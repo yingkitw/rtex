@@ -1,0 +1,43 @@
+\documentclass{article}
+\usepackage{booktabs}
+
+\title{Tables Example}
+\author{latex-rs}
+
+\begin{document}
+\maketitle
+
+\section{Simple Table}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Item & Quantity & Price \\
+\midrule
+Apples & 5 & \$2.50 \\
+Oranges & 3 & \$1.80 \\
+Bananas & 8 & \$3.20 \\
+\bottomrule
+\end{tabular}
+\caption{Fruit inventory}
+\end{table}
+
+\section{Data Table}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Language & Year & Paradigm & Typed \\
+\midrule
+Rust & 2015 & Multi & Static \\
+Python & 1991 & Multi & Dynamic \\
+JavaScript & 1995 & Multi & Dynamic \\
+Haskell & 1990 & Functional & Static \\
+\bottomrule
+\end{tabular}
+\caption{Programming languages}
+\end{table}
+
+\end{document}

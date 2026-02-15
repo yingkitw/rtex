@@ -1,0 +1,51 @@
+\documentclass{article}
+
+\title{Lists and Enumerations}
+\author{latex-rs}
+
+\begin{document}
+\maketitle
+
+\section{Unordered List}
+
+Shopping list:
+\begin{itemize}
+    \item Milk
+    \item Bread
+    \item Eggs
+    \item Coffee
+\end{itemize}
+
+\section{Ordered List}
+
+Steps to compile LaTeX:
+\begin{enumerate}
+    \item Write the \texttt{.tex} file
+    \item Run \texttt{pdflatex}
+    \item Check for errors
+    \item View the PDF output
+\end{enumerate}
+
+\section{Nested Lists}
+
+Project structure:
+\begin{itemize}
+    \item Source code
+    \begin{itemize}
+        \item \texttt{main.rs}
+        \item \texttt{lib.rs}
+        \item \texttt{tests.rs}
+    \end{itemize}
+    \item Documentation
+    \begin{itemize}
+        \item \texttt{README.md}
+        \item \texttt{ARCHITECTURE.md}
+    \end{itemize}
+    \item Configuration
+    \begin{itemize}
+        \item \texttt{Cargo.toml}
+        \item \texttt{.gitignore}
+    \end{itemize}
+\end{itemize}
+
+\end{document}

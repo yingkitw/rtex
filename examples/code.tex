@@ -1,0 +1,47 @@
+\documentclass{article}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true
+}
+
+\title{Code Listings Example}
+\author{latex-rs}
+
+\begin{document}
+\maketitle
+
+\section{Rust Code}
+
+\begin{lstlisting}[language=Rust]
+fn main() {
+    println!("Hello, World!");
+    
+    let numbers = vec![1, 2, 3, 4, 5];
+    let sum: i32 = numbers.iter().sum();
+    
+    println!("Sum: {}", sum);
+}
+\end{lstlisting}
+
+\section{Python Code}
+
+\begin{lstlisting}[language=Python]
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+for i in range(10):
+    print(f"F({i}) = {fibonacci(i)}")
+\end{lstlisting}
+
+\end{document}

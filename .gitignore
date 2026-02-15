@@ -1,0 +1,10 @@
+/target
+/output
+Cargo.lock
+*.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+.DS_Store
