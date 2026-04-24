@@ -1,0 +1,579 @@
+// Round-trip testing for LaTeX → PDF conversion
+// Tests deterministic conversion, structural validation, and regression detection
+
+use latex_rs::convert_tex_to_pdf;
+use std::fs;
+use std::path::PathBuf;
+use tempfile::TempDir;
+use sha2::{Sha256, Digest};
+
+const FIXTURE_DIR: &str = "tests/fixtures";
+
+/// Helper function to convert LaTeX content to PDF bytes
+fn convert_latex_to_bytes(latex_content: &str) -> Result<Vec<u8>, String> {
+    let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let input_path = temp_dir.path().join("input.tex");
+    let output_path = temp_dir.path().join("output.pdf");
+
+    fs::write(&input_path, latex_content)
+        .map_err(|e| format!("Failed to write LaTeX file: {}", e))?;
+
+    convert_tex_to_pdf(&input_path, &output_path)
+        .map_err(|e| format!("Failed to convert LaTeX to PDF: {}", e))?;
+
+    fs::read(&output_path)
+        .map_err(|e| format!("Failed to read PDF file: {}", e))
+}
+
+/// Calculate SHA256 hash of PDF data
+fn pdf_hash(pdf_data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(pdf_data);
+    format!("{:x}", hasher.finalize())
+}
+
+/// Validate PDF structure
+fn validate_pdf_structure(pdf_data: &[u8]) -> Result<(), String> {
+    // Check file size
+    if pdf_data.is_empty() {
+        return Err("PDF file is empty".to_string());
+    }
+    if pdf_data.len() < 100 {
+        return Err("PDF file too small, likely invalid".to_string());
+    }
+
+    // Check PDF header
+    if !pdf_data.starts_with(b"%PDF") {
+        return Err("PDF missing header signature".to_string());
+    }
+
+    // Check for essential PDF components
+    let pdf_str = String::from_utf8_lossy(pdf_data);
+    if !pdf_str.contains("xref") {
+        return Err("PDF missing xref table".to_string());
+    }
+    if !pdf_str.contains("trailer") {
+        return Err("PDF missing trailer".to_string());
+    }
+    if !pdf_str.contains("%%EOF") {
+        return Err("PDF missing EOF marker".to_string());
+    }
+
+    // Check for font embedding
+    if !pdf_str.contains("/Font") {
+        return Err("PDF missing font resources".to_string());
+    }
+
+    // Check for content stream
+    if !pdf_str.contains("/Contents") {
+        return Err("PDF missing content stream".to_string());
+    }
+
+    Ok(())
+}
+
+// ==================== Deterministic Conversion Tests ====================
+
+#[test]
+fn test_deterministic_conversion_minimal() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Hello, World!
+\end{document}"#;
+
+    let pdf1 = convert_latex_to_bytes(latex).unwrap();
+    let pdf2 = convert_latex_to_bytes(latex).unwrap();
+
+    assert_eq!(pdf1, pdf2, "Same LaTeX input must produce identical PDF output");
+}
+
+#[test]
+fn test_deterministic_conversion_math() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Math: $E = mc^2$ and $\int_0^\infty e^{-x} dx = 1$.
+\end{document}"#;
+
+    let pdf1 = convert_latex_to_bytes(latex).unwrap();
+    let pdf2 = convert_latex_to_bytes(latex).unwrap();
+
+    assert_eq!(pdf1, pdf2, "Math content must produce deterministic output");
+}
+
+#[test]
+fn test_deterministic_conversion_complex() {
+    let latex = r#"\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+\section{Test}
+Text with \textbf{bold} and \textit{italic}.
+Math: $x^2 + y^2 = z^2$.
+\begin{itemize}
+\item One
+\item Two
+\end{itemize}
+\end{document}"#;
+
+    let pdf1 = convert_latex_to_bytes(latex).unwrap();
+    let pdf2 = convert_latex_to_bytes(latex).unwrap();
+
+    assert_eq!(pdf1, pdf2, "Complex documents must produce deterministic output");
+}
+
+#[test]
+fn test_multiple_conversions_same_output() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Test multiple conversions
+\end{document}"#;
+
+    let pdfs: Vec<Vec<u8>> = (0..5)
+        .map(|_| convert_latex_to_bytes(latex).unwrap())
+        .collect();
+
+    // All PDFs should be identical
+    for i in 1..pdfs.len() {
+        assert_eq!(pdfs[0], pdfs[i], "Conversion {} differs from first", i);
+    }
+}
+
+#[test]
+fn test_hash_consistency() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Hash consistency test
+\end{document}"#;
+
+    let hash1 = pdf_hash(&convert_latex_to_bytes(latex).unwrap());
+    let hash2 = pdf_hash(&convert_latex_to_bytes(latex).unwrap());
+
+    assert_eq!(hash1, hash2, "PDF hashes must be consistent");
+}
+
+// ==================== Structural Validation Tests ====================
+
+#[test]
+fn test_pdf_structure_minimal() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Test
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).unwrap();
+    validate_pdf_structure(&pdf).expect("PDF structure validation failed");
+}
+
+#[test]
+fn test_pdf_structure_math() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Equation: \begin{equation}E = mc^2\end{equation}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).unwrap();
+    validate_pdf_structure(&pdf).expect("Math PDF structure validation failed");
+}
+
+#[test]
+fn test_pdf_structure_complex() {
+    let latex = r#"\documentclass{article}
+\title{Test}
+\author{Author}
+\date{2024-01-15}
+\begin{document}
+\maketitle
+\section{Section}
+Text with \textbf{formatting}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).unwrap();
+    validate_pdf_structure(&pdf).expect("Complex PDF structure validation failed");
+}
+
+#[test]
+fn test_pdf_header() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Test
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).unwrap();
+    assert!(pdf.starts_with(b"%PDF"), "PDF must start with %PDF header");
+}
+
+#[test]
+fn test_pdf_eof_marker() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Test
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).unwrap();
+    let pdf_str = String::from_utf8_lossy(&pdf);
+    assert!(pdf_str.contains("%%EOF"), "PDF must contain EOF marker");
+}
+
+// ==================== Happy Path Tests ====================
+
+#[test]
+fn test_happy_path_minimal() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/minimal.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read minimal.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert minimal.tex");
+    validate_pdf_structure(&pdf).expect("Minimal PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_text_formatting() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/text_formatting.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read text_formatting.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert text_formatting.tex");
+    validate_pdf_structure(&pdf).expect("Text formatting PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_mathematics() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/mathematics.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read mathematics.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert mathematics.tex");
+    validate_pdf_structure(&pdf).expect("Mathematics PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_lists() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/lists.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read lists.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert lists.tex");
+    validate_pdf_structure(&pdf).expect("Lists PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_tables() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/tables.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read tables.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert tables.tex");
+    validate_pdf_structure(&pdf).expect("Tables PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_metadata() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/metadata.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read metadata.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert metadata.tex");
+    validate_pdf_structure(&pdf).expect("Metadata PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_complex_document() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/complex_document.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read complex_document.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert complex_document.tex");
+    validate_pdf_structure(&pdf).expect("Complex document PDF structure invalid");
+}
+
+// ==================== Edge Case Tests ====================
+
+#[test]
+fn test_edge_case_empty_document() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/edge_cases/empty_document.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read empty_document.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert empty_document.tex");
+    validate_pdf_structure(&pdf).expect("Empty document PDF structure invalid");
+}
+
+#[test]
+fn test_edge_case_long_text() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/edge_cases/long_text.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read long_text.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert long_text.tex");
+    validate_pdf_structure(&pdf).expect("Long text PDF structure invalid");
+}
+
+#[test]
+fn test_edge_case_special_chars() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/edge_cases/special_chars.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read special_chars.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert special_chars.tex");
+    validate_pdf_structure(&pdf).expect("Special chars PDF structure invalid");
+}
+
+#[test]
+fn test_edge_case_deep_nesting() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/edge_cases/deep_nesting.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read deep_nesting.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert deep_nesting.tex");
+    validate_pdf_structure(&pdf).expect("Deep nesting PDF structure invalid");
+}
+
+#[test]
+fn test_edge_case_mixed_content() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/edge_cases/mixed_content.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read mixed_content.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert mixed_content.tex");
+    validate_pdf_structure(&pdf).expect("Mixed content PDF structure invalid");
+}
+
+// ==================== Malformed Input Tests ====================
+
+#[test]
+fn test_malformed_unclosed_command() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/malformed/unclosed_command.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read unclosed_command.tex fixture");
+
+    // Should handle gracefully (may succeed or fail with appropriate error)
+    let result = convert_latex_to_bytes(&latex);
+    match result {
+        Ok(pdf) => {
+            // If it succeeds, PDF should still be valid
+            validate_pdf_structure(&pdf).expect("Malformed input produced invalid PDF");
+        }
+        Err(_) => {
+            // If it fails, that's acceptable too
+        }
+    }
+}
+
+#[test]
+fn test_malformed_invalid_math() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/malformed/invalid_math.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read invalid_math.tex fixture");
+
+    // Should handle gracefully
+    let result = convert_latex_to_bytes(&latex);
+    match result {
+        Ok(pdf) => {
+            validate_pdf_structure(&pdf).expect("Invalid math produced invalid PDF");
+        }
+        Err(_) => {
+            // Acceptable to fail
+        }
+    }
+}
+
+#[test]
+fn test_malformed_missing_structure() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/malformed/missing_structure.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read missing_structure.tex fixture");
+
+    // Should handle gracefully
+    let result = convert_latex_to_bytes(&latex);
+    match result {
+        Ok(pdf) => {
+            validate_pdf_structure(&pdf).expect("Missing structure produced invalid PDF");
+        }
+        Err(_) => {
+            // Acceptable to fail
+        }
+    }
+}
+
+#[test]
+fn test_malformed_unknown_commands() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/malformed/unknown_commands.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read unknown_commands.tex fixture");
+
+    // Should handle gracefully (parser typically ignores unknown commands)
+    let result = convert_latex_to_bytes(&latex);
+    match result {
+        Ok(pdf) => {
+            validate_pdf_structure(&pdf).expect("Unknown commands produced invalid PDF");
+        }
+        Err(_) => {
+            // Acceptable to fail
+        }
+    }
+}
+
+// ==================== Golden File Tests ====================
+
+#[test]
+#[ignore] // Run manually with: cargo test --test round_trip -- --ignored test_golden_file
+fn test_golden_file_minimal() {
+    let latex_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/minimal.tex");
+    let golden_path = PathBuf::from(FIXTURE_DIR)
+        .join("golden_pdfs/minimal.pdf");
+
+    let latex = fs::read_to_string(&latex_path)
+        .expect("Failed to read minimal.tex fixture");
+
+    let actual_pdf = convert_latex_to_bytes(&latex)
+        .expect("Failed to convert minimal.tex");
+
+    if golden_path.exists() {
+        let expected_pdf = fs::read(&golden_path)
+            .expect("Failed to read golden PDF");
+
+        assert_eq!(actual_pdf, expected_pdf,
+                   "PDF output differs from golden file. Run with --ignored generate-golden to update.");
+    } else {
+        panic!("Golden file not found. Run generate-golden test first.");
+    }
+}
+
+// ==================== Golden File Generation ====================
+
+#[test]
+#[ignore] // Run with: cargo test --test round_trip -- --ignored generate_golden_files
+fn generate_golden_files() {
+    let fixtures = vec![
+        "latex/happy_path/minimal.tex",
+        "latex/happy_path/text_formatting.tex",
+        "latex/happy_path/mathematics.tex",
+        "latex/happy_path/lists.tex",
+        "latex/happy_path/tables.tex",
+        "latex/happy_path/metadata.tex",
+        "latex/happy_path/complex_document.tex",
+    ];
+
+    for fixture in fixtures {
+        let latex_path = PathBuf::from(FIXTURE_DIR).join(fixture);
+        let pdf_name = latex_path.file_stem().unwrap().to_string_lossy().to_string() + ".pdf";
+        let golden_path = PathBuf::from(FIXTURE_DIR).join("golden_pdfs").join(&pdf_name);
+
+        let latex = fs::read_to_string(&latex_path)
+            .expect(&format!("Failed to read {}", fixture));
+
+        let pdf = convert_latex_to_bytes(&latex)
+            .expect(&format!("Failed to convert {}", fixture));
+
+        // Validate before saving
+        validate_pdf_structure(&pdf)
+            .expect(&format!("Invalid PDF generated for {}", fixture));
+
+        // Ensure golden directory exists
+        if let Some(parent) = golden_path.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+
+        fs::write(&golden_path, pdf)
+            .expect(&format!("Failed to write golden file {}", pdf_name));
+
+        println!("Generated golden file: {}", golden_path.display());
+    }
+
+    println!("\nAll golden files generated successfully!");
+}
+
+// ==================== Regression Detection ====================
+
+#[test]
+fn test_regression_detection() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Regression test content
+\end{document}"#;
+
+    let pdf1 = convert_latex_to_bytes(latex).unwrap();
+    let hash1 = pdf_hash(&pdf1);
+
+    // Simulate time passing (same input should produce same output)
+    let pdf2 = convert_latex_to_bytes(latex).unwrap();
+    let hash2 = pdf_hash(&pdf2);
+
+    assert_eq!(hash1, hash2, "Regression detected: Same input produced different output");
+
+    // Test different inputs produce different outputs
+    let latex2 = r#"\documentclass{article}
+\begin{document}
+Different content
+\end{document}"#;
+
+    let pdf3 = convert_latex_to_bytes(latex2).unwrap();
+    let hash3 = pdf_hash(&pdf3);
+
+    assert_ne!(hash1, hash3, "Different inputs should produce different outputs");
+}
+
+// ==================== File Size Validation ====================
+
+#[test]
+fn test_file_size_bounds() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Test file size
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).unwrap();
+
+    // PDF should be reasonable size
+    assert!(pdf.len() > 500, "PDF too small: {} bytes", pdf.len());
+    assert!(pdf.len() < 2_000_000, "PDF too large: {} bytes", pdf.len());
+}
+
+#[test]
+fn test_file_size_consistency() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Size consistency test
+\end{document}"#;
+
+    let sizes: Vec<usize> = (0..10)
+        .map(|_| convert_latex_to_bytes(latex).unwrap().len())
+        .collect();
+
+    // All sizes should be identical
+    for i in 1..sizes.len() {
+        assert_eq!(sizes[0], sizes[i], "File size varies across conversions");
+    }
+}

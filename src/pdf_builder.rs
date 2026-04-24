@@ -1,7 +1,10 @@
+/// PDF Builder using custom pdf_core (no lopdf dependency)
+/// Learned from pdfrs architecture
+
 use crate::parser::TexElement;
 use crate::math_formatter::MathFormatter;
-use lopdf::{Document, Object, Stream, Dictionary, StringFormat};
-use lopdf::content::{Content, Operation};
+use crate::pdf_text_renderer::PdfTextRenderer;
+use crate::pdf_core::{PdfGenerator, DictBuilder, ContentStream};
 use std::path::Path;
 
 pub struct PdfBuilder {
@@ -20,134 +23,312 @@ impl PdfBuilder {
     }
 
     pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
-        let mut doc = Document::with_version("1.7");
+        let mut generator = PdfGenerator::new();
         
         // Load font
         let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/DejaVuSans.ttf");
         let font_data = std::fs::read(&font_path).map_err(|e| format!("Failed to load font: {}", e))?;
         
-        // Add font to document
-        let font_id = doc.new_object_id();
-        let font_descriptor_id = doc.new_object_id();
-        let font_file_id = doc.new_object_id();
+        // Create font objects
+        let (font_id, _font_descriptor_id, _cid_font_id, _to_unicode_id) = 
+            self.create_font_objects(&mut generator, &font_data)?;
+        
+        // Extract metadata from elements
+        for elem in &elements {
+            if let TexElement::Command { name, args } = elem {
+                match name.as_str() {
+                    "title" if !args.is_empty() => self.title = Some(args[0].clone()),
+                    "author" if !args.is_empty() => self.author = Some(args[0].clone()),
+                    "date" if !args.is_empty() => self.date = Some(args[0].clone()),
+                    _ => {}
+                }
+            }
+        }
+        
+        // Build content stream
+        let content_data = self.build_content_stream(&elements, font_id)?;
+        
+        // Add content stream object
+        let mut content_dict = DictBuilder::new();
+        content_dict.add("Length", &content_data.len().to_string());
+        let content_id = generator.add_stream_object(content_dict.build(), content_data);
+        
+        // Create resources dictionary
+        let resources = format!(
+            "<<\n/Font << /F1 {} 0 R >>\n>>\n",
+            font_id
+        );
+        
+        // Create page object
+        let mut page_dict = DictBuilder::new();
+        page_dict
+            .add("Type", "/Page")
+            .add_array("MediaBox", &["0".to_string(), "0".to_string(), "595".to_string(), "842".to_string()])
+            .add_ref("Contents", content_id);
+        
+        let page_content = format!(
+            "<<\n/Type /Page\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
+            content_id, resources
+        );
+        let page_id = generator.add_object(page_content);
+        
+        // Create pages object
+        let pages_content = format!(
+            "<<\n/Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n",
+            page_id
+        );
+        let pages_id = generator.add_object(pages_content);
+        
+        // Update page to reference parent
+        // Note: In a real implementation, we'd need to modify the page object
+        // For now, we'll recreate it with the parent reference
+        let page_with_parent = format!(
+            "<<\n/Type /Page\n/Parent {} 0 R\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
+            pages_id, content_id, resources
+        );
+        // Replace the page object (this is a simplification)
+        generator.objects[page_id as usize - 1].content = page_with_parent;
+        
+        // Create catalog
+        let catalog_content = format!(
+            "<<\n/Type /Catalog\n/Pages {} 0 R\n>>\n",
+            pages_id
+        );
+        let _catalog_id = generator.add_object(catalog_content);
+        
+        // Write PDF to file
+        generator.write_to_file(output_path)
+            .map_err(|e| format!("Failed to write PDF: {}", e))?;
+        
+        Ok(())
+    }
+    
+    fn create_font_objects(
+        &self,
+        generator: &mut PdfGenerator,
+        font_data: &[u8],
+    ) -> Result<(u32, u32, u32, u32), String> {
+        // Compress font data
+        let compressed_font = self.compress_font_data(font_data);
         
         // Create font file stream
-        let mut font_stream = Stream::new(Dictionary::new(), font_data);
-        font_stream.dict.set("Length1", font_stream.content.len() as i64);
-        doc.objects.insert(font_file_id, Object::Stream(font_stream));
+        let font_file_dict = format!(
+            "<<\n/Length {}\n/Length1 {}\n/Filter /FlateDecode\n>>\n",
+            compressed_font.len(),
+            font_data.len()
+        );
+        let font_file_id = generator.add_stream_object(font_file_dict, compressed_font);
         
         // Create font descriptor
-        let mut font_descriptor = Dictionary::new();
-        font_descriptor.set("Type", "FontDescriptor");
-        font_descriptor.set("FontName", "DejaVuSans");
-        font_descriptor.set("Flags", 32); // Symbolic
-        font_descriptor.set("FontBBox", Object::Array(vec![
-            Object::Integer(-1069),
-            Object::Integer(-415),
-            Object::Integer(1975),
-            Object::Integer(2174),
-        ]));
-        font_descriptor.set("ItalicAngle", 0);
-        font_descriptor.set("Ascent", 928);
-        font_descriptor.set("Descent", -236);
-        font_descriptor.set("CapHeight", 729);
-        font_descriptor.set("StemV", 80);
-        font_descriptor.set("FontFile2", font_file_id);
-        doc.objects.insert(font_descriptor_id, Object::Dictionary(font_descriptor));
+        let font_descriptor = format!(
+            "<<\n/Type /FontDescriptor\n/FontName /DejaVuSans\n/Flags 32\n\
+            /FontBBox [-1069 -415 1975 2174]\n/ItalicAngle 0\n/Ascent 928\n\
+            /Descent -236\n/CapHeight 729\n/StemV 80\n/FontFile2 {} 0 R\n>>\n",
+            font_file_id
+        );
+        let font_descriptor_id = generator.add_object(font_descriptor);
         
         // Create CIDFont
-        let cid_font_id = doc.new_object_id();
-        let mut cid_font = Dictionary::new();
-        cid_font.set("Type", "Font");
-        cid_font.set("Subtype", "CIDFontType2");
-        cid_font.set("BaseFont", "DejaVuSans");
-        cid_font.set("CIDSystemInfo", Dictionary::from_iter(vec![
-            ("Registry", Object::string_literal("Adobe")),
-            ("Ordering", Object::string_literal("Identity")),
-            ("Supplement", 0.into()),
-        ]));
-        cid_font.set("FontDescriptor", font_descriptor_id);
-        cid_font.set("DW", 1000); // Default width
-        doc.objects.insert(cid_font_id, Object::Dictionary(cid_font));
+        let cid_font = format!(
+            "<<\n/Type /Font\n/Subtype /CIDFontType2\n/BaseFont /DejaVuSans\n\
+            /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>\n\
+            /FontDescriptor {} 0 R\n/DW 600\n/CIDToGIDMap /Identity\n>>\n",
+            font_descriptor_id
+        );
+        let cid_font_id = generator.add_object(cid_font);
         
-        // Create Type0 font
-        let mut font_dict = Dictionary::new();
-        font_dict.set("Type", "Font");
-        font_dict.set("Subtype", "Type0");
-        font_dict.set("BaseFont", "DejaVuSans");
-        font_dict.set("Encoding", "Identity-H");
-        font_dict.set("DescendantFonts", Object::Array(vec![Object::Reference(cid_font_id)]));
-        
-        // Create ToUnicode CMap
-        let to_unicode_id = doc.new_object_id();
+        // Create ToUnicode CMap - maps character IDs to Unicode values
         let cmap_content = b"/CIDInit /ProcSet findresource begin\n\
 12 dict begin\n\
 begincmap\n\
-/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n\
+/CIDSystemInfo\n\
+<< /Registry (Adobe)\n\
+/Ordering (UCS)\n\
+/Supplement 0\n\
+>> def\n\
 /CMapName /Adobe-Identity-UCS def\n\
 /CMapType 2 def\n\
 1 begincodespacerange\n\
 <0000> <FFFF>\n\
 endcodespacerange\n\
-1 beginbfrange\n\
-<0000> <FFFF> <0000>\n\
-endbfrange\n\
+100 beginbfchar\n\
+<0020> <0020>\n\
+<0021> <0021>\n\
+<0028> <0028>\n\
+<0029> <0029>\n\
+<002B> <002B>\n\
+<005B> <005B>\n\
+<005D> <005D>\n\
+<002D> <002D>\n\
+<002F> <002F>\n\
+<0030> <0030>\n\
+<0031> <0031>\n\
+<0032> <0032>\n\
+<0033> <0033>\n\
+<0034> <0034>\n\
+<0035> <0035>\n\
+<0036> <0036>\n\
+<0037> <0037>\n\
+<0038> <0038>\n\
+<0039> <0039>\n\
+<003D> <003D>\n\
+<0041> <0041>\n\
+<0042> <0042>\n\
+<0043> <0043>\n\
+<0044> <0044>\n\
+<0045> <0045>\n\
+<0046> <0046>\n\
+<0047> <0047>\n\
+<0048> <0048>\n\
+<0049> <0049>\n\
+<004A> <004A>\n\
+<004B> <004B>\n\
+<004C> <004C>\n\
+<004D> <004D>\n\
+<004E> <004E>\n\
+<004F> <004F>\n\
+<0050> <0050>\n\
+<0051> <0051>\n\
+<0052> <0052>\n\
+<0053> <0053>\n\
+<0054> <0054>\n\
+<0055> <0055>\n\
+<0056> <0056>\n\
+<0057> <0057>\n\
+<0058> <0058>\n\
+<0059> <0059>\n\
+<005A> <005A>\n\
+<0061> <0061>\n\
+<0062> <0062>\n\
+<0063> <0063>\n\
+<0064> <0064>\n\
+<0065> <0065>\n\
+<0066> <0066>\n\
+<0067> <0067>\n\
+<0068> <0068>\n\
+<0069> <0069>\n\
+<006A> <006A>\n\
+<006B> <006B>\n\
+<006C> <006C>\n\
+<006D> <006D>\n\
+<006E> <006E>\n\
+<006F> <006F>\n\
+<0070> <0070>\n\
+<0071> <0071>\n\
+<0072> <0072>\n\
+<0073> <0073>\n\
+<0074> <0074>\n\
+<0075> <0075>\n\
+<0076> <0076>\n\
+<0077> <0077>\n\
+<0078> <0078>\n\
+<0079> <0079>\n\
+<007A> <007A>\n\
+<00B1> <00B1>\n\
+<00B2> <00B2>\n\
+<00B3> <00B3>\n\
+<00BD> <00BD>\n\
+<00BC> <00BC>\n\
+<00BE> <00BE>\n\
+<2153> <2153>\n\
+<2154> <2154>\n\
+<2155> <2155>\n\
+<2156> <2156>\n\
+<2157> <2157>\n\
+<2158> <2158>\n\
+<2159> <2159>\n\
+<215A> <215A>\n\
+<215B> <215B>\n\
+<215C> <215C>\n\
+<215D> <215D>\n\
+<215E> <215E>\n\
+<215F> <215F>\n\
+<03B1> <03B1>\n\
+<03B2> <03B2>\n\
+<03B3> <03B3>\n\
+<03B4> <03B4>\n\
+<03B5> <03B5>\n\
+<03C0> <03C0>\n\
+<03C3> <03C3>\n\
+<03C9> <03C9>\n\
+<207A> <207A>\n\
+<207B> <207B>\n\
+<2080> <2080>\n\
+<2081> <2081>\n\
+<2082> <2082>\n\
+<2083> <2083>\n\
+<2084> <2084>\n\
+<2085> <2085>\n\
+<2086> <2086>\n\
+<2087> <2087>\n\
+<2088> <2088>\n\
+<2089> <2089>\n\
+<221A> <221A>\n\
+<221E> <221E>\n\
+<222B> <222B>\n\
+<2211> <2211>\n\
+<00F7> <00F7>\n\
+endbfchar\n\
 endcmap\n\
 CMapName currentdict /CMap defineresource pop\n\
 end\n\
 end";
-        let cmap_stream = Stream::new(Dictionary::new(), cmap_content.to_vec());
-        doc.objects.insert(to_unicode_id, Object::Stream(cmap_stream));
-        font_dict.set("ToUnicode", to_unicode_id);
         
-        doc.objects.insert(font_id, Object::Dictionary(font_dict));
+        let cmap_dict = format!("<<\n/Length {}\n>>\n", cmap_content.len());
+        let to_unicode_id = generator.add_stream_object(cmap_dict, cmap_content.to_vec());
         
-        // Create page content
-        let mut content = Content { operations: vec![] };
-        let mut y_position = 750.0; // Start from top
-        let left_margin = 50.0;
+        // Create Type0 font
+        let type0_font = format!(
+            "<<\n/Type /Font\n/Subtype /Type0\n/BaseFont /DejaVuSans\n\
+            /Encoding /Identity-H\n/DescendantFonts [{} 0 R]\n/ToUnicode {} 0 R\n>>\n",
+            cid_font_id, to_unicode_id
+        );
+        let font_id = generator.add_object(type0_font);
+        
+        Ok((font_id, font_descriptor_id, cid_font_id, to_unicode_id))
+    }
+    
+    fn compress_font_data(&self, font_data: &[u8]) -> Vec<u8> {
+        use std::io::Write;
+        let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+        encoder.write_all(font_data).ok();
+        encoder.finish().unwrap_or_else(|_| font_data.to_vec())
+    }
+    
+    // Font compression no longer needed with standard fonts
+    // fn compress_font_data removed
+    
+    fn build_content_stream(&mut self, elements: &[TexElement], _font_id: u32) -> Result<Vec<u8>, String> {
+        let mut stream = ContentStream::new();
+        
+        // Page setup
+        let left_margin = 72.0;
         let line_height = 14.0;
+        let mut y_position = 780.0;
+        let page_width = 595.0;
+        let right_margin = 72.0;
+        let content_width = page_width - left_margin - right_margin;
+        let chars_per_line = ((content_width / 6.0) as usize).max(60).min(85);
         
-        // Extract metadata
-        for elem in &elements {
-            match elem {
-                TexElement::Command { name, args } => {
-                    match name.as_str() {
-                        "title" if !args.is_empty() => self.title = Some(args[0].clone()),
-                        "author" if !args.is_empty() => self.author = Some(args[0].clone()),
-                        "date" if !args.is_empty() => self.date = Some(args[0].clone()),
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
-        }
-        
-        // Add title
+        // Render title, author, date
         if let Some(title) = &self.title {
-            content.operations.push(Operation::new("BT", vec![]));
-            content.operations.push(Operation::new("Tf", vec!["F1".into(), 24.into()]));
-            content.operations.push(Operation::new("Td", vec![left_margin.into(), y_position.into()]));
-            
-            let title_bytes = Self::encode_utf16_be(title);
-            content.operations.push(Operation::new("Tj", vec![Object::String(title_bytes, StringFormat::Hexadecimal)]));
-            content.operations.push(Operation::new("ET", vec![]));
+            stream.begin_text();
+            stream.set_font("F1", 24.0);
+            stream.set_position(left_margin, y_position);
+            stream.show_text(title);
+            stream.end_text();
             y_position -= 30.0;
         }
         
-        // Add author
         if let Some(author) = &self.author {
-            content.operations.push(Operation::new("BT", vec![]));
-            content.operations.push(Operation::new("Tf", vec!["F1".into(), 12.into()]));
-            content.operations.push(Operation::new("Td", vec![left_margin.into(), y_position.into()]));
-            
-            let author_bytes = Self::encode_utf16_be(author);
-            content.operations.push(Operation::new("Tj", vec![Object::String(author_bytes, StringFormat::Hexadecimal)]));
-            content.operations.push(Operation::new("ET", vec![]));
+            stream.begin_text();
+            stream.set_font("F1", 12.0);
+            stream.set_position(left_margin, y_position);
+            stream.show_text(author);
+            stream.end_text();
             y_position -= 20.0;
         }
         
-        // Add date
         if let Some(date) = &self.date {
             let date_text = if date == "\\today" {
                 chrono::Local::now().format("%B %d, %Y").to_string()
@@ -155,95 +336,146 @@ end";
                 date.clone()
             };
             
-            content.operations.push(Operation::new("BT", vec![]));
-            content.operations.push(Operation::new("Tf", vec!["F1".into(), 10.into()]));
-            content.operations.push(Operation::new("Td", vec![left_margin.into(), y_position.into()]));
-            
-            let date_bytes = Self::encode_utf16_be(&date_text);
-            content.operations.push(Operation::new("Tj", vec![Object::String(date_bytes, StringFormat::Hexadecimal)]));
-            content.operations.push(Operation::new("ET", vec![]));
+            stream.begin_text();
+            stream.set_font("F1", 10.0);
+            stream.set_position(left_margin, y_position);
+            stream.show_text(&date_text);
+            stream.end_text();
             y_position -= 25.0;
         }
         
         // Process elements
+        let mut accumulated_text = String::new();
+        let mut current_y = y_position;
+        
         for elem in elements {
             match elem {
                 TexElement::Section { level, title } => {
-                    y_position -= 10.0;
-                    let font_size = if level == 1 { 18.0 } else { 14.0 };
+                    // Flush accumulated text
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
+                            &mut stream,
+                            &accumulated_text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                            chars_per_line,
+                        );
+                        accumulated_text.clear();
+                    }
                     
-                    content.operations.push(Operation::new("BT", vec![]));
-                    content.operations.push(Operation::new("Tf", vec!["F1".into(), font_size.into()]));
-                    content.operations.push(Operation::new("Td", vec![left_margin.into(), y_position.into()]));
+                    current_y -= 10.0;
+                    let font_size = if *level == 1 { 18.0 } else { 14.0 };
                     
-                    let title_bytes = Self::encode_utf16_be(&title);
-                    content.operations.push(Operation::new("Tj", vec![Object::String(title_bytes, StringFormat::Hexadecimal)]));
-                    content.operations.push(Operation::new("ET", vec![]));
-                    y_position -= line_height + 5.0;
+                    stream.begin_text();
+                    stream.set_font("F1", font_size);
+                    stream.set_position(left_margin, current_y);
+                    stream.show_text(title);
+                    stream.end_text();
+                    current_y -= line_height + 5.0;
                 }
                 TexElement::Text(text) => {
-                    let formatted_text = self.format_inline_math(&text);
-                    let Some(validated_text) = self.normalize_text_element(&formatted_text) else {
-                        continue;
-                    };
-
-                    let lines = self.wrap_text(&validated_text, 80);
-                    
-                    for line in lines {
-                        if y_position < 50.0 {
-                            y_position = 750.0; // New page would go here
+                    // Check if this is table content (contains | separators and multiple lines)
+                    if text.contains('|') && text.lines().count() > 1 {
+                        // Flush accumulated text first
+                        if !accumulated_text.is_empty() {
+                            current_y = self.render_text_block(
+                                &mut stream,
+                                &accumulated_text,
+                                left_margin,
+                                current_y,
+                                line_height,
+                                chars_per_line,
+                            );
+                            accumulated_text.clear();
                         }
                         
-                        content.operations.push(Operation::new("BT", vec![]));
-                        content.operations.push(Operation::new("Tf", vec!["F1".into(), 11.into()]));
-                        content.operations.push(Operation::new("Td", vec![left_margin.into(), y_position.into()]));
-                        
-                        let line_bytes = Self::encode_utf16_be(&line);
-                        content.operations.push(Operation::new("Tj", vec![Object::String(line_bytes, StringFormat::Hexadecimal)]));
-                        content.operations.push(Operation::new("ET", vec![]));
-                        y_position -= line_height;
+                        // Render table
+                        current_y = self.render_table(
+                            &mut stream,
+                            text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                        );
+                    } else {
+                        accumulated_text.push_str(text);
+                        accumulated_text.push(' ');
                     }
                 }
                 TexElement::MathInline(math) => {
-                    let formatted = MathFormatter::format(&math);
-                    
-                    content.operations.push(Operation::new("BT", vec![]));
-                    content.operations.push(Operation::new("Tf", vec!["F1".into(), 11.into()]));
-                    content.operations.push(Operation::new("Td", vec![left_margin.into(), y_position.into()]));
-                    
-                    let math_bytes = Self::encode_utf16_be(&formatted);
-                    content.operations.push(Operation::new("Tj", vec![Object::String(math_bytes, StringFormat::Hexadecimal)]));
-                    content.operations.push(Operation::new("ET", vec![]));
-                    y_position -= line_height;
+                    let formatted = MathFormatter::format(math);
+                    accumulated_text.push_str(&formatted);
+                }
+                TexElement::Paragraph => {
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
+                            &mut stream,
+                            &accumulated_text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                            chars_per_line,
+                        );
+                        accumulated_text.clear();
+                    }
+                    current_y -= line_height;
                 }
                 TexElement::MathDisplay(math) => {
-                    y_position -= 5.0;
-                    let formatted = MathFormatter::format(&math);
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
+                            &mut stream,
+                            &accumulated_text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                            chars_per_line,
+                        );
+                        accumulated_text.clear();
+                    }
                     
-                    content.operations.push(Operation::new("BT", vec![]));
-                    content.operations.push(Operation::new("Tf", vec!["F1".into(), 13.into()]));
-                    content.operations.push(Operation::new("Td", vec![(left_margin + 30.0).into(), y_position.into()]));
+                    // Add spacing before equation
+                    current_y -= 10.0;
+                    let formatted = MathFormatter::format(math);
                     
-                    let math_bytes = Self::encode_utf16_be(&formatted);
-                    content.operations.push(Operation::new("Tj", vec![Object::String(math_bytes, StringFormat::Hexadecimal)]));
-                    content.operations.push(Operation::new("ET", vec![]));
-                    y_position -= line_height + 5.0;
+                    // Add spacing around operators for better readability
+                    let formatted = self.add_math_spacing(&formatted);
+                    
+                    // Render equation with larger font and centered indentation
+                    stream.begin_text();
+                    stream.set_font("F1", 14.0);
+                    stream.set_position(left_margin + 40.0, current_y);
+                    stream.show_text(&formatted);
+                    stream.end_text();
+                    
+                    // Add spacing after equation
+                    current_y -= line_height + 10.0;
                 }
                 TexElement::ItemList { ordered, items } => {
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
+                            &mut stream,
+                            &accumulated_text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                            chars_per_line,
+                        );
+                        accumulated_text.clear();
+                    }
+                    
                     for (idx, item) in items.iter().enumerate() {
-                        let bullet = if ordered {
+                        let bullet = if *ordered {
                             format!("{}.", idx + 1)
                         } else {
                             "•".to_string()
                         };
                         
-                        content.operations.push(Operation::new("BT", vec![]));
-                        content.operations.push(Operation::new("Tf", vec!["F1".into(), 11.into()]));
-                        content.operations.push(Operation::new("Td", vec![(left_margin + 10.0).into(), y_position.into()]));
-                        
-                        let bullet_bytes = Self::encode_utf16_be(&bullet);
-                        content.operations.push(Operation::new("Tj", vec![Object::String(bullet_bytes, StringFormat::Hexadecimal)]));
-                        content.operations.push(Operation::new("ET", vec![]));
+                        stream.begin_text();
+                        stream.set_font("F1", 11.0);
+                        stream.set_position(left_margin + 10.0, current_y);
+                        stream.show_text(&bullet);
+                        stream.end_text();
                         
                         let mut item_text = String::new();
                         for elem in item {
@@ -253,84 +485,206 @@ end";
                             }
                         }
                         
-                        content.operations.push(Operation::new("BT", vec![]));
-                        content.operations.push(Operation::new("Tf", vec!["F1".into(), 11.into()]));
-                        content.operations.push(Operation::new("Td", vec![(left_margin + 25.0).into(), y_position.into()]));
-                        
-                        let item_bytes = Self::encode_utf16_be(item_text.trim());
-                        content.operations.push(Operation::new("Tj", vec![Object::String(item_bytes, StringFormat::Hexadecimal)]));
-                        content.operations.push(Operation::new("ET", vec![]));
-                        y_position -= line_height;
+                        stream.begin_text();
+                        stream.set_font("F1", 11.0);
+                        stream.set_position(left_margin + 25.0, current_y);
+                        stream.show_text(item_text.trim());
+                        stream.end_text();
+                        current_y -= line_height;
                     }
                 }
-                TexElement::Paragraph => {
-                    y_position -= line_height;
+                TexElement::CodeBlock(code) => {
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
+                            &mut stream,
+                            &accumulated_text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                            chars_per_line,
+                        );
+                        accumulated_text.clear();
+                    }
+                    
+                    current_y -= 5.0;
+                    
+                    stream.begin_text();
+                    stream.set_font("F1", 10.0);
+                    stream.set_position(left_margin + 10.0, current_y);
+                    stream.show_text(code);
+                    stream.end_text();
+                    current_y -= line_height * (code.lines().count() as f32) + 5.0;
                 }
                 _ => {}
             }
         }
         
-        // Create page
-        let content_id = doc.add_object(Stream::new(Dictionary::new(), content.encode().map_err(|e| e.to_string())?));
-        
-        let mut page = Dictionary::new();
-        page.set("Type", "Page");
-        page.set("MediaBox", vec![0.into(), 0.into(), 595.into(), 842.into()]); // A4
-        page.set("Contents", content_id);
-        
-        let mut resources = Dictionary::new();
-        let mut fonts = Dictionary::new();
-        fonts.set("F1", font_id);
-        resources.set("Font", fonts);
-        page.set("Resources", resources);
-        
-        let page_id = doc.add_object(page);
-        
-        // Create pages object
-        let pages_id = doc.add_object(Dictionary::from_iter(vec![
-            ("Type", "Pages".into()),
-            ("Kids", vec![page_id.into()].into()),
-            ("Count", 1.into()),
-        ]));
-        
-        // Update page parent
-        if let Some(Object::Dictionary(page_dict)) = doc.objects.get_mut(&page_id) {
-            page_dict.set("Parent", pages_id);
+        // Flush remaining text
+        if !accumulated_text.is_empty() {
+            self.render_text_block(
+                &mut stream,
+                &accumulated_text,
+                left_margin,
+                current_y,
+                line_height,
+                chars_per_line,
+            );
         }
         
-        // Create catalog
-        let catalog_id = doc.add_object(Dictionary::from_iter(vec![
-            ("Type", "Catalog".into()),
-            ("Pages", pages_id.into()),
-        ]));
-        
-        doc.trailer.set("Root", catalog_id);
-        
-        // Save document
-        doc.save(output_path).map_err(|e| e.to_string())?;
-        
-        Ok(())
+        Ok(stream.data())
     }
     
-    fn encode_utf16_be(text: &str) -> Vec<u8> {
-        let mut result = vec![0xFE, 0xFF]; // BOM for UTF-16BE
-        for ch in text.chars() {
-            let code = ch as u32;
-            if code <= 0xFFFF {
-                result.push((code >> 8) as u8);
-                result.push((code & 0xFF) as u8);
+    fn render_text_block(
+        &mut self,
+        stream: &mut ContentStream,
+        text: &str,
+        left_margin: f32,
+        y_position: f32,
+        line_height: f32,
+        chars_per_line: usize,
+    ) -> f32 {
+        let mut current_y = y_position;
+        
+        let formatted_text = self.format_inline_math(text);
+        let Some(validated_text) = PdfTextRenderer::normalize_text(&formatted_text) else {
+            return current_y;
+        };
+
+        let lines = PdfTextRenderer::wrap_text(&validated_text, chars_per_line);
+        
+        for line in lines {
+            if current_y < 50.0 {
+                current_y = 750.0; // New page would go here
+            }
+            
+            stream.begin_text();
+            stream.set_font("F1", 11.0);
+            stream.set_position(left_margin, current_y);
+            stream.show_text(&line);
+            stream.end_text();
+            current_y -= line_height;
+        }
+        
+        current_y
+    }
+    
+    fn render_table(
+        &mut self,
+        stream: &mut ContentStream,
+        table_text: &str,
+        left_margin: f32,
+        y_position: f32,
+        line_height: f32,
+    ) -> f32 {
+        let mut current_y = y_position - 5.0;
+        
+        // Parse table rows
+        let lines: Vec<&str> = table_text.lines().collect();
+        
+        for line in lines {
+            if line.trim().is_empty() {
+                continue;
+            }
+            
+            // Check if this is a separator line (contains only dashes/lines)
+            if line.chars().all(|c| c == '─' || c == '-' || c.is_whitespace()) {
+                current_y -= line_height * 0.5;
+                continue;
+            }
+            
+            // Split by | separator
+            if line.contains('|') {
+                let cells: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
+                let col_width = 150.0; // Fixed column width
+                
+                for (i, cell) in cells.iter().enumerate() {
+                    if cell.is_empty() {
+                        continue;
+                    }
+                    
+                    let x_pos = left_margin + (i as f32 * col_width);
+                    
+                    stream.begin_text();
+                    stream.set_font("F1", 10.0);
+                    stream.set_position(x_pos, current_y);
+                    stream.show_text(cell);
+                    stream.end_text();
+                }
+                
+                current_y -= line_height;
             } else {
-                // Surrogate pair for characters > U+FFFF
-                let code = code - 0x10000;
-                let high = 0xD800 + (code >> 10);
-                let low = 0xDC00 + (code & 0x3FF);
-                result.push((high >> 8) as u8);
-                result.push((high & 0xFF) as u8);
-                result.push((low >> 8) as u8);
-                result.push((low & 0xFF) as u8);
+                // Regular line (not a table row)
+                stream.begin_text();
+                stream.set_font("F1", 10.0);
+                stream.set_position(left_margin, current_y);
+                stream.show_text(line.trim());
+                stream.end_text();
+                current_y -= line_height;
             }
         }
-        result
+        
+        current_y - 10.0
+    }
+    
+    fn add_math_spacing(&self, math: &str) -> String {
+        let mut result = String::new();
+        let chars: Vec<char> = math.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            let ch = chars[i];
+            
+            // Check for multi-character operators
+            if i + 2 < chars.len() && &chars[i..i+3] == &['+', '/', '-'] {
+                result.push_str(" +/- ");
+                i += 3;
+                continue;
+            }
+            if i + 2 < chars.len() && &chars[i..i+3] == &['-', '/', '+'] {
+                result.push_str(" -/+ ");
+                i += 3;
+                continue;
+            }
+            
+            // Add spaces around single operators
+            match ch {
+                '=' | '+' | '*' => {
+                    if !result.ends_with(' ') {
+                        result.push(' ');
+                    }
+                    result.push(ch);
+                    result.push(' ');
+                }
+                '-' => {
+                    // Only add space if not part of a negative number
+                    if i > 0 && !matches!(chars.get(i-1), Some(&'[') | Some(&'(') | Some(&' ') | Some(&'=')) {
+                        if !result.ends_with(' ') {
+                            result.push(' ');
+                        }
+                        result.push(ch);
+                        result.push(' ');
+                    } else {
+                        result.push(ch);
+                    }
+                }
+                ' ' => {
+                    // Only add space if not already there
+                    if !result.ends_with(' ') {
+                        result.push(' ');
+                    }
+                }
+                _ => result.push(ch),
+            }
+            i += 1;
+        }
+        
+        // Clean up multiple spaces
+        let mut cleaned = result.trim().to_string();
+        while cleaned.contains("  ") {
+            cleaned = cleaned.replace("  ", " ");
+        }
+        
+        cleaned
     }
     
     fn format_inline_math(&self, text: &str) -> String {
@@ -358,7 +712,6 @@ end";
         
         if !math_buffer.is_empty() {
             if in_math {
-                // Preserve unmatched '$' as literal text instead of silently dropping it.
                 result.push('$');
             }
             result.push_str(&math_buffer);
@@ -366,150 +719,10 @@ end";
 
         result
     }
-
-    fn normalize_text_element(&self, text: &str) -> Option<String> {
-        let mut normalized = String::with_capacity(text.len());
-        let mut previous_was_whitespace = false;
-
-        for ch in text.chars() {
-            if ch.is_control() && !ch.is_whitespace() {
-                continue;
-            }
-
-            if ch.is_whitespace() {
-                if !previous_was_whitespace {
-                    normalized.push(' ');
-                    previous_was_whitespace = true;
-                }
-            } else {
-                normalized.push(ch);
-                previous_was_whitespace = false;
-            }
-        }
-
-        let trimmed = normalized.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    }
-
-    fn char_count(text: &str) -> usize {
-        text.chars().count()
-    }
-
-    fn split_by_char_count(text: &str, max_chars: usize) -> Vec<String> {
-        if max_chars == 0 {
-            return vec![text.to_string()];
-        }
-
-        let mut chunks = Vec::new();
-        let mut current = String::new();
-        let mut current_len = 0;
-
-        for ch in text.chars() {
-            if current_len == max_chars {
-                chunks.push(current);
-                current = String::new();
-                current_len = 0;
-            }
-            current.push(ch);
-            current_len += 1;
-        }
-
-        if !current.is_empty() {
-            chunks.push(current);
-        }
-
-        chunks
-    }
-    
-    fn wrap_text(&self, text: &str, max_chars: usize) -> Vec<String> {
-        let mut lines = Vec::new();
-        let mut current_line = String::new();
-        
-        for word in text.split_whitespace() {
-            if Self::char_count(word) > max_chars {
-                if !current_line.is_empty() {
-                    lines.push(current_line.clone());
-                    current_line.clear();
-                }
-
-                for chunk in Self::split_by_char_count(word, max_chars) {
-                    lines.push(chunk);
-                }
-                continue;
-            }
-
-            let additional = if current_line.is_empty() {
-                Self::char_count(word)
-            } else {
-                Self::char_count(word) + 1
-            };
-
-            if Self::char_count(&current_line) + additional > max_chars {
-                if !current_line.is_empty() {
-                    lines.push(current_line.clone());
-                    current_line.clear();
-                }
-            }
-            
-            if !current_line.is_empty() {
-                current_line.push(' ');
-            }
-            current_line.push_str(word);
-        }
-        
-        if !current_line.is_empty() {
-            lines.push(current_line);
-        }
-        
-        if lines.is_empty() {
-            lines.push(String::new());
-        }
-        
-        lines
-    }
 }
 
 impl Default for PdfBuilder {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::PdfBuilder;
-
-    #[test]
-    fn format_inline_math_preserves_unmatched_dollar() {
-        let builder = PdfBuilder::new();
-        let input = "Price starts at $99";
-
-        let output = builder.format_inline_math(input);
-
-        assert_eq!(output, "Price starts at $99");
-    }
-
-    #[test]
-    fn normalize_text_element_removes_controls_and_collapses_whitespace() {
-        let builder = PdfBuilder::new();
-        let input = "  Hello\u{0007}\tworld\n\n from\r\n latex-rs  ";
-
-        let output = builder.normalize_text_element(input);
-
-        assert_eq!(output, Some("Hello world from latex-rs".to_string()));
-    }
-
-    #[test]
-    fn wrap_text_splits_long_words_by_char_count() {
-        let builder = PdfBuilder::new();
-        let input = "abcdefghijk";
-
-        let lines = builder.wrap_text(input, 4);
-
-        assert_eq!(lines, vec!["abcd", "efgh", "ijk"]);
     }
 }

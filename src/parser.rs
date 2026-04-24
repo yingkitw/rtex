@@ -7,6 +7,7 @@ pub enum TexElement {
     MathInline(String),
     MathDisplay(String),
     ItemList { ordered: bool, items: Vec<Vec<TexElement>> },
+    CodeBlock(String),
 }
 
 pub struct TexParser {
@@ -21,6 +22,9 @@ impl TexParser {
 
     pub fn parse(&mut self) -> Vec<TexElement> {
         let mut elements = Vec::new();
+        
+        // Extract metadata from preamble before skipping
+        elements.extend(self.extract_preamble_metadata());
         
         self.skip_preamble();
         
@@ -40,6 +44,61 @@ impl TexParser {
         }
         
         elements
+    }
+
+    fn extract_preamble_metadata(&mut self) -> Vec<TexElement> {
+        let mut metadata = Vec::new();
+        let original_position = self.position;
+        
+        if let Some(begin_doc) = self.content.find("\\begin{document}") {
+            let preamble = &self.content[..begin_doc];
+            
+            // Extract all metadata commands using a helper
+            for (cmd, offset) in &[("title", 7), ("author", 8), ("date", 6)] {
+                if let Some(element) = self.extract_metadata_command(preamble, cmd, *offset) {
+                    metadata.push(element);
+                }
+            }
+        }
+        
+        self.position = original_position;
+        metadata
+    }
+
+    fn extract_metadata_command(&self, preamble: &str, cmd: &str, offset: usize) -> Option<TexElement> {
+        let search_str = format!("\\{}{{", cmd);
+        if let Some(start) = preamble.find(&search_str) {
+            let after_cmd = &preamble[start + offset..];
+            if let Some(content) = self.extract_braced_content_from(after_cmd) {
+                return Some(TexElement::Command {
+                    name: cmd.to_string(),
+                    args: vec![content],
+                });
+            }
+        }
+        None
+    }
+
+    fn extract_braced_content_from(&self, text: &str) -> Option<String> {
+        let mut depth = 1; // Start at depth 1 since we're already inside the opening brace
+        let mut content = String::new();
+        
+        for ch in text.chars() {
+            if ch == '{' {
+                depth += 1;
+                content.push(ch);
+            } else if ch == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(content);
+                }
+                content.push(ch);
+            } else {
+                content.push(ch);
+            }
+        }
+        
+        None
     }
 
     fn skip_preamble(&mut self) {
@@ -185,7 +244,7 @@ impl TexParser {
 
     fn parse_environment(&mut self) -> Option<TexElement> {
         self.position += "\\begin{".len();
-        
+
         let env_name = self.read_until('}');
         self.position += 1;
 
@@ -193,6 +252,9 @@ impl TexParser {
             "itemize" => self.parse_itemize(false),
             "enumerate" => self.parse_itemize(true),
             "equation" => self.parse_equation(),
+            "lstlisting" => self.parse_lstlisting(),
+            "tabular" => self.parse_tabular(),
+            "table" => self.parse_table(),
             _ => {
                 self.skip_until(&format!("\\end{{{}}}", env_name));
                 None
@@ -246,8 +308,70 @@ impl TexParser {
     fn parse_equation(&mut self) -> Option<TexElement> {
         let content = self.read_until_str("\\end{equation}");
         self.position += "\\end{equation}".len();
-        
+
         Some(TexElement::MathDisplay(content.trim().to_string()))
+    }
+
+    fn parse_lstlisting(&mut self) -> Option<TexElement> {
+        let content = self.read_until_str("\\end{lstlisting}");
+        self.position += "\\end{lstlisting}".len();
+
+        Some(TexElement::CodeBlock(content.trim().to_string()))
+    }
+
+    fn parse_tabular(&mut self) -> Option<TexElement> {
+        let content = self.read_until_str("\\end{tabular}");
+        self.position += "\\end{tabular}".len();
+
+        Some(TexElement::Text(format!("\n{}\n", self.format_table_content(&content))))
+    }
+
+    fn parse_table(&mut self) -> Option<TexElement> {
+        let content = self.read_until_str("\\end{table}");
+        self.position += "\\end{table}".len();
+        
+        // Look for tabular environment within table
+        if let Some(tabular_start) = content.find("\\begin{tabular}") {
+            let tabular_content = &content[tabular_start..];
+            if let Some(tabular_end) = tabular_content.find("\\end{tabular}") {
+                let tabular_only = &tabular_content[..tabular_end + "\\end{tabular}".len()];
+                return Some(TexElement::Text(format!("\n{}\n", self.format_table_content(tabular_only))));
+            }
+        }
+        
+        Some(TexElement::Text(String::new()))
+    }
+
+    fn format_table_content(&self, content: &str) -> String {
+        let mut table_text = String::new();
+        
+        for line in content.lines() {
+            let line = line.trim();
+            
+            // Handle table rules
+            if line.starts_with("\\toprule") || line.starts_with("\\midrule") || line.starts_with("\\bottomrule") {
+                table_text.push_str(&"─".repeat(30));
+                table_text.push('\n');
+                continue;
+            }
+            
+            // Handle table rows
+            if line.contains('&') && !line.starts_with('\\') {
+                let cells: Vec<&str> = line.split('&').collect();
+                for (i, cell) in cells.iter().enumerate() {
+                    let cell = cell.trim()
+                        .trim_end_matches("\\\\")
+                        .replace("\\$", "$");
+                    table_text.push_str(&cell);
+                    if i < cells.len() - 1 {
+                        table_text.push_str(" | ");
+                    }
+                }
+                table_text.push('\n');
+            }
+        }
+        
+        table_text.trim().to_string()
     }
 
     fn parse_math(&mut self) -> Option<TexElement> {
@@ -273,7 +397,7 @@ impl TexParser {
         while self.position < self.content.len() {
             let remaining = &self.content[self.position..];
             
-            if remaining.starts_with('\\') || remaining.starts_with("\n\n") {
+            if remaining.starts_with('\\') || remaining.starts_with("\n\n") || remaining.starts_with('}') {
                 break;
             }
             
@@ -423,5 +547,25 @@ Visible text
         let elements = parser.parse();
 
         assert!(elements.is_empty() || elements.iter().all(|e| !matches!(e, TexElement::Command { .. })));
+    }
+
+    #[test]
+    fn parser_parses_lstlisting_environment() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{lstlisting}[language=Rust]
+fn main() {
+    println!("Hello, World!");
+}
+\end{lstlisting}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::CodeBlock(code) if code.contains("fn main") && code.contains("println"))
+        }));
     }
 }

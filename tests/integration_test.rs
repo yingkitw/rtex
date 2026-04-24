@@ -3,7 +3,6 @@ use std::fs;
 use std::path::PathBuf;
 
 #[test]
-#[ignore]
 fn generate_example_pdfs() {
     let output_dir = PathBuf::from("output");
     fs::create_dir_all(&output_dir).unwrap();

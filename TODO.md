@@ -28,6 +28,7 @@
 - [x] Improve text element quality validation before PDF output (normalize whitespace/control chars, preserve unmatched inline-math delimiter, robust wrapping for long tokens)
 - [x] Run core example PDF tests by default (unignore minimal/math/table/lists tests)
 - [x] Harden parser against unknown-command hangs (forward-progress guard + unknown command consumption + regression tests)
+- [x] Improve math generation quality (fractions/sqrt/scripts parsing + richer symbol mapping + regression tests)
 
 ## Pending
 

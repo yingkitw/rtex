@@ -4,10 +4,13 @@ use thiserror::Error;
 
 mod parser;
 mod pdf_builder;
+mod pdf_core;
+mod pdf_text_renderer;
 mod math_formatter;
 pub mod error;
 pub mod config;
 pub mod traits;
+pub mod page_layout;
 
 use parser::TexParser;
 use pdf_builder::PdfBuilder;
@@ -36,6 +39,11 @@ pub struct NativeTexConverter;
 impl NativeTexConverter {
     pub fn new() -> Self {
         Self
+    }
+    
+    pub fn convert_file(input: &Path, output: &Path) -> Result<(), TexError> {
+        let converter = Self::new();
+        converter.convert(input, output)
     }
 }
 
@@ -71,3 +79,6 @@ pub fn convert_tex_to_pdf(input: &Path, output: &Path) -> Result<(), TexError> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod example_tests;
