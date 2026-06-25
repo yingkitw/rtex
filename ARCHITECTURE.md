@@ -170,6 +170,7 @@ latex-rs/
 │   ├── color.rs            # Color parsing and PDF RGB color operators
 │   ├── layout.rs           # Multi-page layout engine and page break management
 │   ├── macros.rs           # User-defined macro expansion (\newcommand, \def)
+│   ├── bibliography.rs     # BibTeX parsing and citation formatting
 │   ├── pdf_builder.rs      # PDF generation implementation
 │   ├── pdf_core.rs         # Low-level PDF primitives
 │   ├── pdf_text_renderer.rs # Text rendering utilities

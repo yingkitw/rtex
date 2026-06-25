@@ -4,6 +4,7 @@
 //! display math, lists, tables, and metadata extraction.
 
 use crate::table::Table;
+use crate::utils::extract_braced;
 
 /// A structured element parsed from a LaTeX document.
 #[derive(Debug, Clone)]
@@ -30,6 +31,23 @@ pub enum TexElement {
     Table(Table),
     /// Colored text from `\textcolor{color}{text}`.
     ColoredText { color: String, text: String },
+    /// A citation command `\cite{key1,key2}`.
+    Citation { keys: Vec<String> },
+    /// A bibliography list from `thebibliography`.
+    Bibliography { entries: Vec<BibEntry> },
+    /// A label definition `\label{key}`.
+    Label { key: String },
+    /// A reference `\ref{key}`.
+    Ref { key: String },
+    /// A page reference `\pageref{key}`.
+    PageRef { key: String },
+}
+
+/// A single bibliography entry for `thebibliography`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BibEntry {
+    pub key: String,
+    pub text: String,
 }
 
 /// Stateful parser for a single LaTeX document.
@@ -173,6 +191,22 @@ impl TexParser {
             return self.parse_includegraphics();
         }
 
+        if remaining.starts_with("\\cite") {
+            return self.parse_cite();
+        }
+
+        if remaining.starts_with("\\label") {
+            return self.parse_label();
+        }
+
+        if remaining.starts_with("\\ref") {
+            return self.parse_ref();
+        }
+
+        if remaining.starts_with("\\pageref") {
+            return self.parse_pageref();
+        }
+
         if remaining.starts_with('$') {
             return self.parse_math();
         }
@@ -286,6 +320,101 @@ impl TexParser {
         Some(TexElement::ColoredText { color, text })
     }
 
+    fn parse_cite(&mut self) -> Option<TexElement> {
+        self.position += "\\cite".len();
+        self.skip_whitespace_and_comments();
+
+        let keys_str = self.parse_braced_content()?;
+        let keys: Vec<String> = keys_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Some(TexElement::Citation { keys })
+    }
+
+    fn parse_label(&mut self) -> Option<TexElement> {
+        self.position += "\\label".len();
+        self.skip_whitespace_and_comments();
+        let key = self.parse_braced_content()?;
+        Some(TexElement::Label { key })
+    }
+
+    fn parse_ref(&mut self) -> Option<TexElement> {
+        self.position += "\\ref".len();
+        self.skip_whitespace_and_comments();
+        let key = self.parse_braced_content()?;
+        Some(TexElement::Ref { key })
+    }
+
+    fn parse_pageref(&mut self) -> Option<TexElement> {
+        self.position += "\\pageref".len();
+        self.skip_whitespace_and_comments();
+        let key = self.parse_braced_content()?;
+        Some(TexElement::PageRef { key })
+    }
+
+    fn parse_thebibliography(&mut self) -> Option<TexElement> {
+        // Skip optional argument {number}
+        self.skip_whitespace_and_comments();
+        if self.content[self.position..].starts_with('{')
+            && let Some((_inner, end)) = extract_braced(&self.content, self.position)
+        {
+            self.position = end;
+        }
+
+        let mut entries = Vec::new();
+        let end_marker = "\\end{thebibliography}";
+
+        while self.position < self.content.len() {
+            self.skip_whitespace_and_comments();
+            let remaining = &self.content[self.position..];
+
+            if remaining.starts_with(end_marker) {
+                self.position += end_marker.len();
+                break;
+            }
+
+            if remaining.starts_with("\\bibitem") {
+                self.position += "\\bibitem".len();
+                self.skip_whitespace_and_comments();
+
+                let key = if self.content[self.position..].starts_with('{') {
+                    self.parse_braced_content().unwrap_or_default()
+                } else {
+                    // Plain key (no braces)
+                    let start = self.position;
+                    while self.position < self.content.len() {
+                        let ch = self.content[self.position..].chars().next().unwrap();
+                        if ch.is_whitespace() || ch == '\\' {
+                            break;
+                        }
+                        self.position += ch.len_utf8();
+                    }
+                    self.content[start..self.position].to_string()
+                };
+                self.skip_whitespace_and_comments();
+
+                // Read text until next \bibitem or \end
+                let text_start = self.position;
+                while self.position < self.content.len() {
+                    let rem = &self.content[self.position..];
+                    if rem.starts_with("\\bibitem") || rem.starts_with(end_marker) {
+                        break;
+                    }
+                    self.position += rem.chars().next().unwrap().len_utf8();
+                }
+                let text = self.content[text_start..self.position].trim().to_string();
+                entries.push(BibEntry { key, text });
+            } else {
+                // Skip unknown content
+                self.position += remaining.chars().next().unwrap().len_utf8();
+            }
+        }
+
+        Some(TexElement::Bibliography { entries })
+    }
+
     fn parse_environment(&mut self) -> Option<TexElement> {
         self.position += "\\begin{".len();
 
@@ -299,6 +428,7 @@ impl TexParser {
             "lstlisting" => self.parse_lstlisting(),
             "tabular" => self.parse_tabular(),
             "table" => self.parse_table(),
+            "thebibliography" => self.parse_thebibliography(),
             _ => {
                 self.skip_until(&format!("\\end{{{}}}", env_name));
                 None
@@ -887,6 +1017,65 @@ X & Y \\
 
         assert!(elements.iter().any(|element| {
             matches!(element, TexElement::Text(t) if t.contains("hi hi"))
+        }));
+    }
+
+    #[test]
+    fn parser_parses_cite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See \cite{smith2024} for details.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Citation { keys } if keys == &["smith2024"])
+        }));
+    }
+
+    #[test]
+    fn parser_parses_cite_multiple() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See \cite{smith2024, jones2023}.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Citation { keys } if keys == &["smith2024", "jones2023"])
+        }));
+    }
+
+    #[test]
+    fn parser_parses_thebibliography() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{thebibliography}{9}
+\bibitem{smith2024} J. Smith, A Great Paper, Journal of Testing, 2024.
+\bibitem{jones2023} A. Jones, Another Paper, 2023.
+\end{thebibliography}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            if let TexElement::Bibliography { entries } = element {
+                entries.len() == 2
+                    && entries[0].key == "smith2024"
+                    && entries[0].text.contains("A Great Paper")
+                    && entries[1].key == "jones2023"
+                    && entries[1].text.contains("Another Paper")
+            } else {
+                false
+            }
         }));
     }
 }

@@ -393,6 +393,21 @@ end";
             state.advance(25.0);
         }
 
+        // Pre-scan for bibliography entries to build key→number map
+        let mut bib_entries: Vec<(String, String)> = Vec::new();
+        for elem in elements.iter() {
+            if let TexElement::Bibliography { entries } = elem {
+                for entry in entries {
+                    bib_entries.push((entry.key.clone(), entry.text.clone()));
+                }
+            }
+        }
+        let citation_map = crate::bibliography::build_citation_map(&bib_entries);
+
+        // Pre-scan for cross-references
+        let mut ref_store = crate::references::RefStore::new();
+        ref_store.scan(elements);
+
         // Process elements
         let mut accumulated_text = String::new();
 
@@ -563,6 +578,52 @@ end";
                         state.current_stream().draw_image(img_name, x, y, img_width, img_height);
                         state.advance(total_height - 10.0);
                     }
+                }
+                TexElement::Citation { keys } => {
+                    let cite_text = crate::bibliography::format_citation(keys, &citation_map);
+                    if !cite_text.is_empty() {
+                        accumulated_text.push_str(&cite_text);
+                        accumulated_text.push(' ');
+                    }
+                }
+                TexElement::Bibliography { entries } => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.ensure_space(30.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", 16.0);
+                    stream.set_position(x, y);
+                    stream.show_text("References");
+                    stream.end_text();
+                    state.advance(line_height + 5.0);
+
+                    for (idx, entry) in entries.iter().enumerate() {
+                        let label = format!("[{}] ", idx + 1);
+                        let full_text = format!("{}{}", label, entry.text);
+                        self.render_text_block(&mut state, &full_text, line_height, chars_per_line);
+                    }
+                }
+                TexElement::Label { key } => {
+                    let page = state.pages.len();
+                    ref_store.set_page(key, page);
+                }
+                TexElement::Ref { key } => {
+                    let text = ref_store.resolve_ref(key).unwrap_or("??");
+                    accumulated_text.push_str(text);
+                    accumulated_text.push(' ');
+                }
+                TexElement::PageRef { key } => {
+                    let text = ref_store
+                        .resolve_pageref(key)
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "??".to_string());
+                    accumulated_text.push_str(&text);
+                    accumulated_text.push(' ');
                 }
                 _ => {}
             }

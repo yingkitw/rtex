@@ -139,11 +139,14 @@
 ### Phase 4: Advanced Features (Month 2-3)
 
 #### Bibliography
-- [ ] **Bibliography support** - `src/bibliography.rs`
-  - BibTeX parsing
-  - \cite command
-  - Bibliography formatting
-  - Citation styles
+- [x] **Bibliography support** - `src/bibliography.rs`
+  - BibTeX parser: `@type{key, field = {value}, ...}` with brace and quote value support
+  - `\cite{key1,key2}` parsed as `TexElement::Citation`
+  - `thebibliography` environment parsed as `TexElement::Bibliography` with `\bibitem{key}` entries
+  - Numeric citation formatting: `[1, 2]` via `build_citation_map` + `format_citation`
+  - `PdfBuilder` pre-scans bibliography to resolve citation numbers before rendering
+  - `References` heading rendered before bibliography entries with `[n]` labels
+  - `BibEntry` formatting helpers (`format_plain`, `format_numeric`) for future style support
 
 #### Cross-References
 - [ ] **Cross-reference system** - `src/references.rs`
@@ -230,7 +233,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 147 (100% passing)
+- Tests: 150 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 150+
 - LaTeX commands: ~50

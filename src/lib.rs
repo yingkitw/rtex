@@ -17,6 +17,8 @@ mod table;
 mod color;
 mod layout;
 mod macros;
+mod bibliography;
+mod references;
 mod pdf;
 pub(crate) mod utils;
 pub mod error;
