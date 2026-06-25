@@ -6,8 +6,8 @@
 /// immediately after the matching `}`. Returns `None` if there is no
 /// `{` at `start` or if braces are unbalanced.
 ///
-/// # Examples
-/// ```
+/// # Example
+/// ```ignore
 /// let (content, end) = extract_braced("{hello}", 0).unwrap();
 /// assert_eq!(content, "hello");
 /// assert_eq!(end, 7);

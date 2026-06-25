@@ -492,14 +492,14 @@ fn generate_golden_files() {
         let golden_path = PathBuf::from(FIXTURE_DIR).join("golden_pdfs").join(&pdf_name);
 
         let latex = fs::read_to_string(&latex_path)
-            .expect(&format!("Failed to read {}", fixture));
+            .unwrap_or_else(|_| panic!("Failed to read {}", fixture));
 
         let pdf = convert_latex_to_bytes(&latex)
-            .expect(&format!("Failed to convert {}", fixture));
+            .unwrap_or_else(|_| panic!("Failed to convert {}", fixture));
 
         // Validate before saving
         validate_pdf_structure(&pdf)
-            .expect(&format!("Invalid PDF generated for {}", fixture));
+            .unwrap_or_else(|_| panic!("Invalid PDF generated for {}", fixture));
 
         // Ensure golden directory exists
         if let Some(parent) = golden_path.parent() {
@@ -507,7 +507,7 @@ fn generate_golden_files() {
         }
 
         fs::write(&golden_path, pdf)
-            .expect(&format!("Failed to write golden file {}", pdf_name));
+            .unwrap_or_else(|_| panic!("Failed to write golden file {}", pdf_name));
 
         println!("Generated golden file: {}", golden_path.display());
     }

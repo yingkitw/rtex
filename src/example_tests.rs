@@ -18,7 +18,7 @@ mod example_tests {
             .filter_map(|entry| {
                 let entry = entry.unwrap();
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "tex") {
+                if path.extension().is_some_and(|ext| ext == "tex") {
                     Some(path)
                 } else {
                     None

@@ -24,10 +24,10 @@ fn main() {
 
 fn format_fraction_simple(latex: &str) -> String {
     // Simple version of what format_fractions does
-    let result = latex.replace(r"\frac{", "(")
+    
+    latex.replace(r"\frac{", "(")
         .replace("}{", ")/(")
-        .replace("}", ")");
-    result
+        .replace("}", ")")
 }
 
 fn replace_pm(s: &str) -> String {

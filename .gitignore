@@ -8,3 +8,8 @@ Cargo.lock
 *.toc
 *.synctex.gz
 .DS_Store
+test_format
+test_fraction
+test_pdf_output
+test_simple.tex
+test_math_fractions.tex

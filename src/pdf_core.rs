@@ -237,6 +237,37 @@ impl ContentStream {
         self.operations.extend_from_slice(b"> Tj\n");
     }
 
+    /// Move to coordinate (x, y) for path construction.
+    pub fn move_to(&mut self, x: f32, y: f32) {
+        self.operations.extend_from_slice(
+            format!("{} {} m\n", x, y).as_bytes()
+        );
+    }
+
+    /// Draw a line to coordinate (x, y).
+    pub fn line_to(&mut self, x: f32, y: f32) {
+        self.operations.extend_from_slice(
+            format!("{} {} l\n", x, y).as_bytes()
+        );
+    }
+
+    /// Stroke the current path.
+    pub fn stroke(&mut self) {
+        self.operations.extend_from_slice(b"S\n");
+    }
+
+    /// Draw an image XObject at the given position and size.
+    ///
+    /// `name` is the resource name (e.g. "Im1").
+    pub fn draw_image(&mut self, name: &str, x: f32, y: f32, width: f32, height: f32) {
+        self.operations.extend_from_slice(b"q\n");
+        self.operations.extend_from_slice(
+            format!("{} 0 0 {} {} {} cm\n", width, height, x, y).as_bytes()
+        );
+        self.operations.extend_from_slice(format!("/{} Do\n", name).as_bytes());
+        self.operations.extend_from_slice(b"Q\n");
+    }
+
     /// Get the content stream data
     pub fn data(&self) -> Vec<u8> {
         self.operations.clone()

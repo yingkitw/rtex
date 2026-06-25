@@ -165,6 +165,8 @@ latex-rs/
 │   ├── main.rs             # CLI entry point
 │   ├── parser.rs           # LaTeX parser implementation
 │   ├── math_formatter.rs   # Math formatting orchestrator
+│   ├── image.rs            # Image loading and PDF embedding
+│   ├── table.rs            # Table parsing and PDF rendering
 │   ├── pdf_builder.rs      # PDF generation implementation
 │   ├── pdf_core.rs         # Low-level PDF primitives
 │   ├── pdf_text_renderer.rs # Text rendering utilities
@@ -172,6 +174,7 @@ latex-rs/
 │   ├── error.rs            # Structured error types
 │   ├── page_layout.rs      # Page layout and font helpers
 │   ├── traits.rs           # Composable trait definitions
+│   ├── utils.rs            # Shared utilities (brace extraction)
 │   ├── math/
 │   │   ├── mod.rs          # Math module re-exports
 │   │   ├── symbols.rs      # LaTeX-to-Unicode symbol mapping
@@ -179,7 +182,10 @@ latex-rs/
 │   ├── pdf/
 │   │   └── mod.rs          # PDF module re-exports
 │   ├── tests.rs            # Unit/integration tests
-│   └── example_tests.rs    # Example-based tests
+│   ├── example_tests.rs    # Example-based tests
+│   └── bin/                # Auxiliary binaries (benchmarks, debug scripts)
+│       ├── bench.rs
+│       └── debug_*.rs
 ├── examples/               # Example TeX files
 │   ├── minimal.tex
 │   ├── sample.tex

@@ -1,7 +1,9 @@
 //! LaTeX parser - converts raw LaTeX source into structured elements.
 //!
 //! Handles document structure, environments, commands, inline math,
-//! display math, lists, and metadata extraction.
+//! display math, lists, tables, and metadata extraction.
+
+use crate::table::Table;
 
 /// A structured element parsed from a LaTeX document.
 #[derive(Debug, Clone)]
@@ -22,6 +24,10 @@ pub enum TexElement {
     ItemList { ordered: bool, items: Vec<Vec<TexElement>> },
     /// A code block from `lstlisting`.
     CodeBlock(String),
+    /// An image inclusion (`\includegraphics`).
+    Image { path: String, width: Option<String>, height: Option<String> },
+    /// A table from `tabular` or `table` environment.
+    Table(Table),
 }
 
 /// Stateful parser for a single LaTeX document.
@@ -152,6 +158,10 @@ impl TexParser {
             return self.parse_text_command();
         }
 
+        if remaining.starts_with("\\includegraphics") {
+            return self.parse_includegraphics();
+        }
+
         if remaining.starts_with('$') {
             return self.parse_math();
         }
@@ -223,6 +233,35 @@ impl TexParser {
         self.position += cmd_len;
         
         self.parse_braced_content().map(TexElement::Text)
+    }
+
+    fn parse_includegraphics(&mut self) -> Option<TexElement> {
+        self.position += "\\includegraphics".len();
+        self.skip_whitespace_and_comments();
+
+        let mut width = None;
+        let mut height = None;
+
+        // Optional [width=...,height=...] arguments
+        if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let opts = self.read_until(']');
+            self.position += 1;
+
+            for part in opts.split(',') {
+                let part = part.trim();
+                if let Some(val) = part.strip_prefix("width=") {
+                    width = Some(val.trim().to_string());
+                } else if let Some(val) = part.strip_prefix("height=") {
+                    height = Some(val.trim().to_string());
+                }
+            }
+        }
+
+        self.skip_whitespace_and_comments();
+
+        let path = self.parse_braced_content()?;
+        Some(TexElement::Image { path, width, height })
     }
 
     fn parse_environment(&mut self) -> Option<TexElement> {
@@ -303,58 +342,38 @@ impl TexParser {
     }
 
     fn parse_tabular(&mut self) -> Option<TexElement> {
-        let content = self.read_until_str("\\end{tabular}");
+        let raw = self.read_until_str("\\end{tabular}");
         self.position += "\\end{tabular}".len();
 
-        Some(TexElement::Text(format!("\n{}\n", self.format_table_content(&content))))
+        // Extract column spec from the start of raw content: {lc|r}...
+        let (spec, body) = if let Some(end) = raw.find('}') {
+            (&raw[..=end], &raw[end + 1..])
+        } else {
+            ("", raw.as_str())
+        };
+
+        Some(TexElement::Table(Table::parse(spec, body)))
     }
 
     fn parse_table(&mut self) -> Option<TexElement> {
         let content = self.read_until_str("\\end{table}");
         self.position += "\\end{table}".len();
-        
+
         // Look for tabular environment within table
         if let Some(tabular_start) = content.find("\\begin{tabular}") {
-            let tabular_content = &content[tabular_start..];
-            if let Some(tabular_end) = tabular_content.find("\\end{tabular}") {
-                let tabular_only = &tabular_content[..tabular_end + "\\end{tabular}".len()];
-                return Some(TexElement::Text(format!("\n{}\n", self.format_table_content(tabular_only))));
+            let after_begin = &content[tabular_start + "\\begin{tabular}".len()..];
+            let (spec, body_with_end) = if let Some(end) = after_begin.find('}') {
+                (&after_begin[..=end], &after_begin[end + 1..])
+            } else {
+                ("", after_begin)
+            };
+            if let Some(tabular_end) = body_with_end.find("\\end{tabular}") {
+                let body = &body_with_end[..tabular_end];
+                return Some(TexElement::Table(Table::parse(spec, body)));
             }
         }
-        
-        Some(TexElement::Text(String::new()))
-    }
 
-    fn format_table_content(&self, content: &str) -> String {
-        let mut table_text = String::new();
-        
-        for line in content.lines() {
-            let line = line.trim();
-            
-            // Handle table rules
-            if line.starts_with("\\toprule") || line.starts_with("\\midrule") || line.starts_with("\\bottomrule") {
-                table_text.push_str(&"─".repeat(30));
-                table_text.push('\n');
-                continue;
-            }
-            
-            // Handle table rows
-            if line.contains('&') && !line.starts_with('\\') {
-                let cells: Vec<&str> = line.split('&').collect();
-                for (i, cell) in cells.iter().enumerate() {
-                    let cell = cell.trim()
-                        .trim_end_matches("\\\\")
-                        .replace("\\$", "$");
-                    table_text.push_str(&cell);
-                    if i < cells.len() - 1 {
-                        table_text.push_str(" | ");
-                    }
-                }
-                table_text.push('\n');
-            }
-        }
-        
-        table_text.trim().to_string()
+        Some(TexElement::Text(String::new()))
     }
 
     fn parse_math(&mut self) -> Option<TexElement> {
@@ -689,5 +708,96 @@ Body text.
         assert!(combined.contains("bold"));
         assert!(combined.contains("italic"));
         assert!(combined.contains("mono"));
+    }
+
+    #[test]
+    fn parser_parses_includegraphics() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\includegraphics{logo.png}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Image { path, width, height } if path == "logo.png" && width.is_none() && height.is_none())
+        }));
+    }
+
+    #[test]
+    fn parser_parses_includegraphics_with_options() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\includegraphics[width=5cm,height=3cm]{logo.png}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Image { path, width, height }
+                if path == "logo.png"
+                && width.as_deref() == Some("5cm")
+                && height.as_deref() == Some("3cm"))
+        }));
+    }
+
+    #[test]
+    fn parser_parses_tabular() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{tabular}{lcr}
+\hline
+A & B & C \\
+\hline
+1 & 2 & 3 \\
+\end{tabular}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            if let TexElement::Table(table) = element {
+                table.columns == vec![crate::table::Align::Left, crate::table::Align::Center, crate::table::Align::Right]
+                    && table.rows.len() == 4
+                    && table.rows[0].is_separator
+                    && table.rows[1].cells == vec!["A", "B", "C"]
+                    && table.rows[2].is_separator
+                    && table.rows[3].cells == vec!["1", "2", "3"]
+            } else {
+                false
+            }
+        }));
+    }
+
+    #[test]
+    fn parser_parses_table_environment() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{table}
+\begin{tabular}{cc}
+X & Y \\
+\end{tabular}
+\end{table}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            if let TexElement::Table(table) = element {
+                table.columns == vec![crate::table::Align::Center, crate::table::Align::Center]
+                    && table.rows.len() == 1
+                    && table.rows[0].cells == vec!["X", "Y"]
+            } else {
+                false
+            }
+        }));
     }
 }

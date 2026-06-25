@@ -1,192 +1,234 @@
 /// Replace LaTeX math commands with Unicode symbols.
 ///
-/// This is the central symbol-mapping table used by `MathFormatter`.
-/// It covers Greek letters, operators, relations, arrows, delimiters
-/// and common spacing commands.
+/// Uses a single-pass scanner for O(n) performance instead of
+/// O(n·m) sequential `String::replace` calls.
 pub fn replace_math_symbols(text: &str) -> String {
-    let mut result = text.to_string();
+    let mut result = String::with_capacity(text.len());
+    let mut iter = text.chars().peekable();
 
-    // Clean up LaTeX spacing and formatting commands
-    result = result.replace("\\,", " "); // thin space
-    result = result.replace("\\;", " "); // medium space
-    result = result.replace("\\!", ""); // negative thin space
-    result = result.replace("\\quad", "  "); // quad space
-    result = result.replace("\\qquad", "    "); // double quad
-    result = result.replace("\\:", " "); // medium math space
-    result = result.replace("\\>", " "); // medium space
-    result = result.replace("\\~", " "); // non-breaking space
+    while let Some(ch) = iter.next() {
+        if ch == '\\' {
+            match iter.peek() {
+                Some(&'\\') => {
+                    iter.next();
+                    result.push(' ');
+                }
+                Some(&'{') => {
+                    iter.next();
+                    result.push('{');
+                }
+                Some(&'}') => {
+                    iter.next();
+                    result.push('}');
+                }
+                Some(&',') | Some(&';') | Some(&':') | Some(&'>') | Some(&'~') => {
+                    iter.next();
+                    result.push(' ');
+                }
+                Some(&'!') => {
+                    iter.next(); // negative space — remove
+                }
+                Some(&next_ch) if next_ch.is_alphabetic() => {
+                    let mut name = String::new();
+                    name.push(next_ch);
+                    iter.next();
 
-    // Remove matrix row separators and alignment
-    result = result.replace("\\\\", " "); // row separator
-    result = result.replace("&", " "); // column separator
+                    while let Some(&c) = iter.peek() {
+                        if c.is_alphabetic() || c == '*' {
+                            name.push(c);
+                            iter.next();
+                        } else {
+                            break;
+                        }
+                    }
 
-    // Differential operators
-    result = result.replace("\\mathrm{d}", "d");
-    result = result.replace("\\,d", "d");
-    result = result.replace("\\dx", "dx");
-    result = result.replace("\\dy", "dy");
-    result = result.replace("\\dt", "dt");
+                    // Text commands: strip the command and consume the opening brace
+                    if matches!(name.as_str(), "text" | "mathrm" | "mathbf" | "mathit" | "mathcal") {
+                        if let Some(&'{') = iter.peek() {
+                            iter.next();
+                        }
+                        continue;
+                    }
 
-    // Greek letters - lowercase
-    result = result.replace("\\alpha", "α");
-    result = result.replace("\\beta", "β");
-    result = result.replace("\\gamma", "γ");
-    result = result.replace("\\delta", "δ");
-    result = result.replace("\\epsilon", "ε");
-    result = result.replace("\\varepsilon", "ε");
-    result = result.replace("\\zeta", "ζ");
-    result = result.replace("\\eta", "η");
-    result = result.replace("\\theta", "θ");
-    result = result.replace("\\vartheta", "θ");
-    result = result.replace("\\iota", "ι");
-    result = result.replace("\\kappa", "κ");
-    result = result.replace("\\lambda", "λ");
-    result = result.replace("\\mu", "μ");
-    result = result.replace("\\nu", "ν");
-    result = result.replace("\\xi", "ξ");
-    result = result.replace("\\pi", "π");
-    result = result.replace("\\varpi", "π");
-    result = result.replace("\\rho", "ρ");
-    result = result.replace("\\varrho", "ρ");
-    result = result.replace("\\sigma", "σ");
-    result = result.replace("\\varsigma", "σ");
-    result = result.replace("\\tau", "τ");
-    result = result.replace("\\upsilon", "υ");
-    result = result.replace("\\phi", "φ");
-    result = result.replace("\\varphi", "φ");
-    result = result.replace("\\chi", "χ");
-    result = result.replace("\\psi", "ψ");
-    result = result.replace("\\omega", "ω");
-
-    // Greek letters - uppercase
-    result = result.replace("\\Gamma", "Γ");
-    result = result.replace("\\Delta", "Δ");
-    result = result.replace("\\Theta", "Θ");
-    result = result.replace("\\Lambda", "Λ");
-    result = result.replace("\\Xi", "Ξ");
-    result = result.replace("\\Pi", "Π");
-    result = result.replace("\\Sigma", "Σ");
-    result = result.replace("\\Upsilon", "Υ");
-    result = result.replace("\\Phi", "Φ");
-    result = result.replace("\\Psi", "Ψ");
-    result = result.replace("\\Omega", "Ω");
-
-    // Math operators - order matters! Replace longer strings first
-    result = result.replace("\\infty", "∞"); // Must come before \in
-    result = result.replace("\\int", "∫");
-    result = result.replace("\\in", "∈");
-    result = result.replace("\\sum", "∑");
-    result = result.replace("\\prod", "∏");
-    result = result.replace("\\coprod", "∐");
-    result = result.replace("\\bigcap", "⋂");
-    result = result.replace("\\bigcup", "⋃");
-    result = result.replace("\\bigoplus", "⊕");
-    result = result.replace("\\bigotimes", "⊗");
-    result = result.replace("\\bigodot", "⊙");
-
-    // Binary operators
-    result = result.replace("\\pm", "±");
-    result = result.replace("\\mp", "∓");
-    result = result.replace("\\times", "×");
-    result = result.replace("\\cdot", "·");
-    result = result.replace("\\ast", "∗");
-    result = result.replace("\\star", "⋆");
-    result = result.replace("\\circ", "∘");
-    result = result.replace("\\bullet", "•");
-    result = result.replace("\\diamond", "⋄");
-    result = result.replace("\\oplus", "⊕");
-    result = result.replace("\\ominus", "⊖");
-    result = result.replace("\\otimes", "⊗");
-    result = result.replace("\\odot", "⊙");
-
-    // Relations
-    result = result.replace("\\leq", "≤");
-    result = result.replace("\\geq", "≥");
-    result = result.replace("\\ll", "≪");
-    result = result.replace("\\gg", "≫");
-    result = result.replace("\\prec", "≺");
-    result = result.replace("\\succ", "≻");
-    result = result.replace("\\preceq", "≼");
-    result = result.replace("\\succeq", "≽");
-    result = result.replace("\\equiv", "≡");
-    result = result.replace("\\sim", "∼");
-    result = result.replace("\\simeq", "≃");
-    result = result.replace("\\cong", "≅");
-    result = result.replace("\\approx", "≈");
-    result = result.replace("\\subset", "⊂");
-    result = result.replace("\\subseteq", "⊆");
-    result = result.replace("\\supset", "⊃");
-    result = result.replace("\\supseteq", "⊇");
-    result = result.replace("\\in", "∈");
-    result = result.replace("\\notin", "∉");
-    result = result.replace("\\neq", "≠");
-    result = result.replace("\\perp", "⊥");
-    result = result.replace("\\parallel", "∥");
-    result = result.replace("\\mid", "|");
-    result = result.replace("\\models", "⊨");
-    result = result.replace("\\propto", "∝");
-
-    // Arrows
-    result = result.replace("\\rightarrow", "→");
-    result = result.replace("\\leftarrow", "←");
-    result = result.replace("\\leftrightarrow", "↔");
-    result = result.replace("\\Rightarrow", "⇒");
-    result = result.replace("\\Leftarrow", "⇐");
-    result = result.replace("\\Leftrightarrow", "⇔");
-    result = result.replace("\\longrightarrow", "⟶");
-    result = result.replace("\\longleftarrow", "⟵");
-    result = result.replace("\\Longrightarrow", "⟹");
-    result = result.replace("\\Longleftarrow", "⟸");
-    result = result.replace("\\uparrow", "↑");
-    result = result.replace("\\downarrow", "↓");
-    result = result.replace("\\Uparrow", "⇑");
-    result = result.replace("\\Downarrow", "⇓");
-    result = result.replace("\\updownarrow", "↕");
-    result = result.replace("\\nearrow", "↗");
-    result = result.replace("\\searrow", "↘");
-    result = result.replace("\\swarrow", "↙");
-    result = result.replace("\\nwarrow", "↖");
-    result = result.replace("\\mapsto", "↦");
-    result = result.replace("\\to", "→");
-
-    // Special symbols
-    result = result.replace("\\infty", "∞");
-    result = result.replace("\\aleph", "ℵ");
-    result = result.replace("\\hbar", "ℏ");
-    result = result.replace("\\ell", "ℓ");
-    result = result.replace("\\nabla", "∇");
-    result = result.replace("\\partial", "∂");
-    result = result.replace("\\angle", "∠");
-    result = result.replace("\\emptyset", "∅");
-    result = result.replace("\\forall", "∀");
-    result = result.replace("\\exists", "∃");
-    result = result.replace("\\neg", "¬");
-    result = result.replace("\\land", "∧");
-    result = result.replace("\\lor", "∨");
-    result = result.replace("\\top", "⊤");
-    result = result.replace("\\bot", "⊥");
-
-    // Delimiters (remove)
-    result = result.replace("\\left", "");
-    result = result.replace("\\right", "");
-    result = result.replace("\\big", "");
-    result = result.replace("\\Big", "");
-    result = result.replace("\\bigg", "");
-    result = result.replace("\\Bigg", "");
-
-    // Text commands
-    result = result.replace("\\text{", "");
-    result = result.replace("\\mathrm{", "");
-    result = result.replace("\\mathbf{", "");
-    result = result.replace("\\mathit{", "");
-    result = result.replace("\\mathcal{", "");
-
-    // Clean up extra backslashes and braces
-    result = result.replace("\\\\", "");
-    result = result.replace("\\{", "{");
-    result = result.replace("\\}", "}");
+                    match lookup_symbol(&name) {
+                        Some(repl) => result.push_str(repl),
+                        None => {
+                            result.push('\\');
+                            result.push_str(&name);
+                        }
+                    }
+                }
+                _ => result.push('\\'),
+            }
+        } else if ch == '&' {
+            result.push(' ');
+        } else {
+            result.push(ch);
+        }
+    }
 
     result
+}
+
+fn lookup_symbol(name: &str) -> Option<&'static str> {
+    Some(match name {
+        // Differential operators
+        "mathrm" => return Some(""), // handled above, but fallback
+        "dx" => "dx",
+        "dy" => "dy",
+        "dt" => "dt",
+
+        // Greek — lowercase
+        "alpha" => "α",
+        "beta" => "β",
+        "gamma" => "γ",
+        "delta" => "δ",
+        "epsilon" => "ε",
+        "varepsilon" => "ε",
+        "zeta" => "ζ",
+        "eta" => "η",
+        "theta" => "θ",
+        "vartheta" => "θ",
+        "iota" => "ι",
+        "kappa" => "κ",
+        "lambda" => "λ",
+        "mu" => "μ",
+        "nu" => "ν",
+        "xi" => "ξ",
+        "pi" => "π",
+        "varpi" => "π",
+        "rho" => "ρ",
+        "varrho" => "ρ",
+        "sigma" => "σ",
+        "varsigma" => "σ",
+        "tau" => "τ",
+        "upsilon" => "υ",
+        "phi" => "φ",
+        "varphi" => "φ",
+        "chi" => "χ",
+        "psi" => "ψ",
+        "omega" => "ω",
+
+        // Greek — uppercase
+        "Gamma" => "Γ",
+        "Delta" => "Δ",
+        "Theta" => "Θ",
+        "Lambda" => "Λ",
+        "Xi" => "Ξ",
+        "Pi" => "Π",
+        "Sigma" => "Σ",
+        "Upsilon" => "Υ",
+        "Phi" => "Φ",
+        "Psi" => "Ψ",
+        "Omega" => "Ω",
+
+        // Operators — longest first to avoid shadowing
+        "infty" => "∞",
+        "int" => "∫",
+        "in" => "∈",
+        "sum" => "∑",
+        "prod" => "∏",
+        "coprod" => "∐",
+        "bigcap" => "⋂",
+        "bigcup" => "⋃",
+        "bigoplus" => "⊕",
+        "bigotimes" => "⊗",
+        "bigodot" => "⊙",
+
+        // Binary operators
+        "pm" => "±",
+        "mp" => "∓",
+        "times" => "×",
+        "cdot" => "·",
+        "ast" => "∗",
+        "star" => "⋆",
+        "circ" => "∘",
+        "bullet" => "•",
+        "diamond" => "⋄",
+        "oplus" => "⊕",
+        "ominus" => "⊖",
+        "otimes" => "⊗",
+        "odot" => "⊙",
+
+        // Relations
+        "leq" => "≤",
+        "geq" => "≥",
+        "ll" => "≪",
+        "gg" => "≫",
+        "prec" => "≺",
+        "succ" => "≻",
+        "preceq" => "≼",
+        "succeq" => "≽",
+        "equiv" => "≡",
+        "sim" => "∼",
+        "simeq" => "≃",
+        "cong" => "≅",
+        "approx" => "≈",
+        "subset" => "⊂",
+        "subseteq" => "⊆",
+        "supset" => "⊃",
+        "supseteq" => "⊇",
+        "notin" => "∉",
+        "neq" => "≠",
+        "perp" => "⊥",
+        "parallel" => "∥",
+        "mid" => "|",
+        "models" => "⊨",
+        "propto" => "∝",
+
+        // Arrows
+        "longrightarrow" => "⟶",
+        "longleftarrow" => "⟵",
+        "Longrightarrow" => "⟹",
+        "Longleftarrow" => "⟸",
+        "leftrightarrow" => "↔",
+        "Leftrightarrow" => "⇔",
+        "rightarrow" => "→",
+        "leftarrow" => "←",
+        "Rightarrow" => "⇒",
+        "Leftarrow" => "⇐",
+        "uparrow" => "↑",
+        "downarrow" => "↓",
+        "Uparrow" => "⇑",
+        "Downarrow" => "⇓",
+        "updownarrow" => "↕",
+        "nearrow" => "↗",
+        "searrow" => "↘",
+        "swarrow" => "↙",
+        "nwarrow" => "↖",
+        "mapsto" => "↦",
+        "to" => "→",
+
+        // Special
+        "aleph" => "ℵ",
+        "hbar" => "ℏ",
+        "ell" => "ℓ",
+        "nabla" => "∇",
+        "partial" => "∂",
+        "angle" => "∠",
+        "emptyset" => "∅",
+        "forall" => "∀",
+        "exists" => "∃",
+        "neg" => "¬",
+        "land" => "∧",
+        "lor" => "∨",
+        "top" => "⊤",
+        "bot" => "⊥",
+
+        // Delimiters (remove)
+        "left" => "",
+        "right" => "",
+        "big" => "",
+        "Big" => "",
+        "bigg" => "",
+        "Bigg" => "",
+
+        // Quad spacing
+        "quad" => "  ",
+        "qquad" => "    ",
+
+        _ => return None,
+    })
 }
 
 #[cfg(test)]

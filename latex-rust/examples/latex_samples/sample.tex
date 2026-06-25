@@ -1,0 +1,107 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+
+\title{Sample LaTeX Document}
+\author{LaTeX-Rust Processor}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This is a sample LaTeX document demonstrating various features supported by the LaTeX-Rust processor. It includes text formatting, mathematical expressions, lists, and document structure.
+\end{abstract}
+
+\section{Introduction}
+
+Welcome to the LaTeX-Rust processor! This document showcases various LaTeX features that are supported by our Rust implementation.
+
+\section{Text Formatting}
+
+Here are some examples of text formatting:
+
+\begin{itemize}
+\item \textbf{Bold text} for emphasis
+\item \textit{Italic text} for style
+\item \texttt{Monospace text} for code
+\item \underline{Underlined text} for highlighting
+\item \emph{Emphasized text} for importance
+\end{itemize}
+
+\section{Mathematical Expressions}
+
+\subsection{Inline Mathematics}
+
+Here's some inline math: $E = mc^2$, and the quadratic formula: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$.
+
+\subsection{Display Mathematics}
+
+Here are some display math examples:
+
+$$\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$
+
+$$\sum_{n=1}^\infty \frac{1}{n^2} = \frac{\pi^2}{6}$$
+
+$$\lim_{x \to 0} \frac{\sin x}{x} = 1$$
+
+\section{Lists}
+
+\subsection{Itemized Lists}
+
+\begin{itemize}
+\item First item
+\item Second item
+\item Third item with \textbf{bold} text
+\end{itemize}
+
+\subsection{Enumerated Lists}
+
+\begin{enumerate}
+\item First numbered item
+\item Second numbered item
+\item Third numbered item
+\end{enumerate}
+
+\section{Environments}
+
+\subsection{Quotations}
+
+\begin{quote}
+This is a quoted text block. It demonstrates how the LaTeX-Rust processor handles the quote environment.
+\end{quote}
+
+\subsection{Centered Text}
+
+\begin{center}
+This text is centered.
+\end{center}
+
+\section{Document Structure}
+
+This document demonstrates a hierarchical structure with sections and subsections.
+
+\subsection{Subsection Example}
+
+This is content within a subsection.
+
+\subsubsection{Subsubsection Example}
+
+This is content within a subsubsection.
+
+\section{Conclusion}
+
+The LaTeX-Rust processor successfully handles various LaTeX constructs including:
+
+\begin{itemize}
+\item Document structure (sections, subsections)
+\item Text formatting commands
+\item Mathematical expressions (inline and display)
+\item Lists and environments
+\item Document metadata (title, author, date)
+\end{itemize}
+
+This demonstrates the capability of processing LaTeX documents and converting them to HTML format while preserving the structure and formatting.
+
+\end{document}

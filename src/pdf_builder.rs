@@ -30,15 +30,15 @@ impl PdfBuilder {
     /// Build a PDF from `elements` and write it to `output_path`.
     pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
         let mut generator = PdfGenerator::new();
-        
+
         // Load font
         let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/DejaVuSans.ttf");
         let font_data = std::fs::read(&font_path).map_err(|e| format!("Failed to load font: {}", e))?;
-        
+
         // Create font objects
-        let (font_id, _font_descriptor_id, _cid_font_id, _to_unicode_id) = 
+        let (font_id, _font_descriptor_id, _cid_font_id, _to_unicode_id) =
             self.create_font_objects(&mut generator, &font_data)?;
-        
+
         // Extract metadata from elements
         for elem in &elements {
             if let TexElement::Command { name, args } = elem {
@@ -50,62 +50,83 @@ impl PdfBuilder {
                 }
             }
         }
-        
-        // Build content stream
-        let content_data = self.build_content_stream(&elements, font_id)?;
-        
+
+        // Collect and embed images
+        use std::collections::HashMap;
+        let mut image_xobjects: HashMap<usize, (String, u32)> = HashMap::new();
+        for (idx, elem) in elements.iter().enumerate() {
+            if let TexElement::Image { path, .. } = elem {
+                let img_path = std::path::Path::new(path);
+                match crate::image::ImageInfo::from_path(img_path) {
+                    Ok(info) => {
+                        let dict = info.xobject_dict(info.data.len());
+                        let img_id = generator.add_stream_object(dict, info.data);
+                        image_xobjects.insert(idx, (format!("Im{}", idx), img_id));
+                    }
+                    Err(e) => eprintln!("Warning: could not load image '{}': {}", path, e),
+                }
+            }
+        }
+
+        // Build content stream (pass image xobjects so it can reference them)
+        let content_data = self.build_content_stream(&elements, font_id, &image_xobjects)?;
+
         // Add content stream object
         let mut content_dict = DictBuilder::new();
         content_dict.add("Length", &content_data.len().to_string());
         let content_id = generator.add_stream_object(content_dict.build(), content_data);
-        
+
+        // Build XObject resource entries
+        let mut xobj_entries = String::new();
+        for (name, id) in image_xobjects.values() {
+            xobj_entries.push_str(&format!("/{} {} 0 R ", name, id));
+        }
+
         // Create resources dictionary
-        let resources = format!(
-            "<<\n/Font << /F1 {} 0 R >>\n>>\n",
-            font_id
-        );
-        
+        let resources = if xobj_entries.is_empty() {
+            format!(
+                "<<\n/Font << /F1 {} 0 R >>\n>>\n",
+                font_id
+            )
+        } else {
+            format!(
+                "<<\n/Font << /F1 {} 0 R >>\n/XObject << {}>>\n>>\n",
+                font_id, xobj_entries
+            )
+        };
+
         // Create page object
-        let mut page_dict = DictBuilder::new();
-        page_dict
-            .add("Type", "/Page")
-            .add_array("MediaBox", &["0".to_string(), "0".to_string(), "595".to_string(), "842".to_string()])
-            .add_ref("Contents", content_id);
-        
         let page_content = format!(
             "<<\n/Type /Page\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
             content_id, resources
         );
         let page_id = generator.add_object(page_content);
-        
+
         // Create pages object
         let pages_content = format!(
             "<<\n/Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n",
             page_id
         );
         let pages_id = generator.add_object(pages_content);
-        
+
         // Update page to reference parent
-        // Note: In a real implementation, we'd need to modify the page object
-        // For now, we'll recreate it with the parent reference
         let page_with_parent = format!(
             "<<\n/Type /Page\n/Parent {} 0 R\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
             pages_id, content_id, resources
         );
-        // Replace the page object (this is a simplification)
         generator.objects[page_id as usize - 1].content = page_with_parent;
-        
+
         // Create catalog
         let catalog_content = format!(
             "<<\n/Type /Catalog\n/Pages {} 0 R\n>>\n",
             pages_id
         );
         let _catalog_id = generator.add_object(catalog_content);
-        
+
         // Write PDF to file
         generator.write_to_file(output_path)
             .map_err(|e| format!("Failed to write PDF: {}", e))?;
-        
+
         Ok(())
     }
     
@@ -304,7 +325,7 @@ end";
     // Font compression no longer needed with standard fonts
     // fn compress_font_data removed
     
-    fn build_content_stream(&mut self, elements: &[TexElement], _font_id: u32) -> Result<Vec<u8>, String> {
+    fn build_content_stream(&mut self, elements: &[TexElement], _font_id: u32, image_xobjects: &std::collections::HashMap<usize, (String, u32)>) -> Result<Vec<u8>, String> {
         let mut stream = ContentStream::new();
         
         // Page setup
@@ -354,7 +375,7 @@ end";
         let mut accumulated_text = String::new();
         let mut current_y = y_position;
         
-        for elem in elements {
+        for (elem_idx, elem) in elements.iter().enumerate() {
             match elem {
                 TexElement::Section { level, title } => {
                     // Flush accumulated text
@@ -381,33 +402,29 @@ end";
                     current_y -= line_height + 5.0;
                 }
                 TexElement::Text(text) => {
-                    // Check if this is table content (contains | separators and multiple lines)
-                    if text.contains('|') && text.lines().count() > 1 {
-                        // Flush accumulated text first
-                        if !accumulated_text.is_empty() {
-                            current_y = self.render_text_block(
-                                &mut stream,
-                                &accumulated_text,
-                                left_margin,
-                                current_y,
-                                line_height,
-                                chars_per_line,
-                            );
-                            accumulated_text.clear();
-                        }
-                        
-                        // Render table
-                        current_y = self.render_table(
+                    accumulated_text.push_str(text);
+                    accumulated_text.push(' ');
+                }
+                TexElement::Table(table) => {
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
                             &mut stream,
-                            text,
+                            &accumulated_text,
                             left_margin,
                             current_y,
                             line_height,
+                            chars_per_line,
                         );
-                    } else {
-                        accumulated_text.push_str(text);
-                        accumulated_text.push(' ');
+                        accumulated_text.clear();
                     }
+                    current_y = crate::table::render_table(
+                        table,
+                        &mut stream,
+                        left_margin,
+                        current_y,
+                        line_height,
+                        content_width,
+                    );
                 }
                 TexElement::MathInline(math) => {
                     let formatted = MathFormatter::format(math);
@@ -511,15 +528,42 @@ end";
                         );
                         accumulated_text.clear();
                     }
-                    
+
                     current_y -= 5.0;
-                    
+
                     stream.begin_text();
                     stream.set_font("F1", 10.0);
                     stream.set_position(left_margin + 10.0, current_y);
                     stream.show_text(code);
                     stream.end_text();
                     current_y -= line_height * (code.lines().count() as f32) + 5.0;
+                }
+                TexElement::Image { path: _, width, height } => {
+                    if !accumulated_text.is_empty() {
+                        current_y = self.render_text_block(
+                            &mut stream,
+                            &accumulated_text,
+                            left_margin,
+                            current_y,
+                            line_height,
+                            chars_per_line,
+                        );
+                        accumulated_text.clear();
+                    }
+
+                    // Look up the XObject by element index
+                    if let Some((img_name, _)) = image_xobjects.get(&elem_idx) {
+                        let img_width = width.as_ref()
+                            .and_then(|w| crate::image::parse_dimension(w))
+                            .unwrap_or(200.0);
+                        let img_height = height.as_ref()
+                            .and_then(|h| crate::image::parse_dimension(h))
+                            .unwrap_or(img_width);
+
+                        current_y -= 10.0;
+                        stream.draw_image(img_name, left_margin, current_y - img_height, img_width, img_height);
+                        current_y -= img_height + 10.0;
+                    }
                 }
                 _ => {}
             }
@@ -572,64 +616,6 @@ end";
         }
         
         current_y
-    }
-    
-    fn render_table(
-        &mut self,
-        stream: &mut ContentStream,
-        table_text: &str,
-        left_margin: f32,
-        y_position: f32,
-        line_height: f32,
-    ) -> f32 {
-        let mut current_y = y_position - 5.0;
-        
-        // Parse table rows
-        let lines: Vec<&str> = table_text.lines().collect();
-        
-        for line in lines {
-            if line.trim().is_empty() {
-                continue;
-            }
-            
-            // Check if this is a separator line (contains only dashes/lines)
-            if line.chars().all(|c| c == '─' || c == '-' || c.is_whitespace()) {
-                current_y -= line_height * 0.5;
-                continue;
-            }
-            
-            // Split by | separator
-            if line.contains('|') {
-                let cells: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
-                let col_width = 150.0; // Fixed column width
-                
-                for (i, cell) in cells.iter().enumerate() {
-                    if cell.is_empty() {
-                        continue;
-                    }
-                    
-                    let x_pos = left_margin + (i as f32 * col_width);
-                    
-                    stream.begin_text();
-                    stream.set_font("F1", 10.0);
-                    stream.set_position(x_pos, current_y);
-                    stream.show_text(cell);
-                    stream.end_text();
-                }
-                
-                current_y -= line_height;
-            } else {
-                // Regular line (not a table row)
-                stream.begin_text();
-                stream.set_font("F1", 10.0);
-                stream.set_position(left_margin, current_y);
-                stream.show_text(line.trim());
-                stream.end_text();
-                current_y -= line_height;
-            }
-        }
-        
-        current_y - 10.0
     }
     
     fn add_math_spacing(&self, math: &str) -> String {

@@ -12,17 +12,19 @@ mod pdf_core;
 mod pdf_text_renderer;
 mod math;
 mod math_formatter;
+mod image;
+mod table;
 mod pdf;
-mod utils;
+pub(crate) mod utils;
 pub mod error;
 pub mod config;
 pub mod traits;
 pub mod page_layout;
 
 pub use error::LatexError;
-
-use parser::TexParser;
-use pdf_builder::PdfBuilder;
+pub use parser::TexParser;
+pub use pdf_builder::PdfBuilder;
+pub use math_formatter::MathFormatter;
 
 /// Trait for converting a LaTeX file to PDF.
 pub trait TexConverter {
