@@ -1,17 +1,25 @@
+//! Math formatting orchestrator.
+//!
+//! Applies successive transformations to LaTeX math expressions:
+//! matrices, square roots, fractions, symbol replacement,
+//! superscripts, and subscripts.
+
 pub struct MathFormatter;
 
 impl MathFormatter {
+    /// Create a new formatter (stateless; mostly for API consistency).
     pub fn new() -> Self {
         Self
     }
     
+    /// Convert a LaTeX math expression to a Unicode-rich display string.
     pub fn format(math: &str) -> String {
         let mut result = math.to_string();
         
         result = Self::format_matrices(&result);
         result = Self::format_sqrt(&result);
         result = Self::format_fractions(&result);
-        result = Self::replace_math_symbols(&result);
+        result = crate::math::symbols::replace_math_symbols(&result);
         result = Self::format_superscripts(&result);
         result = Self::format_subscripts(&result);
         // Unicode symbols now supported with DejaVu font - no ASCII fallbacks needed
@@ -77,7 +85,7 @@ impl MathFormatter {
             if remaining.starts_with("\\sqrt") {
                 let sqrt_end = index + "\\sqrt".len();
 
-                if let Some((radicand, next_index)) = Self::read_group(text, sqrt_end) {
+                if let Some((radicand, next_index)) = crate::utils::extract_braced(text, sqrt_end) {
                     // Format the radicand recursively
                     let formatted_radicand = Self::format(&radicand);
                     result.push('√');
@@ -113,8 +121,8 @@ impl MathFormatter {
             if remaining.starts_with("\\frac") {
                 let frac_end = index + "\\frac".len();
 
-                if let Some((numerator, num_end)) = Self::read_group(text, frac_end) {
-                    if let Some((denominator, denom_end)) = Self::read_group(text, num_end) {
+                if let Some((numerator, num_end)) = crate::utils::extract_braced(text, frac_end)
+                    && let Some((denominator, denom_end)) = crate::utils::extract_braced(text, num_end) {
                         // Format numerator and denominator recursively
                         let formatted_num = Self::format(&numerator);
                         let formatted_denom = Self::format(&denominator);
@@ -136,7 +144,6 @@ impl MathFormatter {
                         index = denom_end;
                         continue;
                     }
-                }
 
                 result.push_str("frac");
                 index = frac_end;
@@ -214,7 +221,7 @@ impl MathFormatter {
     }
 
     fn render_script_token(token: &str, is_super: bool) -> String {
-        let normalized = Self::replace_math_symbols(token);
+        let normalized = crate::math::symbols::replace_math_symbols(token);
         if normalized.is_empty() {
             return String::new();
         }
@@ -224,11 +231,11 @@ impl MathFormatter {
         if normalized.chars().count() == 1 {
             let ch = normalized.chars().next().unwrap();
             if is_super {
-                if Self::to_superscript(ch).is_none() {
+                if crate::math::scripts::to_superscript(ch).is_none() {
                     return format!("^{}", normalized);
                 }
             } else {
-                if Self::to_subscript(ch).is_none() {
+                if crate::math::scripts::to_subscript(ch).is_none() {
                     return format!("_{}", normalized);
                 }
             }
@@ -237,9 +244,9 @@ impl MathFormatter {
         let mut mapped = String::new();
         for ch in normalized.chars() {
             let mapped_char = if is_super {
-                Self::to_superscript(ch)
+                crate::math::scripts::to_superscript(ch)
             } else {
-                Self::to_subscript(ch)
+                crate::math::scripts::to_subscript(ch)
             };
 
             if let Some(script_char) = mapped_char {
@@ -263,7 +270,7 @@ impl MathFormatter {
 
         let first = text[start..].chars().next()?;
         if first == '{' {
-            return Self::read_group(text, start);
+            return crate::utils::extract_braced(text, start);
         }
 
         if first == '\\' {
@@ -282,302 +289,6 @@ impl MathFormatter {
         Some((first.to_string(), start + first.len_utf8()))
     }
 
-    fn read_group(text: &str, start: usize) -> Option<(String, usize)> {
-        if start >= text.len() || !text[start..].starts_with('{') {
-            return None;
-        }
-
-        let mut depth = 0;
-        let mut content_start = None;
-
-        for (offset, ch) in text[start..].char_indices() {
-            let index = start + offset;
-            if ch == '{' {
-                depth += 1;
-                if depth == 1 {
-                    content_start = Some(index + ch.len_utf8());
-                }
-            } else if ch == '}' {
-                depth -= 1;
-                if depth == 0 {
-                    let inner_start = content_start?;
-                    return Some((text[inner_start..index].to_string(), index + ch.len_utf8()));
-                }
-            }
-        }
-
-        None
-    }
-
-    fn replace_math_symbols(text: &str) -> String {
-        let mut result = text.to_string();
-        
-        // Clean up LaTeX spacing and formatting commands
-        result = result.replace("\\,", " ");  // thin space
-        result = result.replace("\\;", " ");  // medium space
-        result = result.replace("\\!", "");   // negative thin space
-        result = result.replace("\\quad", "  ");  // quad space
-        result = result.replace("\\qquad", "    ");  // double quad
-        result = result.replace("\\:", " ");  // medium math space
-        result = result.replace("\\>", " ");  // medium space
-        result = result.replace("\\~", " ");  // non-breaking space
-        
-        // Remove matrix row separators and alignment
-        result = result.replace("\\\\", " ");  // row separator
-        result = result.replace("&", " ");  // column separator
-        
-        // Differential operators
-        result = result.replace("\\mathrm{d}", "d");
-        result = result.replace("\\,d", "d");
-        result = result.replace("\\dx", "dx");
-        result = result.replace("\\dy", "dy");
-        result = result.replace("\\dt", "dt");
-        
-        // Greek letters - lowercase
-        result = result.replace("\\alpha", "α");
-        result = result.replace("\\beta", "β");
-        result = result.replace("\\gamma", "γ");
-        result = result.replace("\\delta", "δ");
-        result = result.replace("\\epsilon", "ε");
-        result = result.replace("\\varepsilon", "ε");
-        result = result.replace("\\zeta", "ζ");
-        result = result.replace("\\eta", "η");
-        result = result.replace("\\theta", "θ");
-        result = result.replace("\\vartheta", "θ");
-        result = result.replace("\\iota", "ι");
-        result = result.replace("\\kappa", "κ");
-        result = result.replace("\\lambda", "λ");
-        result = result.replace("\\mu", "μ");
-        result = result.replace("\\nu", "ν");
-        result = result.replace("\\xi", "ξ");
-        result = result.replace("\\pi", "π");
-        result = result.replace("\\varpi", "π");
-        result = result.replace("\\rho", "ρ");
-        result = result.replace("\\varrho", "ρ");
-        result = result.replace("\\sigma", "σ");
-        result = result.replace("\\varsigma", "σ");
-        result = result.replace("\\tau", "τ");
-        result = result.replace("\\upsilon", "υ");
-        result = result.replace("\\phi", "φ");
-        result = result.replace("\\varphi", "φ");
-        result = result.replace("\\chi", "χ");
-        result = result.replace("\\psi", "ψ");
-        result = result.replace("\\omega", "ω");
-        
-        // Greek letters - uppercase
-        result = result.replace("\\Gamma", "Γ");
-        result = result.replace("\\Delta", "Δ");
-        result = result.replace("\\Theta", "Θ");
-        result = result.replace("\\Lambda", "Λ");
-        result = result.replace("\\Xi", "Ξ");
-        result = result.replace("\\Pi", "Π");
-        result = result.replace("\\Sigma", "Σ");
-        result = result.replace("\\Upsilon", "Υ");
-        result = result.replace("\\Phi", "Φ");
-        result = result.replace("\\Psi", "Ψ");
-        result = result.replace("\\Omega", "Ω");
-        
-        // Math operators - order matters! Replace longer strings first
-        result = result.replace("\\infty", "∞");  // Must come before \in
-        result = result.replace("\\int", "∫");
-        result = result.replace("\\in", "∈");
-        result = result.replace("\\sum", "∑");
-        result = result.replace("\\prod", "∏");
-        result = result.replace("\\coprod", "∐");
-        result = result.replace("\\bigcap", "⋂");
-        result = result.replace("\\bigcup", "⋃");
-        result = result.replace("\\bigoplus", "⊕");
-        result = result.replace("\\bigotimes", "⊗");
-        result = result.replace("\\bigodot", "⊙");
-        
-        // Binary operators
-        result = result.replace("\\pm", "±");
-        result = result.replace("\\mp", "∓");
-        result = result.replace("\\times", "×");
-        result = result.replace("\\cdot", "·");
-        result = result.replace("\\ast", "∗");
-        result = result.replace("\\star", "⋆");
-        result = result.replace("\\circ", "∘");
-        result = result.replace("\\bullet", "•");
-        result = result.replace("\\diamond", "⋄");
-        result = result.replace("\\oplus", "⊕");
-        result = result.replace("\\ominus", "⊖");
-        result = result.replace("\\otimes", "⊗");
-        result = result.replace("\\odot", "⊙");
-        
-        // Relations
-        result = result.replace("\\leq", "≤");
-        result = result.replace("\\geq", "≥");
-        result = result.replace("\\ll", "≪");
-        result = result.replace("\\gg", "≫");
-        result = result.replace("\\prec", "≺");
-        result = result.replace("\\succ", "≻");
-        result = result.replace("\\preceq", "≼");
-        result = result.replace("\\succeq", "≽");
-        result = result.replace("\\equiv", "≡");
-        result = result.replace("\\sim", "∼");
-        result = result.replace("\\simeq", "≃");
-        result = result.replace("\\cong", "≅");
-        result = result.replace("\\approx", "≈");
-        result = result.replace("\\subset", "⊂");
-        result = result.replace("\\subseteq", "⊆");
-        result = result.replace("\\supset", "⊃");
-        result = result.replace("\\supseteq", "⊇");
-        result = result.replace("\\in", "∈");
-        result = result.replace("\\notin", "∉");
-        result = result.replace("\\neq", "≠");
-        result = result.replace("\\perp", "⊥");
-        result = result.replace("\\parallel", "∥");
-        result = result.replace("\\mid", "|");
-        result = result.replace("\\models", "⊨");
-        result = result.replace("\\propto", "∝");
-        
-        // Arrows
-        result = result.replace("\\rightarrow", "→");
-        result = result.replace("\\leftarrow", "←");
-        result = result.replace("\\leftrightarrow", "↔");
-        result = result.replace("\\Rightarrow", "⇒");
-        result = result.replace("\\Leftarrow", "⇐");
-        result = result.replace("\\Leftrightarrow", "⇔");
-        result = result.replace("\\longrightarrow", "⟶");
-        result = result.replace("\\longleftarrow", "⟵");
-        result = result.replace("\\Longrightarrow", "⟹");
-        result = result.replace("\\Longleftarrow", "⟸");
-        result = result.replace("\\uparrow", "↑");
-        result = result.replace("\\downarrow", "↓");
-        result = result.replace("\\Uparrow", "⇑");
-        result = result.replace("\\Downarrow", "⇓");
-        result = result.replace("\\updownarrow", "↕");
-        result = result.replace("\\nearrow", "↗");
-        result = result.replace("\\searrow", "↘");
-        result = result.replace("\\swarrow", "↙");
-        result = result.replace("\\nwarrow", "↖");
-        result = result.replace("\\mapsto", "↦");
-        result = result.replace("\\to", "→");
-        
-        // Special symbols
-        result = result.replace("\\infty", "∞");
-        result = result.replace("\\aleph", "ℵ");
-        result = result.replace("\\hbar", "ℏ");
-        result = result.replace("\\ell", "ℓ");
-        result = result.replace("\\nabla", "∇");
-        result = result.replace("\\partial", "∂");
-        result = result.replace("\\angle", "∠");
-        result = result.replace("\\emptyset", "∅");
-        result = result.replace("\\forall", "∀");
-        result = result.replace("\\exists", "∃");
-        result = result.replace("\\neg", "¬");
-        result = result.replace("\\land", "∧");
-        result = result.replace("\\lor", "∨");
-        result = result.replace("\\top", "⊤");
-        result = result.replace("\\bot", "⊥");
-        
-        // Delimiters (remove)
-        result = result.replace("\\left", "");
-        result = result.replace("\\right", "");
-        result = result.replace("\\big", "");
-        result = result.replace("\\Big", "");
-        result = result.replace("\\bigg", "");
-        result = result.replace("\\Bigg", "");
-        
-        // Text commands
-        result = result.replace("\\text{", "");
-        result = result.replace("\\mathrm{", "");
-        result = result.replace("\\mathbf{", "");
-        result = result.replace("\\mathit{", "");
-        result = result.replace("\\mathcal{", "");
-        
-        // Clean up extra backslashes and braces
-        result = result.replace("\\\\", "");
-        result = result.replace("\\{", "{");
-        result = result.replace("\\}", "}");
-        
-        result
-    }
-    
-    fn to_superscript(ch: char) -> Option<char> {
-        match ch {
-            '0' => Some('⁰'),
-            '1' => Some('¹'),
-            '2' => Some('²'),
-            '3' => Some('³'),
-            '4' => Some('⁴'),
-            '5' => Some('⁵'),
-            '6' => Some('⁶'),
-            '7' => Some('⁷'),
-            '8' => Some('⁸'),
-            '9' => Some('⁹'),
-            '+' => Some('⁺'),
-            '-' => Some('⁻'),
-            '=' => Some('⁼'),
-            '(' => Some('⁽'),
-            ')' => Some('⁾'),
-            'a' => Some('ᵃ'),
-            'b' => Some('ᵇ'),
-            'c' => Some('ᶜ'),
-            'd' => Some('ᵈ'),
-            'e' => Some('ᵉ'),
-            'f' => Some('ᶠ'),
-            'g' => Some('ᵍ'),
-            'h' => Some('ʰ'),
-            'i' => Some('ⁱ'),
-            'j' => Some('ʲ'),
-            'k' => Some('ᵏ'),
-            'l' => Some('ˡ'),
-            'm' => Some('ᵐ'),
-            'n' => Some('ⁿ'),
-            'o' => Some('ᵒ'),
-            'p' => Some('ᵖ'),
-            'r' => Some('ʳ'),
-            's' => Some('ˢ'),
-            't' => Some('ᵗ'),
-            'u' => Some('ᵘ'),
-            'v' => Some('ᵛ'),
-            'w' => Some('ʷ'),
-            'x' => Some('ˣ'),
-            'y' => Some('ʸ'),
-            'z' => Some('ᶻ'),
-            _ => None,
-        }
-    }
-
-    fn to_subscript(ch: char) -> Option<char> {
-        match ch {
-            '0' => Some('₀'),
-            '1' => Some('₁'),
-            '2' => Some('₂'),
-            '3' => Some('₃'),
-            '4' => Some('₄'),
-            '5' => Some('₅'),
-            '6' => Some('₆'),
-            '7' => Some('₇'),
-            '8' => Some('₈'),
-            '9' => Some('₉'),
-            '+' => Some('₊'),
-            '-' => Some('₋'),
-            '=' => Some('₌'),
-            '(' => Some('₍'),
-            ')' => Some('₎'),
-            'a' => Some('ₐ'),
-            'e' => Some('ₑ'),
-            'h' => Some('ₕ'),
-            'i' => Some('ᵢ'),
-            'j' => Some('ⱼ'),
-            'k' => Some('ₖ'),
-            'l' => Some('ₗ'),
-            'm' => Some('ₘ'),
-            'n' => Some('ₙ'),
-            'o' => Some('ₒ'),
-            'p' => Some('ₚ'),
-            'r' => Some('ᵣ'),
-            's' => Some('ₛ'),
-            't' => Some('ₜ'),
-            'u' => Some('ᵤ'),
-            'v' => Some('ᵥ'),
-            'x' => Some('ₓ'),
-            _ => None,
-        }
-    }
 }
 
 impl Default for MathFormatter {

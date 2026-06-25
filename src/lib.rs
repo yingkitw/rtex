@@ -1,47 +1,48 @@
+//! latex-rs - Native TeX to PDF converter
+//!
+//! A self-contained Rust library for converting LaTeX documents to PDF
+//! without requiring an external LaTeX installation.
+
 use std::path::Path;
 use std::fs;
-use thiserror::Error;
 
 mod parser;
 mod pdf_builder;
 mod pdf_core;
 mod pdf_text_renderer;
+mod math;
 mod math_formatter;
+mod pdf;
+mod utils;
 pub mod error;
 pub mod config;
 pub mod traits;
 pub mod page_layout;
 
+pub use error::LatexError;
+
 use parser::TexParser;
 use pdf_builder::PdfBuilder;
 
-#[derive(Error, Debug)]
-pub enum TexError {
-    #[error("Failed to read input file: {0}")]
-    ReadError(#[from] std::io::Error),
-    
-    #[error("LaTeX compilation failed: {0}")]
-    CompilationError(String),
-    
-    #[error("PDF generation failed: {0}")]
-    PdfGenerationError(String),
-    
-    #[error("Invalid file path")]
-    InvalidPath,
-}
-
+/// Trait for converting a LaTeX file to PDF.
 pub trait TexConverter {
-    fn convert(&self, input: &Path, output: &Path) -> Result<(), TexError>;
+    /// Convert `input` (a `.tex` file) to `output` (a `.pdf` file).
+    fn convert(&self, input: &Path, output: &Path) -> Result<(), LatexError>;
 }
 
+/// Pure-Rust TeX-to-PDF converter.
+///
+/// No external LaTeX installation is required.
 pub struct NativeTexConverter;
 
 impl NativeTexConverter {
+    /// Create a new converter.
     pub fn new() -> Self {
         Self
     }
-    
-    pub fn convert_file(input: &Path, output: &Path) -> Result<(), TexError> {
+
+    /// Convenience constructor that creates a converter and runs the conversion.
+    pub fn convert_file(input: &Path, output: &Path) -> Result<(), LatexError> {
         let converter = Self::new();
         converter.convert(input, output)
     }
@@ -54,25 +55,25 @@ impl Default for NativeTexConverter {
 }
 
 impl TexConverter for NativeTexConverter {
-    fn convert(&self, input: &Path, output: &Path) -> Result<(), TexError> {
+    fn convert(&self, input: &Path, output: &Path) -> Result<(), LatexError> {
         if !input.exists() {
-            return Err(TexError::InvalidPath);
+            return Err(LatexError::InvalidPath);
         }
 
         let content = fs::read_to_string(input)?;
-        
+
         let mut parser = TexParser::new(content);
         let elements = parser.parse();
-        
+
         let mut builder = PdfBuilder::new();
-        builder.build(elements, output)
-            .map_err(|e| TexError::PdfGenerationError(e))?;
+        builder.build(elements, output)?;
 
         Ok(())
     }
 }
 
-pub fn convert_tex_to_pdf(input: &Path, output: &Path) -> Result<(), TexError> {
+/// One-shot helper: convert a `.tex` file to a `.pdf`.
+pub fn convert_tex_to_pdf(input: &Path, output: &Path) -> Result<(), LatexError> {
     let converter = NativeTexConverter::new();
     converter.convert(input, output)
 }

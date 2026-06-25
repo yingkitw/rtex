@@ -6,7 +6,7 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::tempdir;
     // Note: lopdf removed - using custom PDF generation
-    use crate::{NativeTexConverter, TexError};
+    use crate::{NativeTexConverter, LatexError};
     use crate::parser::TexElement;
     use crate::parser::TexParser;
 
@@ -24,7 +24,7 @@ mod tests {
         
         let result = converter.convert(&input, &output);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TexError::InvalidPath));
+        assert!(matches!(result.unwrap_err(), LatexError::InvalidPath));
     }
 
     #[test]
@@ -91,9 +91,8 @@ Test document.
         let result = converter.convert(&input_path, &output_path);
 
         match result {
-            Err(TexError::CompilationError(_)) => {},
-            Err(TexError::PdfGenerationError(_)) => {},
-            Err(TexError::ReadError(_)) => {},
+            Err(LatexError::PdfError { .. }) => {},
+            Err(LatexError::IoError { .. }) => {},
             Err(e) => panic!("Unexpected error type: {:?}", e),
             Ok(_) => {},
         }

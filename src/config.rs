@@ -1,15 +1,17 @@
-/// Configuration system for latex-rs
-/// 
-/// Provides quality presets and configurable options for PDF generation
+//! Configuration system for latex-rs.
+//!
+//! Provides quality presets and configurable options for PDF generation.
 
 use std::path::PathBuf;
 
 /// Quality preset for PDF generation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum QualityPreset {
     /// Draft quality - fast generation, larger files
     Draft,
     /// Standard quality - balanced
+    #[default]
     Standard,
     /// High quality - better output, slower
     High,
@@ -17,28 +19,20 @@ pub enum QualityPreset {
     Print,
 }
 
-impl Default for QualityPreset {
-    fn default() -> Self {
-        QualityPreset::Standard
-    }
-}
 
 /// Font embedding options
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum FontEmbedding {
     /// Don't embed fonts (smallest files, may not display correctly)
     None,
     /// Embed only used characters (subset)
     Subset,
     /// Embed full fonts
+    #[default]
     Full,
 }
 
-impl Default for FontEmbedding {
-    fn default() -> Self {
-        FontEmbedding::Full
-    }
-}
 
 /// Configuration for latex-rs operations
 #[derive(Debug, Clone)]
@@ -103,8 +97,10 @@ impl Config {
     
     /// Create configuration with a specific quality preset
     pub fn with_quality(quality: QualityPreset) -> Self {
-        let mut config = Self::default();
-        config.quality = quality;
+        let mut config = Self {
+            quality,
+            ..Self::default()
+        };
         config.apply_quality_preset();
         config
     }

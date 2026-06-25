@@ -1,5 +1,6 @@
-/// Custom PDF generation core - learned from pdfrs
-/// Replaces lopdf dependency with simple, maintainable PDF generation
+//! Custom PDF generation core — learned from pdfrs.
+//!
+//! Replaces the `lopdf` dependency with simple, maintainable PDF generation.
 
 use std::io::Write;
 
@@ -76,13 +77,12 @@ impl PdfGenerator {
             pdf.extend_from_slice(obj.content.as_bytes());
 
             // Stream data if present
-            if obj.is_stream {
-                if let Some(data) = &obj.stream_data {
+            if obj.is_stream
+                && let Some(data) = &obj.stream_data {
                     pdf.extend_from_slice(b"stream\n");
                     pdf.extend_from_slice(data);
                     pdf.extend_from_slice(b"\nendstream\n");
                 }
-            }
 
             pdf.extend_from_slice(b"endobj\n");
             current_offset = pdf.len() as u32;
@@ -290,5 +290,67 @@ mod tests {
         let data = stream.data();
         assert!(data.starts_with(b"BT\n"));
         assert!(data.ends_with(b"ET\n"));
+    }
+
+    #[test]
+    fn test_add_stream_object() {
+        let mut generator = PdfGenerator::new();
+        let id = generator.add_stream_object(
+            "<< /Type /Stream >>".to_string(),
+            vec![0x48, 0x65, 0x6C, 0x6C, 0x6F],
+        );
+        assert_eq!(id, 1);
+        assert_eq!(generator.objects.len(), 1);
+        assert!(generator.objects[0].is_stream);
+        assert_eq!(generator.objects[0].stream_data.as_ref().unwrap().len(), 5);
+    }
+
+    #[test]
+    fn test_generate_with_objects() {
+        let mut generator = PdfGenerator::new();
+        generator.add_object("<< /Type /Catalog >>".to_string());
+        let pdf = generator.generate();
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert!(pdf.ends_with(b"%%EOF\n"));
+        let pdf_str = String::from_utf8_lossy(&pdf);
+        assert!(pdf_str.contains("xref"));
+        assert!(pdf_str.contains("trailer"));
+        assert!(pdf_str.contains("/Root 1 0 R"));
+    }
+
+    #[test]
+    fn test_dict_builder_ref_and_array() {
+        let mut dict = DictBuilder::new();
+        dict.add("Type", "/Page")
+            .add_ref("Parent", 2)
+            .add_array("MediaBox", &["0".to_string(), "0".to_string(), "612".to_string(), "792".to_string()]);
+        let result = dict.build();
+        assert!(result.contains("/Parent 2 0 R"));
+        assert!(result.contains("/MediaBox [0 0 612 792]"));
+    }
+
+    #[test]
+    fn test_content_stream_show_text() {
+        let mut stream = ContentStream::new();
+        stream.begin_text();
+        stream.show_text("Hi");
+        stream.end_text();
+        
+        let data = stream.data();
+        let text = String::from_utf8_lossy(&data);
+        assert!(text.contains("BT"));
+        assert!(text.contains("ET"));
+        assert!(text.contains("> Tj"));
+    }
+
+    #[test]
+    fn test_object_ids_are_sequential() {
+        let mut generator = PdfGenerator::new();
+        let id1 = generator.add_object("obj1".to_string());
+        let id2 = generator.add_stream_object("obj2".to_string(), vec![]);
+        let id3 = generator.add_object("obj3".to_string());
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+        assert_eq!(id3, 3);
     }
 }

@@ -1,5 +1,8 @@
-/// PDF Builder using custom pdf_core (no lopdf dependency)
-/// Learned from pdfrs architecture
+//! PDF document builder — converts parsed LaTeX elements into a PDF file.
+//!
+//! Uses the custom `pdf_core` module for low-level PDF generation,
+//! DejaVu Sans for Unicode math support, and handles page layout,
+//! text wrapping, and automatic page breaks.
 
 use crate::parser::TexElement;
 use crate::math_formatter::MathFormatter;
@@ -7,6 +10,7 @@ use crate::pdf_text_renderer::PdfTextRenderer;
 use crate::pdf_core::{PdfGenerator, DictBuilder, ContentStream};
 use std::path::Path;
 
+/// Converts a sequence of `TexElement`s into a PDF file.
 pub struct PdfBuilder {
     title: Option<String>,
     author: Option<String>,
@@ -14,6 +18,7 @@ pub struct PdfBuilder {
 }
 
 impl PdfBuilder {
+    /// Create a new builder with no metadata set.
     pub fn new() -> Self {
         Self {
             title: None,
@@ -22,6 +27,7 @@ impl PdfBuilder {
         }
     }
 
+    /// Build a PDF from `elements` and write it to `output_path`.
     pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
         let mut generator = PdfGenerator::new();
         
@@ -308,7 +314,7 @@ end";
         let page_width = 595.0;
         let right_margin = 72.0;
         let content_width = page_width - left_margin - right_margin;
-        let chars_per_line = ((content_width / 6.0) as usize).max(60).min(85);
+        let chars_per_line = ((content_width / 6.0) as usize).clamp(60, 85);
         
         // Render title, author, date
         if let Some(title) = &self.title {
@@ -635,12 +641,12 @@ end";
             let ch = chars[i];
             
             // Check for multi-character operators
-            if i + 2 < chars.len() && &chars[i..i+3] == &['+', '/', '-'] {
+            if i + 2 < chars.len() && chars[i..i+3] == ['+', '/', '-'] {
                 result.push_str(" +/- ");
                 i += 3;
                 continue;
             }
-            if i + 2 < chars.len() && &chars[i..i+3] == &['-', '/', '+'] {
+            if i + 2 < chars.len() && chars[i..i+3] == ['-', '/', '+'] {
                 result.push_str(" -/+ ");
                 i += 3;
                 continue;
@@ -689,11 +695,11 @@ end";
     
     fn format_inline_math(&self, text: &str) -> String {
         let mut result = String::new();
-        let mut chars = text.chars();
+        let chars = text.chars();
         let mut in_math = false;
         let mut math_buffer = String::new();
         
-        while let Some(ch) = chars.next() {
+        for ch in chars {
             if ch == '$' {
                 if in_math {
                     let formatted = MathFormatter::format(&math_buffer);

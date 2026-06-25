@@ -1,7 +1,7 @@
-/// Core traits for latex-rs
-/// 
-/// Defines atomic, composable traits for parsing, formatting, and PDF generation
-/// Following the trait-based architecture pattern from minitex
+//! Core traits for latex-rs.
+//!
+//! Defines atomic, composable traits for parsing, formatting, and PDF generation.
+//! Follows the trait-based architecture pattern from minitex.
 
 use crate::error::Result;
 use crate::parser::TexElement;

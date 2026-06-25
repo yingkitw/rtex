@@ -1,106 +1,75 @@
-use std::fmt;
+//! Structured error types for latex-rs.
+//!
+//! Provides rich error variants with context, line numbers, and suggestions.
+
 use std::path::PathBuf;
+use thiserror::Error;
 
 /// Main error type for latex-rs operations
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum LatexError {
     /// Error during parsing
+    #[error("Parse error: {message}{line_info}{column_info}{context_info}",
+        line_info = line.map(|l| format!(" at line {}", l)).unwrap_or_default(),
+        column_info = column.map(|c| format!(", column {}", c)).unwrap_or_default(),
+        context_info = context.as_ref().map(|ctx| format!("\nContext: {}", ctx)).unwrap_or_default()
+    )]
     ParseError {
         message: String,
         line: Option<usize>,
         column: Option<usize>,
         context: Option<String>,
     },
-    
+
     /// Error during PDF generation
+    #[error("PDF generation error: {message}{context_info}",
+        context_info = context.as_ref().map(|ctx| format!("\nContext: {}", ctx)).unwrap_or_default()
+    )]
     PdfError {
         message: String,
         context: Option<String>,
     },
-    
+
     /// File I/O error
+    #[error("I/O error for file '{path}': {source}")]
     IoError {
         path: PathBuf,
+        #[source]
         source: std::io::Error,
     },
-    
+
     /// Font loading error
+    #[error("Font error for '{font_name}': {message}")]
     FontError {
         font_name: String,
         message: String,
     },
-    
+
     /// Math formatting error
+    #[error("Math error in '{expression}': {message}")]
     MathError {
         expression: String,
         message: String,
     },
-    
+
     /// Configuration error
+    #[error("Configuration error: {message}")]
     ConfigError {
         message: String,
     },
-    
+
     /// Unsupported feature
+    #[error("Unsupported feature: {feature}{suggestion_info}",
+        suggestion_info = suggestion.as_ref().map(|s| format!("\nSuggestion: {}", s)).unwrap_or_default()
+    )]
     UnsupportedFeature {
         feature: String,
         suggestion: Option<String>,
     },
-}
 
-impl fmt::Display for LatexError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LatexError::ParseError { message, line, column, context } => {
-                write!(f, "Parse error: {}", message)?;
-                if let Some(l) = line {
-                    write!(f, " at line {}", l)?;
-                    if let Some(c) = column {
-                        write!(f, ", column {}", c)?;
-                    }
-                }
-                if let Some(ctx) = context {
-                    write!(f, "\nContext: {}", ctx)?;
-                }
-                Ok(())
-            }
-            LatexError::PdfError { message, context } => {
-                write!(f, "PDF generation error: {}", message)?;
-                if let Some(ctx) = context {
-                    write!(f, "\nContext: {}", ctx)?;
-                }
-                Ok(())
-            }
-            LatexError::IoError { path, source } => {
-                write!(f, "I/O error for file '{}': {}", path.display(), source)
-            }
-            LatexError::FontError { font_name, message } => {
-                write!(f, "Font error for '{}': {}", font_name, message)
-            }
-            LatexError::MathError { expression, message } => {
-                write!(f, "Math error in '{}': {}", expression, message)
-            }
-            LatexError::ConfigError { message } => {
-                write!(f, "Configuration error: {}", message)
-            }
-            LatexError::UnsupportedFeature { feature, suggestion } => {
-                write!(f, "Unsupported feature: {}", feature)?;
-                if let Some(sug) = suggestion {
-                    write!(f, "\nSuggestion: {}", sug)?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
-impl std::error::Error for LatexError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            LatexError::IoError { source, .. } => Some(source),
-            _ => None,
-        }
-    }
+    /// Invalid file path
+    #[error("Invalid file path")]
+    InvalidPath,
 }
 
 /// Result type for latex-rs operations

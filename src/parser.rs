@@ -1,25 +1,42 @@
+//! LaTeX parser - converts raw LaTeX source into structured elements.
+//!
+//! Handles document structure, environments, commands, inline math,
+//! display math, lists, and metadata extraction.
+
+/// A structured element parsed from a LaTeX document.
 #[derive(Debug, Clone)]
 pub enum TexElement {
+    /// Plain text content.
     Text(String),
+    /// A LaTeX command such as `\title{...}`.
     Command { name: String, args: Vec<String> },
+    /// A section or subsection heading.
     Section { level: usize, title: String },
+    /// A paragraph break (`\n\n`).
     Paragraph,
+    /// Inline math delimited by `$...$`.
     MathInline(String),
+    /// Display math from `\begin{equation}` or `$$...$$`.
     MathDisplay(String),
+    /// A list (`itemize` or `enumerate`).
     ItemList { ordered: bool, items: Vec<Vec<TexElement>> },
+    /// A code block from `lstlisting`.
     CodeBlock(String),
 }
 
+/// Stateful parser for a single LaTeX document.
 pub struct TexParser {
     content: String,
     position: usize,
 }
 
 impl TexParser {
+    /// Create a new parser for the given LaTeX source.
     pub fn new(content: String) -> Self {
         Self { content, position: 0 }
     }
 
+    /// Parse the entire document into a sequence of elements.
     pub fn parse(&mut self) -> Vec<TexElement> {
         let mut elements = Vec::new();
         
@@ -69,35 +86,13 @@ impl TexParser {
         let search_str = format!("\\{}{{", cmd);
         if let Some(start) = preamble.find(&search_str) {
             let after_cmd = &preamble[start + offset..];
-            if let Some(content) = self.extract_braced_content_from(after_cmd) {
+            if let Some(content) = crate::utils::extract_braced_inner(after_cmd) {
                 return Some(TexElement::Command {
                     name: cmd.to_string(),
                     args: vec![content],
                 });
             }
         }
-        None
-    }
-
-    fn extract_braced_content_from(&self, text: &str) -> Option<String> {
-        let mut depth = 1; // Start at depth 1 since we're already inside the opening brace
-        let mut content = String::new();
-        
-        for ch in text.chars() {
-            if ch == '{' {
-                depth += 1;
-                content.push(ch);
-            } else if ch == '}' {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(content);
-                }
-                content.push(ch);
-            } else {
-                content.push(ch);
-            }
-        }
-        
         None
     }
 
@@ -198,11 +193,7 @@ impl TexParser {
         
         self.skip_whitespace_and_comments();
         
-        if let Some(title) = self.parse_braced_content() {
-            Some(TexElement::Section { level: level as usize, title })
-        } else {
-            None
-        }
+        self.parse_braced_content().map(|title| TexElement::Section { level: level as usize, title })
     }
 
     fn parse_command(&mut self, name: &str) -> Option<TexElement> {
@@ -210,14 +201,10 @@ impl TexParser {
         
         self.skip_whitespace_and_comments();
         
-        if let Some(arg) = self.parse_braced_content() {
-            Some(TexElement::Command {
+        self.parse_braced_content().map(|arg| TexElement::Command {
                 name: name.to_string(),
                 args: vec![arg],
             })
-        } else {
-            None
-        }
     }
 
     fn parse_text_command(&mut self) -> Option<TexElement> {
@@ -235,11 +222,7 @@ impl TexParser {
 
         self.position += cmd_len;
         
-        if let Some(content) = self.parse_braced_content() {
-            Some(TexElement::Text(content))
-        } else {
-            None
-        }
+        self.parse_braced_content().map(TexElement::Text)
     }
 
     fn parse_environment(&mut self) -> Option<TexElement> {
@@ -567,5 +550,144 @@ fn main() {
         assert!(elements.iter().any(|element| {
             matches!(element, TexElement::CodeBlock(code) if code.contains("fn main") && code.contains("println"))
         }));
+    }
+
+    #[test]
+    fn parser_parses_sections() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\section{Introduction}
+Some intro text.
+\subsection{Background}
+Background info.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Section { level: 1, title } if title == "Introduction")
+        }));
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Section { level: 2, title } if title == "Background")
+        }));
+    }
+
+    #[test]
+    fn parser_parses_inline_math_in_text() {
+        let content = r#"\documentclass{article}
+\begin{document}
+The equation $E = mc^2$ is famous.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        // Inline math is kept inside Text elements with $ delimiters
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Text(text) if text.contains("$E = mc^2$"))
+        }));
+    }
+
+    #[test]
+    fn parser_parses_display_math() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{equation}
+a^2 + b^2 = c^2
+\end{equation}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::MathDisplay(text) if text.contains("a^2 + b^2 = c^2"))
+        }));
+    }
+
+    #[test]
+    fn parser_parses_itemize() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{itemize}
+\item First bullet
+\item Second bullet
+\end{itemize}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::ItemList { ordered: false, items } if items.len() == 2)
+        }));
+    }
+
+    #[test]
+    fn parser_parses_enumerate() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{enumerate}
+\item Step one
+\item Step two
+\end{enumerate}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::ItemList { ordered: true, items } if items.len() == 2)
+        }));
+    }
+
+    #[test]
+    fn parser_extracts_metadata() {
+        let content = r#"\documentclass{article}
+\title{Test Doc}
+\author{Jane Doe}
+\date{2024-01-01}
+\begin{document}
+\maketitle
+Body text.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Command { name, args } if name == "title" && args[0] == "Test Doc")
+        }));
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Command { name, args } if name == "author" && args[0] == "Jane Doe")
+        }));
+    }
+
+    #[test]
+    fn parser_parses_text_formatting() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\textbf{bold} and \textit{italic} and \texttt{mono}.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let text_elements: Vec<_> = elements.iter().filter_map(|e| {
+            if let TexElement::Text(t) = e { Some(t.clone()) } else { None }
+        }).collect();
+
+        let combined = text_elements.join(" ");
+        assert!(combined.contains("bold"));
+        assert!(combined.contains("italic"));
+        assert!(combined.contains("mono"));
     }
 }
