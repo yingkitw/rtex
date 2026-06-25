@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 use std::fs;
-use latex_rs::convert_tex_to_pdf;
+use latex_rs::{StreamingConverter, ConsoleReporter};
 
 #[derive(Parser)]
 #[command(name = "latex-rs")]
@@ -34,10 +34,11 @@ fn main() -> anyhow::Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    convert_tex_to_pdf(&cli.input, &output)?;
+    let mut converter = StreamingConverter::with_reporter(ConsoleReporter);
+    converter.convert(&cli.input, &output)?;
 
-    println!("Successfully converted {} to {}", 
-             cli.input.display(), 
+    println!("Successfully converted {} to {}",
+             cli.input.display(),
              output.display());
 
     Ok(())

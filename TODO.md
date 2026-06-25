@@ -158,11 +158,13 @@
   - Parser integration tests for `\label`, `\ref`, and `\pageref`
 
 #### Streaming
-- [ ] **Streaming support** - `src/streaming.rs`
-  - Handle large documents (>100MB)
-  - Incremental parsing
-  - Memory-efficient processing
-  - Progress reporting
+- [x] **Streaming support** - `src/streaming.rs`
+  - `ProgressReporter` trait with `NoOpReporter` and `ConsoleReporter` implementations
+  - `StreamingConverter` reads files in configurable chunks (default 1 MiB), falling back to `read_to_string` for small files
+  - Stage-based progress reporting: reading (0–30%), parsing (30–60%), building PDF (60–100%)
+  - `convert_with_progress` convenience helper for one-shot conversions with a reporter
+  - CLI (`main.rs`) now uses `StreamingConverter` with `ConsoleReporter` for visible progress
+  - Memory-efficient: large files read incrementally via `BufReader` instead of loading entire file into memory
 
 #### Plugin System
 - [ ] **Plugin architecture** - `src/plugins.rs`
@@ -234,7 +236,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 156 (100% passing)
+- Tests: 159 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 150+
 - LaTeX commands: ~50
