@@ -110,27 +110,31 @@
   - `\begin{table}` wrapper extracts inner `tabular` and returns same `Table` element
 
 #### Color Support
-- [ ] **Add color management** - `src/color.rs`
-  - RGB colors
-  - Named colors
-  - \textcolor command
-  - \colorbox command
-  - Color spaces (RGB, CMYK)
+- [x] **Add color management** - `src/color.rs`
+  - `Color` struct with normalized RGB and 12 named colors
+  - `Color::parse` accepts named colors, `#RRGGBB`/`RGB` hex, and `r,g,b` decimal triples
+  - `\textcolor{color}{text}` parsed as `TexElement::ColoredText`; PDF builder applies `rg` operator
+  - `ContentStream::set_color` added for non-stroking RGB color changes
+  - `\colorbox` deferred — requires rectangle fill primitive
 
 #### Layout Engine
-- [ ] **Improve layout engine** - `src/layout.rs`
-  - Better text positioning
-  - Margin management
-  - Column support
-  - Float positioning
-  - Page breaks
+- [x] **Improve layout engine** - `src/layout.rs`
+  - `LayoutState` tracks current page, Y position, and content area using `PageLayout`
+  - Automatic page breaks: `render_text_block` creates new pages mid-text-block
+  - `ensure_space` pre-checks available height before rendering large elements
+  - `PdfBuilder` now produces multi-page PDFs with proper `/Pages` tree
+  - Hard-coded layout constants replaced with `PageLayout::a4_portrait()`
+  - Column support and float positioning deferred to future work
 
 #### Macro System
-- [ ] **Basic macro support** - `src/macros.rs`
-  - \newcommand
-  - \def
-  - Parameter substitution
-  - Macro expansion
+- [x] **Basic macro support** - `src/macros.rs`
+  - `\newcommand{\name}[n]{body}` and `\newcommand\name[n]{body}` parsing
+  - `\def\name#1#2...{body}` parsing with parameter counting
+  - Parameter substitution (`#1`, `#2`, ...) during expansion
+  - `MacroStore::extract_definitions` strips definitions from source before parsing
+  - `MacroStore::expand_all` performs iterative expansion (max 10 rounds) with loop protection
+  - `TexParser::new` automatically runs macro extraction + expansion before structured parsing
+  - Parser integration tests for `\newcommand`, `\newcommand` with args, and `\def`
 
 ### Phase 4: Advanced Features (Month 2-3)
 
@@ -226,7 +230,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 136 (100% passing)
+- Tests: 147 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 150+
 - LaTeX commands: ~50

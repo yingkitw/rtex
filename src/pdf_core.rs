@@ -256,6 +256,13 @@ impl ContentStream {
         self.operations.extend_from_slice(b"S\n");
     }
 
+    /// Set the non-stroking (fill) RGB color.
+    pub fn set_color(&mut self, r: f32, g: f32, b: f32) {
+        self.operations.extend_from_slice(
+            format!("{} {} {} rg\n", r, g, b).as_bytes()
+        );
+    }
+
     /// Draw an image XObject at the given position and size.
     ///
     /// `name` is the resource name (e.g. "Im1").

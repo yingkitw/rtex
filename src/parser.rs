@@ -28,6 +28,8 @@ pub enum TexElement {
     Image { path: String, width: Option<String>, height: Option<String> },
     /// A table from `tabular` or `table` environment.
     Table(Table),
+    /// Colored text from `\textcolor{color}{text}`.
+    ColoredText { color: String, text: String },
 }
 
 /// Stateful parser for a single LaTeX document.
@@ -38,8 +40,13 @@ pub struct TexParser {
 
 impl TexParser {
     /// Create a new parser for the given LaTeX source.
+    /// Macro definitions (`\newcommand`, `\def`) are extracted and
+    /// all macro calls are expanded before structured parsing begins.
     pub fn new(content: String) -> Self {
-        Self { content, position: 0 }
+        let mut store = crate::macros::MacroStore::new();
+        let stripped = store.extract_definitions(&content);
+        let expanded = store.expand_all(&stripped);
+        Self { content: expanded, position: 0 }
     }
 
     /// Parse the entire document into a sequence of elements.
@@ -154,6 +161,10 @@ impl TexParser {
             return self.parse_environment();
         }
 
+        if remaining.starts_with("\\textcolor") {
+            return self.parse_textcolor();
+        }
+
         if remaining.starts_with("\\texttt{") || remaining.starts_with("\\textbf{") || remaining.starts_with("\\textit{") {
             return self.parse_text_command();
         }
@@ -262,6 +273,17 @@ impl TexParser {
 
         let path = self.parse_braced_content()?;
         Some(TexElement::Image { path, width, height })
+    }
+
+    fn parse_textcolor(&mut self) -> Option<TexElement> {
+        self.position += "\\textcolor".len();
+        self.skip_whitespace_and_comments();
+
+        let color = self.parse_braced_content()?;
+        self.skip_whitespace_and_comments();
+
+        let text = self.parse_braced_content()?;
+        Some(TexElement::ColoredText { color, text })
     }
 
     fn parse_environment(&mut self) -> Option<TexElement> {
@@ -798,6 +820,73 @@ X & Y \\
             } else {
                 false
             }
+        }));
+    }
+
+    #[test]
+    fn parser_parses_textcolor() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\textcolor{red}{Important!}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::ColoredText { color, text } if color == "red" && text == "Important!")
+        }));
+    }
+
+    #[test]
+    fn parser_expands_newcommand_macro() {
+        let content = r#"\documentclass{article}
+\newcommand{\hello}{Hello World}
+\begin{document}
+\hello
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Text(t) if t.contains("Hello World"))
+        }));
+    }
+
+    #[test]
+    fn parser_expands_newcommand_with_args() {
+        let content = r#"\documentclass{article}
+\newcommand{\greet}[1]{Hello, #1!}
+\begin{document}
+\greet{Alice}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Text(t) if t.contains("Hello, Alice!"))
+        }));
+    }
+
+    #[test]
+    fn parser_expands_def_macro() {
+        let content = r#"\documentclass{article}
+\def\twice#1{#1 #1}
+\begin{document}
+\twice{hi}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Text(t) if t.contains("hi hi"))
         }));
     }
 }

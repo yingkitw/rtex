@@ -7,7 +7,7 @@
 use crate::parser::TexElement;
 use crate::math_formatter::MathFormatter;
 use crate::pdf_text_renderer::PdfTextRenderer;
-use crate::pdf_core::{PdfGenerator, DictBuilder, ContentStream};
+use crate::pdf_core::{PdfGenerator, DictBuilder};
 use std::path::Path;
 
 /// Converts a sequence of `TexElement`s into a PDF file.
@@ -68,13 +68,8 @@ impl PdfBuilder {
             }
         }
 
-        // Build content stream (pass image xobjects so it can reference them)
-        let content_data = self.build_content_stream(&elements, font_id, &image_xobjects)?;
-
-        // Add content stream object
-        let mut content_dict = DictBuilder::new();
-        content_dict.add("Length", &content_data.len().to_string());
-        let content_id = generator.add_stream_object(content_dict.build(), content_data);
+        // Build content streams (one per page)
+        let layout_state = self.build_content_stream(&elements, font_id, &image_xobjects)?;
 
         // Build XObject resource entries
         let mut xobj_entries = String::new();
@@ -82,7 +77,7 @@ impl PdfBuilder {
             xobj_entries.push_str(&format!("/{} {} 0 R ", name, id));
         }
 
-        // Create resources dictionary
+        // Create resources dictionary (shared across all pages)
         let resources = if xobj_entries.is_empty() {
             format!(
                 "<<\n/Font << /F1 {} 0 R >>\n>>\n",
@@ -95,26 +90,41 @@ impl PdfBuilder {
             )
         };
 
-        // Create page object
-        let page_content = format!(
-            "<<\n/Type /Page\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
-            content_id, resources
-        );
-        let page_id = generator.add_object(page_content);
+        // Create a content stream and page object for each page
+        let mut page_ids = Vec::new();
+        for stream in &layout_state.pages {
+            let content_data = stream.data();
+            let mut content_dict = DictBuilder::new();
+            content_dict.add("Length", &content_data.len().to_string());
+            let content_id = generator.add_stream_object(content_dict.build(), content_data);
+
+            let page_content = format!(
+                "<<\n/Type /Page\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
+                content_id, resources
+            );
+            let page_id = generator.add_object(page_content);
+            page_ids.push((page_id, content_id));
+        }
 
         // Create pages object
+        let kids = page_ids.iter()
+            .map(|(pid, _)| format!("{} 0 R", pid))
+            .collect::<Vec<_>>()
+            .join(" ");
         let pages_content = format!(
-            "<<\n/Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n",
-            page_id
+            "<<\n/Type /Pages\n/Kids [{}]\n/Count {}\n>>\n",
+            kids, page_ids.len()
         );
         let pages_id = generator.add_object(pages_content);
 
-        // Update page to reference parent
-        let page_with_parent = format!(
-            "<<\n/Type /Page\n/Parent {} 0 R\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
-            pages_id, content_id, resources
-        );
-        generator.objects[page_id as usize - 1].content = page_with_parent;
+        // Update each page to reference parent
+        for (page_id, content_id) in &page_ids {
+            let page_with_parent = format!(
+                "<<\n/Type /Page\n/Parent {} 0 R\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
+                pages_id, content_id, resources
+            );
+            generator.objects[*page_id as usize - 1].content = page_with_parent;
+        }
 
         // Create catalog
         let catalog_content = format!(
@@ -325,81 +335,85 @@ end";
     // Font compression no longer needed with standard fonts
     // fn compress_font_data removed
     
-    fn build_content_stream(&mut self, elements: &[TexElement], _font_id: u32, image_xobjects: &std::collections::HashMap<usize, (String, u32)>) -> Result<Vec<u8>, String> {
-        let mut stream = ContentStream::new();
-        
-        // Page setup
-        let left_margin = 72.0;
-        let line_height = 14.0;
-        let mut y_position = 780.0;
-        let page_width = 595.0;
-        let right_margin = 72.0;
-        let content_width = page_width - left_margin - right_margin;
-        let chars_per_line = ((content_width / 6.0) as usize).clamp(60, 85);
-        
-        // Render title, author, date
+    fn build_content_stream(
+        &mut self,
+        elements: &[TexElement],
+        _font_id: u32,
+        image_xobjects: &std::collections::HashMap<usize, (String, u32)>,
+    ) -> Result<crate::layout::LayoutState, String> {
+        use crate::layout::LayoutState;
+        use crate::page_layout::PageLayout;
+
+        let mut state = LayoutState::new(PageLayout::a4_portrait());
+        let line_height = state.line_height(11.0);
+        let chars_per_line = ((state.content_width() / 6.0) as usize).clamp(60, 85);
+
+        // Render title, author, date on the first page
         if let Some(title) = &self.title {
+            state.ensure_space(30.0);
+            let x = state.left_margin();
+            let y = state.current_y;
+            let stream = state.current_stream();
             stream.begin_text();
             stream.set_font("F1", 24.0);
-            stream.set_position(left_margin, y_position);
+            stream.set_position(x, y);
             stream.show_text(title);
             stream.end_text();
-            y_position -= 30.0;
+            state.advance(30.0);
         }
-        
+
         if let Some(author) = &self.author {
+            state.ensure_space(20.0);
+            let x = state.left_margin();
+            let y = state.current_y;
+            let stream = state.current_stream();
             stream.begin_text();
             stream.set_font("F1", 12.0);
-            stream.set_position(left_margin, y_position);
+            stream.set_position(x, y);
             stream.show_text(author);
             stream.end_text();
-            y_position -= 20.0;
+            state.advance(20.0);
         }
-        
+
         if let Some(date) = &self.date {
+            state.ensure_space(25.0);
             let date_text = if date == "\\today" {
                 chrono::Local::now().format("%B %d, %Y").to_string()
             } else {
                 date.clone()
             };
-            
+            let x = state.left_margin();
+            let y = state.current_y;
+            let stream = state.current_stream();
             stream.begin_text();
             stream.set_font("F1", 10.0);
-            stream.set_position(left_margin, y_position);
+            stream.set_position(x, y);
             stream.show_text(&date_text);
             stream.end_text();
-            y_position -= 25.0;
+            state.advance(25.0);
         }
-        
+
         // Process elements
         let mut accumulated_text = String::new();
-        let mut current_y = y_position;
-        
+
         for (elem_idx, elem) in elements.iter().enumerate() {
             match elem {
                 TexElement::Section { level, title } => {
-                    // Flush accumulated text
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-                    
-                    current_y -= 10.0;
+                    state.ensure_space(30.0);
                     let font_size = if *level == 1 { 18.0 } else { 14.0 };
-                    
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
                     stream.begin_text();
                     stream.set_font("F1", font_size);
-                    stream.set_position(left_margin, current_y);
+                    stream.set_position(x, y);
                     stream.show_text(title);
                     stream.end_text();
-                    current_y -= line_height + 5.0;
+                    state.advance(line_height + 5.0);
                 }
                 TexElement::Text(text) => {
                     accumulated_text.push_str(text);
@@ -407,99 +421,92 @@ end";
                 }
                 TexElement::Table(table) => {
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-                    current_y = crate::table::render_table(
+                    state.ensure_space(50.0);
+                    let left = state.left_margin();
+                    let width = state.content_width();
+                    let current_y = state.current_y;
+                    state.current_y = crate::table::render_table(
                         table,
-                        &mut stream,
-                        left_margin,
+                        state.current_stream(),
+                        left,
                         current_y,
                         line_height,
-                        content_width,
+                        width,
                     );
                 }
                 TexElement::MathInline(math) => {
                     let formatted = MathFormatter::format(math);
                     accumulated_text.push_str(&formatted);
                 }
-                TexElement::Paragraph => {
+                TexElement::ColoredText { color, text } => {
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-                    current_y -= line_height;
+                    state.ensure_space(20.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    if let Some(c) = crate::color::Color::parse(color) {
+                        stream.set_color(c.r, c.g, c.b);
+                    }
+                    stream.begin_text();
+                    stream.set_font("F1", 11.0);
+                    stream.set_position(x, y);
+                    stream.show_text(text);
+                    stream.end_text();
+                    stream.set_color(0.0, 0.0, 0.0);
+                    state.advance(20.0);
+                }
+                TexElement::Paragraph => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.advance(line_height);
                 }
                 TexElement::MathDisplay(math) => {
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-                    
-                    // Add spacing before equation
-                    current_y -= 10.0;
+                    state.ensure_space(40.0);
                     let formatted = MathFormatter::format(math);
-                    
-                    // Add spacing around operators for better readability
                     let formatted = self.add_math_spacing(&formatted);
-                    
-                    // Render equation with larger font and centered indentation
+                    let x = state.left_margin() + 40.0;
+                    let y = state.current_y;
+                    let stream = state.current_stream();
                     stream.begin_text();
                     stream.set_font("F1", 14.0);
-                    stream.set_position(left_margin + 40.0, current_y);
+                    stream.set_position(x, y);
                     stream.show_text(&formatted);
                     stream.end_text();
-                    
-                    // Add spacing after equation
-                    current_y -= line_height + 10.0;
+                    state.advance(line_height + 10.0);
                 }
                 TexElement::ItemList { ordered, items } => {
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-                    
+                    state.ensure_space(items.len() as f32 * line_height);
                     for (idx, item) in items.iter().enumerate() {
                         let bullet = if *ordered {
                             format!("{}.", idx + 1)
                         } else {
                             "•".to_string()
                         };
-                        
+                        let x1 = state.left_margin() + 10.0;
+                        let y = state.current_y;
+                        let stream = state.current_stream();
                         stream.begin_text();
                         stream.set_font("F1", 11.0);
-                        stream.set_position(left_margin + 10.0, current_y);
+                        stream.set_position(x1, y);
                         stream.show_text(&bullet);
                         stream.end_text();
-                        
+
                         let mut item_text = String::new();
                         for elem in item {
                             if let TexElement::Text(t) = elem {
@@ -507,51 +514,40 @@ end";
                                 item_text.push(' ');
                             }
                         }
-                        
+                        let x2 = state.left_margin() + 25.0;
+                        let y = state.current_y;
+                        let stream = state.current_stream();
                         stream.begin_text();
                         stream.set_font("F1", 11.0);
-                        stream.set_position(left_margin + 25.0, current_y);
+                        stream.set_position(x2, y);
                         stream.show_text(item_text.trim());
                         stream.end_text();
-                        current_y -= line_height;
+                        state.advance(line_height);
                     }
                 }
                 TexElement::CodeBlock(code) => {
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-
-                    current_y -= 5.0;
-
+                    let code_height = line_height * (code.lines().count() as f32) + 10.0;
+                    state.ensure_space(code_height);
+                    state.advance(5.0);
+                    let x = state.left_margin() + 10.0;
+                    let y = state.current_y;
+                    let stream = state.current_stream();
                     stream.begin_text();
                     stream.set_font("F1", 10.0);
-                    stream.set_position(left_margin + 10.0, current_y);
+                    stream.set_position(x, y);
                     stream.show_text(code);
                     stream.end_text();
-                    current_y -= line_height * (code.lines().count() as f32) + 5.0;
+                    state.advance(code_height);
                 }
                 TexElement::Image { path: _, width, height } => {
                     if !accumulated_text.is_empty() {
-                        current_y = self.render_text_block(
-                            &mut stream,
-                            &accumulated_text,
-                            left_margin,
-                            current_y,
-                            line_height,
-                            chars_per_line,
-                        );
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-
-                    // Look up the XObject by element index
                     if let Some((img_name, _)) = image_xobjects.get(&elem_idx) {
                         let img_width = width.as_ref()
                             .and_then(|w| crate::image::parse_dimension(w))
@@ -559,63 +555,54 @@ end";
                         let img_height = height.as_ref()
                             .and_then(|h| crate::image::parse_dimension(h))
                             .unwrap_or(img_width);
-
-                        current_y -= 10.0;
-                        stream.draw_image(img_name, left_margin, current_y - img_height, img_width, img_height);
-                        current_y -= img_height + 10.0;
+                        let total_height = img_height + 20.0;
+                        state.ensure_space(total_height);
+                        state.advance(10.0);
+                        let x = state.left_margin();
+                        let y = state.current_y - img_height;
+                        state.current_stream().draw_image(img_name, x, y, img_width, img_height);
+                        state.advance(total_height - 10.0);
                     }
                 }
                 _ => {}
             }
         }
-        
+
         // Flush remaining text
         if !accumulated_text.is_empty() {
-            self.render_text_block(
-                &mut stream,
-                &accumulated_text,
-                left_margin,
-                current_y,
-                line_height,
-                chars_per_line,
-            );
+            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
         }
-        
-        Ok(stream.data())
+
+        Ok(state)
     }
-    
+
     fn render_text_block(
         &mut self,
-        stream: &mut ContentStream,
+        state: &mut crate::layout::LayoutState,
         text: &str,
-        left_margin: f32,
-        y_position: f32,
         line_height: f32,
         chars_per_line: usize,
-    ) -> f32 {
-        let mut current_y = y_position;
-        
+    ) {
         let formatted_text = self.format_inline_math(text);
         let Some(validated_text) = PdfTextRenderer::normalize_text(&formatted_text) else {
-            return current_y;
+            return;
         };
-
         let lines = PdfTextRenderer::wrap_text(&validated_text, chars_per_line);
-        
+        let left_margin = state.left_margin();
+
         for line in lines {
-            if current_y < 50.0 {
-                current_y = 750.0; // New page would go here
+            if state.current_y - line_height < state.content_bottom() {
+                state.new_page();
             }
-            
+            let y = state.current_y;
+            let stream = state.current_stream();
             stream.begin_text();
             stream.set_font("F1", 11.0);
-            stream.set_position(left_margin, current_y);
+            stream.set_position(left_margin, y);
             stream.show_text(&line);
             stream.end_text();
-            current_y -= line_height;
+            state.advance(line_height);
         }
-        
-        current_y
     }
     
     fn add_math_spacing(&self, math: &str) -> String {

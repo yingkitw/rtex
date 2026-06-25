@@ -167,6 +167,9 @@ latex-rs/
 │   ├── math_formatter.rs   # Math formatting orchestrator
 │   ├── image.rs            # Image loading and PDF embedding
 │   ├── table.rs            # Table parsing and PDF rendering
+│   ├── color.rs            # Color parsing and PDF RGB color operators
+│   ├── layout.rs           # Multi-page layout engine and page break management
+│   ├── macros.rs           # User-defined macro expansion (\newcommand, \def)
 │   ├── pdf_builder.rs      # PDF generation implementation
 │   ├── pdf_core.rs         # Low-level PDF primitives
 │   ├── pdf_text_renderer.rs # Text rendering utilities
