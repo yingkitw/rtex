@@ -1078,4 +1078,53 @@ See \cite{smith2024, jones2023}.
             }
         }));
     }
+
+    #[test]
+    fn parser_parses_label() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\section{Intro}
+\label{sec:intro}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Label { key } if key == "sec:intro")
+        }));
+    }
+
+    #[test]
+    fn parser_parses_ref() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See Section~\ref{sec:intro}.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::Ref { key } if key == "sec:intro")
+        }));
+    }
+
+    #[test]
+    fn parser_parses_pageref() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See page~\pageref{sec:intro}.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::PageRef { key } if key == "sec:intro")
+        }));
+    }
 }

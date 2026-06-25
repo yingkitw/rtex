@@ -149,12 +149,13 @@
   - `BibEntry` formatting helpers (`format_plain`, `format_numeric`) for future style support
 
 #### Cross-References
-- [ ] **Cross-reference system** - `src/references.rs`
-  - \label and \ref
-  - \pageref
-  - Section references
-  - Equation references
-  - Figure/table references
+- [x] **Cross-reference system** - `src/references.rs`
+  - `\label{key}` parsed as `TexElement::Label`; `\ref{key}` as `TexElement::Ref`; `\pageref{key}` as `TexElement::PageRef`
+  - `RefStore::scan` assigns sequential numbers: sections (`1`, `1.1`, `2`), equations (`(1)`), figures (`1`), tables (`1`)
+  - `RefStore::set_page` updates page numbers during rendering (current page = `state.pages.len()`)
+  - `PdfBuilder` pre-scans labels, resolves `\ref` to number text and `\pageref` to page number during content stream build
+  - Unknown refs render as `??` (matching LaTeX behavior)
+  - Parser integration tests for `\label`, `\ref`, and `\pageref`
 
 #### Streaming
 - [ ] **Streaming support** - `src/streaming.rs`
@@ -233,7 +234,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 150 (100% passing)
+- Tests: 156 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 150+
 - LaTeX commands: ~50
