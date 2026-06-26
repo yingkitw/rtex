@@ -217,18 +217,18 @@
   - Defaults to `num_cpus::get()` workers
 
 #### Optimization
-- [ ] **PDF optimization** - Reduce file sizes
-  - Font subsetting
-  - Image compression
-  - Content stream optimization
-  - Remove unused objects
+- [x] **PDF optimization** - Reduce file sizes
+  - [ ] Font subsetting
+  - [x] Image compression — already applied for embedded images
+  - [x] Content stream compression — `flate2` FlateDecode on all page streams
+  - [ ] Remove unused objects
   - Target: <100KB for simple documents
 
 ### Low Priority / Future
 
 - [ ] Add support for other LaTeX engines (xelatex, lualatex)
-- [ ] Add batch conversion support
-- [ ] Add progress indicator for long compilations
+- [x] Add batch conversion support — `src/parallel.rs`
+- [x] Add progress indicator for long compilations — `StreamingConverter` with `ConsoleReporter`
 - [ ] Add option to keep intermediate files
 - [ ] SVG image support
 - [ ] Advanced color management (ICC profiles)
@@ -244,7 +244,10 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 
 - **Bibliography / citation support** (Pandoc, Tectonic) — highest value; needed for academic docs
 - **Cross-references** (\label, \ref, \cite) — basic but widely used
-- **Template / style system** — allow custom document styling without editing Rust code
+- [x] **Template / style system** — `src/template.rs`
+  - `DocumentTemplate` with configurable page layout, fonts, colours, headings
+  - TOML/JSON load and save
+  - `PdfBuilder::with_template()` integration
 - **Incremental / cached compilation** — Typst achieves <500ms renders via caching
 - **WASM target** (Typst) — run in browser with zero infrastructure
 - **Multiple output formats** (Pandoc) — HTML, DOCX, EPUB from same source
@@ -254,12 +257,12 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 216 (100% passing)
+- Tests: 245 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
-- Math symbols: 150+
-- LaTeX commands: ~50
-- Documentation: ~25%
-- File size: ~750KB per PDF
+- Math symbols: 350+
+- LaTeX commands: ~125 (parser + math symbols)
+- Documentation: ~30%
+- File size: ~750KB per PDF (content streams now compressed)
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)

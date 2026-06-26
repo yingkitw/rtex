@@ -42,6 +42,7 @@ impl ProgressReporter for ConsoleReporter {
 pub struct StreamingConverter<R: ProgressReporter> {
     reporter: R,
     chunk_size: usize,
+    template: Option<crate::template::DocumentTemplate>,
 }
 
 impl StreamingConverter<NoOpReporter> {
@@ -49,6 +50,7 @@ impl StreamingConverter<NoOpReporter> {
         Self {
             reporter: NoOpReporter,
             chunk_size: 1024 * 1024, // 1 MiB
+            template: None,
         }
     }
 }
@@ -58,11 +60,18 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         Self {
             reporter,
             chunk_size: 1024 * 1024,
+            template: None,
         }
     }
 
     pub fn with_chunk_size(mut self, size: usize) -> Self {
         self.chunk_size = size;
+        self
+    }
+
+    /// Attach a document template for styling.
+    pub fn with_template(mut self, template: crate::template::DocumentTemplate) -> Self {
+        self.template = Some(template);
         self
     }
 
@@ -80,12 +89,18 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         // Stage 2: parse (30–60%)
         self.reporter.stage_started("parsing", 30.0);
         let mut parser = crate::parser::TexParser::new(content);
+        if let Some(parent) = input.parent() {
+            parser = parser.with_base_dir(parent);
+        }
         let elements = parser.parse();
         self.reporter.stage_finished("parsing");
 
         // Stage 3: build PDF (60–100%)
         self.reporter.stage_started("building PDF", 60.0);
         let mut builder = crate::pdf_builder::PdfBuilder::new();
+        if let Some(template) = self.template.take() {
+            builder = builder.with_template(template);
+        }
         builder.build(elements, output)?;
         self.reporter.stage_finished("building PDF");
 

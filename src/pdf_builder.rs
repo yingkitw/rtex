@@ -17,6 +17,7 @@ pub struct PdfBuilder {
     date: Option<String>,
     plugins: Option<crate::plugins::PluginRegistry>,
     typography: Option<crate::typography::TypographyEngine>,
+    template: Option<crate::template::DocumentTemplate>,
 }
 
 impl PdfBuilder {
@@ -28,6 +29,7 @@ impl PdfBuilder {
             date: None,
             plugins: None,
             typography: None,
+            template: None,
         }
     }
 
@@ -40,6 +42,12 @@ impl PdfBuilder {
     /// Attach a typography engine for ligatures and kerning.
     pub fn with_typography(mut self, engine: crate::typography::TypographyEngine) -> Self {
         self.typography = Some(engine);
+        self
+    }
+
+    /// Attach a document template for page layout, fonts and colours.
+    pub fn with_template(mut self, template: crate::template::DocumentTemplate) -> Self {
+        self.template = Some(template);
         self
     }
 
@@ -88,8 +96,12 @@ impl PdfBuilder {
             }
         }
 
+        // Resolve page layout from template or default to A4 portrait
+        let page_layout = self.template.as_ref().map(|t| t.page_layout()).unwrap_or_else(crate::page_layout::PageLayout::a4_portrait);
+        let media_box = format!("[0 0 {} {}]", page_layout.width, page_layout.height);
+
         // Build content streams (one per page)
-        let layout_state = self.build_content_stream(&elements, font_id, &image_xobjects)?;
+        let layout_state = self.build_content_stream(&elements, font_id, &image_xobjects, &page_layout)?;
 
         // Build XObject resource entries
         let mut xobj_entries = String::new();
@@ -114,13 +126,15 @@ impl PdfBuilder {
         let mut page_ids = Vec::new();
         for stream in &layout_state.pages {
             let content_data = stream.data();
+            let compressed = compress_content(&content_data);
             let mut content_dict = DictBuilder::new();
-            content_dict.add("Length", &content_data.len().to_string());
-            let content_id = generator.add_stream_object(content_dict.build(), content_data);
+            content_dict.add("Length", &compressed.len().to_string());
+            content_dict.add("Filter", "/FlateDecode");
+            let content_id = generator.add_stream_object(content_dict.build(), compressed);
 
             let page_content = format!(
-                "<<\n/Type /Page\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
-                content_id, resources
+                "<<\n/Type /Page\n/MediaBox {}\n/Contents {} 0 R\n/Resources {}\n>>\n",
+                media_box, content_id, resources
             );
             let page_id = generator.add_object(page_content);
             page_ids.push((page_id, content_id));
@@ -351,66 +365,93 @@ end";
         encoder.write_all(font_data).ok();
         encoder.finish().unwrap_or_else(|_| font_data.to_vec())
     }
-    
+
     // Font compression no longer needed with standard fonts
     // fn compress_font_data removed
-    
+}
+
+/// Compress raw PDF content stream bytes with FlateDecode.
+fn compress_content(data: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+    if encoder.write_all(data).is_ok() {
+        encoder.finish().unwrap_or_else(|_| data.to_vec())
+    } else {
+        data.to_vec()
+    }
+}
+
+impl PdfBuilder {
     fn build_content_stream(
         &mut self,
         elements: &[TexElement],
         _font_id: u32,
         image_xobjects: &std::collections::HashMap<usize, (String, u32)>,
+        page_layout: &crate::page_layout::PageLayout,
     ) -> Result<crate::layout::LayoutState, String> {
         use crate::layout::LayoutState;
-        use crate::page_layout::PageLayout;
 
-        let mut state = LayoutState::new(PageLayout::a4_portrait());
-        let line_height = state.line_height(11.0);
-        let chars_per_line = ((state.content_width() / 6.0) as usize).clamp(60, 85);
+        let mut state = LayoutState::new(*page_layout);
+        // Resolve style values from template or use defaults
+        let tp = self.template.as_ref().map(|t| &t.title_page);
+        let base_font_size = self.template.as_ref().map(|t| t.base_font_size).unwrap_or(11.0);
+        let mut current_font_size = base_font_size;
+        let mut line_height = state.line_height(base_font_size);
+        let chars_per_line = ((state.content_width() / (base_font_size * 0.55)) as usize).clamp(60, 120);
 
-        // Render title, author, date on the first page
-        if let Some(title) = &self.title {
-            state.ensure_space(30.0);
-            let x = state.left_margin();
-            let y = state.current_y;
-            let stream = state.current_stream();
-            stream.begin_text();
-            stream.set_font("F1", 24.0);
-            stream.set_position(x, y);
-            stream.show_text(title);
-            stream.end_text();
-            state.advance(30.0);
-        }
+        let title_font_size = tp.map(|tp| tp.title_font_size).unwrap_or(24.0);
+        let title_spacing = tp.map(|tp| tp.spacing_after_title).unwrap_or(30.0);
+        let author_font_size = tp.map(|tp| tp.author_font_size).unwrap_or(12.0);
+        let author_spacing = tp.map(|tp| tp.spacing_after_author).unwrap_or(20.0);
+        let date_font_size = tp.map(|tp| tp.date_font_size).unwrap_or(10.0);
+        let date_spacing = tp.map(|tp| tp.spacing_after_date).unwrap_or(25.0);
 
-        if let Some(author) = &self.author {
-            state.ensure_space(20.0);
-            let x = state.left_margin();
-            let y = state.current_y;
-            let stream = state.current_stream();
-            stream.begin_text();
-            stream.set_font("F1", 12.0);
-            stream.set_position(x, y);
-            stream.show_text(author);
-            stream.end_text();
-            state.advance(20.0);
-        }
+        // Render title, author, date on the first page (if title_page is enabled)
+        let title_page_enabled = tp.map(|tp| tp.enabled).unwrap_or(true);
+        if title_page_enabled {
+            if let Some(title) = &self.title {
+                state.ensure_space(title_spacing);
+                let x = state.left_margin();
+                let y = state.current_y;
+                let stream = state.current_stream();
+                stream.begin_text();
+                stream.set_font("F1", title_font_size);
+                stream.set_position(x, y);
+                stream.show_text(title);
+                stream.end_text();
+                state.advance(title_spacing);
+            }
 
-        if let Some(date) = &self.date {
-            state.ensure_space(25.0);
-            let date_text = if date == "\\today" {
-                chrono::Local::now().format("%B %d, %Y").to_string()
-            } else {
-                date.clone()
-            };
-            let x = state.left_margin();
-            let y = state.current_y;
-            let stream = state.current_stream();
-            stream.begin_text();
-            stream.set_font("F1", 10.0);
-            stream.set_position(x, y);
-            stream.show_text(&date_text);
-            stream.end_text();
-            state.advance(25.0);
+            if let Some(author) = &self.author {
+                state.ensure_space(author_spacing);
+                let x = state.left_margin();
+                let y = state.current_y;
+                let stream = state.current_stream();
+                stream.begin_text();
+                stream.set_font("F1", author_font_size);
+                stream.set_position(x, y);
+                stream.show_text(author);
+                stream.end_text();
+                state.advance(author_spacing);
+            }
+
+            if let Some(date) = &self.date {
+                state.ensure_space(date_spacing);
+                let date_text = if date == "\\today" {
+                    chrono::Local::now().format("%B %d, %Y").to_string()
+                } else {
+                    date.clone()
+                };
+                let x = state.left_margin();
+                let y = state.current_y;
+                let stream = state.current_stream();
+                stream.begin_text();
+                stream.set_font("F1", date_font_size);
+                stream.set_position(x, y);
+                stream.show_text(&date_text);
+                stream.end_text();
+                state.advance(date_spacing);
+            }
         }
 
         // Pre-scan for bibliography entries to build key→number map
@@ -438,8 +479,16 @@ end";
                         self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
-                    state.ensure_space(30.0);
-                    let font_size = if *level == 1 { 18.0 } else { 14.0 };
+                    let headings = self.template.as_ref().map(|t| t.headings.clone()).unwrap_or_default();
+                    let font_size = match *level {
+                        1 => headings.h1,
+                        2 => headings.h2,
+                        3 => headings.h3,
+                        4 => headings.h4,
+                        5 => headings.h5,
+                        _ => headings.h6,
+                    };
+                    state.ensure_space(font_size + 6.0);
                     let x = state.left_margin();
                     let y = state.current_y;
                     let stream = state.current_stream();
@@ -448,7 +497,7 @@ end";
                     stream.set_position(x, y);
                     stream.show_text(title);
                     stream.end_text();
-                    state.advance(line_height + 5.0);
+                    state.advance(font_size + 6.0);
                 }
                 TexElement::Text(text) => {
                     accumulated_text.push_str(text);
@@ -645,6 +694,66 @@ end";
                     accumulated_text.push_str(&text);
                     accumulated_text.push(' ');
                 }
+                TexElement::Command { name, args } if name == "newpage" => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.new_page();
+                }
+                TexElement::Command { name, args } if name == "vspace" && !args.is_empty() => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    let space = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                    state.advance(space.max(0.0));
+                }
+                TexElement::Command { name, args } if name == "underline" && !args.is_empty() => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    let text = &args[0];
+                    state.ensure_space(line_height);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let font_size = state.current_font_size;
+                    let text_width = text.len() as f32 * font_size * 0.55;
+                    {
+                        let stream = state.current_stream();
+                        stream.begin_text();
+                        stream.set_font("F1", font_size);
+                        stream.set_position(x, y);
+                        stream.show_text(text);
+                        stream.end_text();
+                        // Draw underline beneath text
+                        stream.move_to(x, y - 2.0);
+                        stream.line_to(x + text_width, y - 2.0);
+                        stream.stroke();
+                    }
+                    state.advance(line_height);
+                }
+                TexElement::Command { name, args } => {
+                    // Font size commands
+                    let size = match name.as_str() {
+                        "tiny" => 6.0,
+                        "scriptsize" => 7.0,
+                        "footnotesize" => 8.0,
+                        "small" => 9.0,
+                        "normalsize" => base_font_size,
+                        "large" => 12.0,
+                        "Large" => 14.0,
+                        "LARGE" => 17.0,
+                        "huge" => 20.0,
+                        "Huge" => 25.0,
+                        _ => 0.0, // not a font size command
+                    };
+                    if size > 0.0 {
+                        state.current_font_size = size;
+                        line_height = state.line_height(size);
+                    }
+                }
                 _ => {}
             }
         }
@@ -676,9 +785,10 @@ end";
                 state.new_page();
             }
             let y = state.current_y;
+            let font_size = state.current_font_size;
             let stream = state.current_stream();
             stream.begin_text();
-            stream.set_font("F1", 11.0);
+            stream.set_font("F1", font_size);
             stream.set_position(left_margin, y);
             if let Some(engine) = self.typography.as_ref() {
                 let segs = engine.process(&line);
@@ -797,5 +907,42 @@ end";
 impl Default for PdfBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compress_content;
+
+    #[test]
+    fn compress_content_produces_valid_output() {
+        let data = b"BT /F1 12 Tf 100 700 Td (Hello World) Tj ET";
+        let compressed = compress_content(data);
+        assert!(!compressed.is_empty());
+        // Decompress to verify round-trip
+        use std::io::Read;
+        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn compress_content_is_deterministic() {
+        let data = b"repeated repeated repeated repeated text";
+        let c1 = compress_content(data);
+        let c2 = compress_content(data);
+        assert_eq!(c1, c2);
+    }
+
+    #[test]
+    fn compress_content_empty_roundtrips() {
+        let data = b"";
+        let compressed = compress_content(data);
+        use std::io::Read;
+        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed).unwrap();
+        assert_eq!(decompressed, data);
     }
 }

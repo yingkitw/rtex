@@ -5,6 +5,7 @@
 
 use crate::table::Table;
 use crate::utils::extract_braced;
+use std::path::{Path, PathBuf};
 
 /// A structured element parsed from a LaTeX document.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +56,7 @@ pub struct TexParser {
     content: String,
     position: usize,
     plugins: Option<crate::plugins::PluginRegistry>,
+    base_dir: Option<PathBuf>,
 }
 
 impl TexParser {
@@ -65,7 +67,7 @@ impl TexParser {
         let mut store = crate::macros::MacroStore::new();
         let stripped = store.extract_definitions(&content);
         let expanded = store.expand_all(&stripped);
-        Self { content: expanded, position: 0, plugins: None }
+        Self { content: expanded, position: 0, plugins: None, base_dir: None }
     }
 
     /// Create a parser with a plugin registry for custom command and
@@ -74,6 +76,12 @@ impl TexParser {
         let mut parser = Self::new(content);
         parser.plugins = Some(plugins);
         parser
+    }
+
+    /// Set the base directory for resolving relative paths in `\input`.
+    pub fn with_base_dir(mut self, base_dir: &Path) -> Self {
+        self.base_dir = Some(base_dir.to_path_buf());
+        self
     }
 
     /// Parse the entire document into a sequence of elements.
@@ -192,7 +200,7 @@ impl TexParser {
             return self.parse_textcolor();
         }
 
-        if remaining.starts_with("\\texttt{") || remaining.starts_with("\\textbf{") || remaining.starts_with("\\textit{") {
+        if remaining.starts_with("\\texttt{") || remaining.starts_with("\\textbf{") || remaining.starts_with("\\textit{") || remaining.starts_with("\\emph{") {
             return self.parse_text_command();
         }
 
@@ -218,6 +226,46 @@ impl TexParser {
 
         if remaining.starts_with('$') {
             return self.parse_math();
+        }
+
+        // Page breaks
+        if remaining.starts_with("\\newpage") || remaining.starts_with("\\clearpage") || remaining.starts_with("\\pagebreak") {
+            return self.parse_pagebreak();
+        }
+
+        // Include external file content inline
+        if remaining.starts_with("\\input{") {
+            return self.parse_input();
+        }
+
+        // Vertical spacing
+        if remaining.starts_with("\\vspace{") {
+            return self.parse_vspace();
+        }
+
+        // Underline
+        if remaining.starts_with("\\underline{") {
+            return self.parse_underline();
+        }
+
+        // Font size commands
+        let sizes = [
+            ("\\tiny", "tiny"),
+            ("\\scriptsize", "scriptsize"),
+            ("\\footnotesize", "footnotesize"),
+            ("\\small", "small"),
+            ("\\normalsize", "normalsize"),
+            ("\\large", "large"),
+            ("\\Large", "Large"),
+            ("\\LARGE", "LARGE"),
+            ("\\huge", "huge"),
+            ("\\Huge", "Huge"),
+        ];
+        for (prefix, name) in &sizes {
+            if remaining.starts_with(prefix) {
+                self.position += prefix.len();
+                return Some(TexElement::Command { name: name.to_string(), args: vec![] });
+            }
         }
 
         if remaining.starts_with('\\') {
@@ -283,6 +331,8 @@ impl TexParser {
             ("textbf", 8)
         } else if remaining.starts_with("\\textit{") {
             ("textit", 8)
+        } else if remaining.starts_with("\\emph{") {
+            ("emph", 6)
         } else {
             return None;
         };
@@ -364,6 +414,56 @@ impl TexParser {
         self.skip_whitespace_and_comments();
         let key = self.parse_braced_content()?;
         Some(TexElement::PageRef { key })
+    }
+
+    fn parse_pagebreak(&mut self) -> Option<TexElement> {
+        if self.content[self.position..].starts_with("\\newpage") {
+            self.position += "\\newpage".len();
+        } else if self.content[self.position..].starts_with("\\clearpage") {
+            self.position += "\\clearpage".len();
+        } else if self.content[self.position..].starts_with("\\pagebreak") {
+            self.position += "\\pagebreak".len();
+        }
+        Some(TexElement::Command { name: "newpage".to_string(), args: vec![] })
+    }
+
+    fn parse_input(&mut self) -> Option<TexElement> {
+        self.position += "\\input{".len();
+        let filename = self.read_until('}');
+        self.position += 1; // skip closing brace
+
+        let mut path = if let Some(ref base) = self.base_dir {
+            base.join(&filename)
+        } else {
+            PathBuf::from(&filename)
+        };
+        // Ensure .tex extension if missing
+        if path.extension().is_none() {
+            path.set_extension("tex");
+        }
+
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            // Splice included content into current source at current position
+            let before = &self.content[..self.position];
+            let after = &self.content[self.position..];
+            self.content = format!("{}{}\n{}", before, content, after);
+        }
+        // Return None so the loop re-parses the spliced content
+        None
+    }
+
+    fn parse_vspace(&mut self) -> Option<TexElement> {
+        self.position += "\\vspace{".len();
+        let length = self.read_until('}');
+        self.position += 1; // skip closing brace
+        Some(TexElement::Command { name: "vspace".to_string(), args: vec![length] })
+    }
+
+    fn parse_underline(&mut self) -> Option<TexElement> {
+        self.position += "\\underline{".len();
+        let text = self.read_until('}');
+        self.position += 1; // skip closing brace
+        Some(TexElement::Command { name: "underline".to_string(), args: vec![text] })
     }
 
     #[allow(clippy::question_mark)]
@@ -1248,5 +1348,106 @@ Visit \url{https://example.com}.
                 false
             }
         }));
+    }
+
+    #[test]
+    fn parser_parses_emph() {
+        let content = r#"\emph{important}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t == "important")));
+    }
+
+    #[test]
+    fn parser_parses_newpage() {
+        let content = r#"\newpage"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "newpage" && args.is_empty())));
+    }
+
+    #[test]
+    fn parser_parses_clearpage_as_newpage() {
+        let content = r#"\clearpage"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "newpage" && args.is_empty())));
+    }
+
+    #[test]
+    fn parser_parses_vspace() {
+        let content = r#"\vspace{12pt}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "vspace" && args == &["12pt"])));
+    }
+
+    #[test]
+    fn parser_parses_underline() {
+        let content = r#"\underline{key}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "underline" && args == &["key"])));
+    }
+
+    #[test]
+    fn parser_parses_font_size_commands() {
+        let sizes = ["\\tiny", "\\scriptsize", "\\footnotesize", "\\small",
+                     "\\normalsize", "\\large", "\\Large", "\\LARGE", "\\huge", "\\Huge"];
+        for cmd in &sizes {
+            let content = format!("{}text", cmd);
+            let name = &cmd[1..]; // strip backslash
+            let mut parser = TexParser::new(content);
+            let elements = parser.parse();
+            assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name: n, args } if n == name && args.is_empty())),
+                "failed to parse {}", cmd);
+        }
+    }
+
+    #[test]
+    fn parser_input_splices_file_content() {
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let included = tmp.path().join("included.tex");
+        {
+            let mut f = std::fs::File::create(&included).unwrap();
+            f.write_all(b"\\textbf{included}").unwrap();
+        }
+
+        let content = r#"\input{included}"#;
+        let mut parser = TexParser::new(content.to_string())
+            .with_base_dir(tmp.path());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| {
+            if let TexElement::Text(t) = e { t.contains("included") } else { false }
+        }));
+    }
+
+    #[test]
+    fn parser_input_adds_tex_extension() {
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let included = tmp.path().join("chapter1.tex");
+        {
+            let mut f = std::fs::File::create(&included).unwrap();
+            f.write_all(b"Chapter text").unwrap();
+        }
+
+        let content = r#"\input{chapter1}"#;
+        let mut parser = TexParser::new(content.to_string())
+            .with_base_dir(tmp.path());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| {
+            if let TexElement::Text(t) = e { t.contains("Chapter text") } else { false }
+        }));
+    }
+
+    #[test]
+    fn parser_input_missing_file_is_noop() {
+        let content = r#"\input{nonexistent}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        // Should not panic; parser skips the command and continues
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "newpage")));
     }
 }

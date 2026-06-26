@@ -1,7 +1,7 @@
 /// Page layout configuration for PDF generation
 /// Inspired by pdfrs architecture for better maintainability
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PageOrientation {
     Portrait,
     Landscape,

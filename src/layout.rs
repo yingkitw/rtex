@@ -13,6 +13,8 @@ pub struct LayoutState {
     pub current_y: f32,
     /// One content stream per page.
     pub pages: Vec<ContentStream>,
+    /// Current font size in points.
+    pub current_font_size: f32,
 }
 
 impl LayoutState {
@@ -22,6 +24,7 @@ impl LayoutState {
             layout,
             current_y: layout.content_top(),
             pages: vec![ContentStream::new()],
+            current_font_size: 11.0,
         }
     }
 
