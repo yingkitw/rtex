@@ -1,3 +1,9 @@
+//! Unicode superscript / subscript helpers for math rendering.
+//!
+//! Maps ASCII digits, letters, and common symbols to their Unicode
+//! superscript or subscript equivalents so they can be rendered with
+//! any Unicode-capable font without needing a math-specific typeface.
+
 /// Convert a base character to its Unicode superscript equivalent.
 pub fn to_superscript(ch: char) -> Option<char> {
     match ch {

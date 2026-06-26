@@ -2,7 +2,7 @@
 
 ## Summary
 
-Successfully migrated latex-rs from the `lopdf` dependency to a custom PDF generation implementation learned from pdfrs. **All 53 tests passing** with zero regressions.
+Successfully migrated rtex from the `lopdf` dependency to a custom PDF generation implementation learned from pdfrs. **All 53 tests passing** with zero regressions.
 
 ## What Changed
 

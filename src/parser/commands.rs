@@ -4,13 +4,16 @@ use super::{TexElement, TexParser};
 use std::path::PathBuf;
 
 impl TexParser {
+    /// Parse a sectioning command (\part, \chapter, \section, \subsection, …, \subparagraph).
     pub(super) fn parse_section(&mut self, level: u8) -> Option<TexElement> {
         let cmd = match level {
+            0 => "\\part",
             1 => "\\section",
             2 => "\\subsection",
             3 => "\\subsubsection",
             4 => "\\paragraph",
             5 => "\\subparagraph",
+            6 => "\\chapter",
             _ => "\\section",
         };
         self.position += cmd.len();
@@ -20,6 +23,7 @@ impl TexParser {
         self.parse_braced_content().map(|title| TexElement::Section { level: level as usize, title })
     }
 
+    /// Parse a generic one-argument command (\title, \author, \date, …).
     pub(super) fn parse_command(&mut self, name: &str) -> Option<TexElement> {
         self.position += name.len() + 1;
 
@@ -31,6 +35,7 @@ impl TexParser {
             })
     }
 
+    /// Parse `\texttt{arg}`, `\textbf{arg}`, `\textit{arg}`, or `\emph{arg}`.
     pub(super) fn parse_text_command(&mut self) -> Option<TexElement> {
         let remaining = &self.content[self.position..];
 
@@ -54,6 +59,7 @@ impl TexParser {
         })
     }
 
+    /// Parse `\includegraphics[…]{path}` with optional width/height.
     pub(super) fn parse_includegraphics(&mut self) -> Option<TexElement> {
         self.position += "\\includegraphics".len();
         self.skip_whitespace_and_comments();
@@ -94,6 +100,7 @@ impl TexParser {
         Some(TexElement::ColoredText { color, text })
     }
 
+    /// Parse `\cite{key1,key2}` into a citation element.
     pub(super) fn parse_cite(&mut self) -> Option<TexElement> {
         self.position += "\\cite".len();
         self.skip_whitespace_and_comments();
@@ -107,6 +114,7 @@ impl TexParser {
         Some(TexElement::Citation { keys })
     }
 
+    /// Parse `\label{key}`.
     pub(super) fn parse_label(&mut self) -> Option<TexElement> {
         self.position += "\\label".len();
         self.skip_whitespace_and_comments();
@@ -114,6 +122,7 @@ impl TexParser {
         Some(TexElement::Label { key })
     }
 
+    /// Parse `\ref{key}`.
     pub(super) fn parse_ref(&mut self) -> Option<TexElement> {
         self.position += "\\ref".len();
         self.skip_whitespace_and_comments();
@@ -121,6 +130,7 @@ impl TexParser {
         Some(TexElement::Ref { key })
     }
 
+    /// Parse `\pageref{key}`.
     pub(super) fn parse_pageref(&mut self) -> Option<TexElement> {
         self.position += "\\pageref".len();
         self.skip_whitespace_and_comments();
@@ -128,6 +138,7 @@ impl TexParser {
         Some(TexElement::PageRef { key })
     }
 
+    /// Parse page-break commands: `\newpage`, `\clearpage`, `\pagebreak`.
     pub(super) fn parse_pagebreak(&mut self) -> Option<TexElement> {
         let name = if self.content[self.position..].starts_with("\\newpage") {
             self.position += "\\newpage".len();
@@ -144,6 +155,7 @@ impl TexParser {
         Some(TexElement::Command { name: name.to_string(), args: vec![] })
     }
 
+    /// Parse `\input{filename}` and splice the referenced file inline.
     pub(super) fn parse_input(&mut self) -> Option<TexElement> {
         self.position += "\\input{".len();
         let filename = self.read_until('}');
@@ -169,6 +181,7 @@ impl TexParser {
         None
     }
 
+    /// Parse `\vspace{length}`.
     pub(super) fn parse_vspace(&mut self) -> Option<TexElement> {
         self.position += "\\vspace{".len();
         let length = self.read_until('}');
@@ -176,6 +189,7 @@ impl TexParser {
         Some(TexElement::Command { name: "vspace".to_string(), args: vec![length] })
     }
 
+    /// Parse `\underline{text}`.
     pub(super) fn parse_underline(&mut self) -> Option<TexElement> {
         self.position += "\\underline{".len();
         let text = self.read_until('}');
@@ -183,6 +197,7 @@ impl TexParser {
         Some(TexElement::Command { name: "underline".to_string(), args: vec![text] })
     }
 
+    /// Parse `\footnote{text}`.
     pub(super) fn parse_footnote(&mut self) -> Option<TexElement> {
         self.position += "\\footnote{".len();
         let text = self.read_until('}');
@@ -190,6 +205,7 @@ impl TexParser {
         Some(TexElement::Footnote { text })
     }
 
+    /// Parse `\caption{text}`.
     pub(super) fn parse_caption(&mut self) -> Option<TexElement> {
         self.position += "\\caption{".len();
         let text = self.read_until('}');
@@ -197,6 +213,91 @@ impl TexParser {
         Some(TexElement::Caption { text })
     }
 
+    /// Parse `\url{link}`.
+    pub(super) fn parse_url(&mut self) -> Option<TexElement> {
+        self.position += "\\url{".len();
+        let text = self.read_until('}');
+        self.position += 1; // skip closing brace
+        Some(TexElement::Command { name: "url".to_string(), args: vec![text] })
+    }
+
+    /// Parse `\raisebox{distance}{text}`.
+    pub(super) fn parse_raisebox(&mut self) -> Option<TexElement> {
+        self.position += "\\raisebox{".len();
+        let distance = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let text = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let t = self.read_until('}');
+            self.position += 1;
+            t
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command { name: "raisebox".to_string(), args: vec![distance, text] })
+    }
+
+    /// Parse `\rotatebox{angle}{text}`.
+    pub(super) fn parse_rotatebox(&mut self) -> Option<TexElement> {
+        self.position += "\\rotatebox{".len();
+        let angle = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let text = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let t = self.read_until('}');
+            self.position += 1;
+            t
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command { name: "rotatebox".to_string(), args: vec![angle, text] })
+    }
+
+    /// Parse `\scalebox{factor}{text}`.
+    pub(super) fn parse_scalebox(&mut self) -> Option<TexElement> {
+        self.position += "\\scalebox{".len();
+        let factor = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let text = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let t = self.read_until('}');
+            self.position += 1;
+            t
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command { name: "scalebox".to_string(), args: vec![factor, text] })
+    }
+
+    /// Parse any command of the form `\name{text}` into a [`TexElement::Command`].
+    pub(super) fn parse_simple_braced_command(&mut self, name: &str, prefix_len: usize) -> Option<TexElement> {
+        self.position += prefix_len;
+        let text = self.read_until('}');
+        self.position += 1; // skip closing brace
+        Some(TexElement::Command { name: name.to_string(), args: vec![text] })
+    }
+
+    /// Parse `\rule{width}{height}` for horizontal rules or vertical struts.
+    pub(super) fn parse_rule(&mut self) -> Option<TexElement> {
+        self.position += "\\rule{".len();
+        let width = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let height = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let h = self.read_until('}');
+            self.position += 1;
+            h
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command { name: "rule".to_string(), args: vec![width, height] })
+    }
+
+    /// Skip past an unknown command so parsing can continue.
     pub(super) fn parse_unknown_command(&mut self) {
         if self.position >= self.content.len() {
             return;

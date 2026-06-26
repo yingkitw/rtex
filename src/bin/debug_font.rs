@@ -1,4 +1,4 @@
-use latex_rs::{TexParser, PdfBuilder};
+use rtex::{TexParser, PdfBuilder};
 use std::path::Path;
 
 fn main() {

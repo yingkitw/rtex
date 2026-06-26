@@ -2,7 +2,7 @@
 
 ## Overview
 
-latex-rs uses a trait-based architecture for modularity, testability, and extensibility. This design is inspired by minitex's atomic traits pattern.
+rtex uses a trait-based architecture for modularity, testability, and extensibility. This design is inspired by minitex's atomic traits pattern.
 
 ## Core Traits
 

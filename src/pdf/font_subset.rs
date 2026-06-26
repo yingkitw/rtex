@@ -5,10 +5,6 @@ use std::collections::BTreeSet;
 /// Collect every Unicode character that appears in the parsed document.
 pub fn collect_used_chars(elements: &[crate::parser::TexElement]) -> BTreeSet<char> {
     let mut chars = BTreeSet::new();
-    // Always include basic ASCII control / punctuation so the font remains usable
-    for c in ' '..='~' {
-        chars.insert(c);
-    }
     for elem in elements {
         match elem {
             crate::parser::TexElement::Text(t)
@@ -57,6 +53,11 @@ pub fn collect_used_chars(elements: &[crate::parser::TexElement]) -> BTreeSet<ch
                         chars.insert(c);
                     }
                 }
+            }
+            crate::parser::TexElement::Quote(inner)
+            | crate::parser::TexElement::Abstract(inner)
+            | crate::parser::TexElement::Center(inner) => {
+                chars.extend(collect_used_chars(inner));
             }
             _ => {}
         }

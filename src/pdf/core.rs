@@ -220,6 +220,33 @@ impl ContentStream {
         let _ = writeln!(&mut self.operations, "{} {} Td", x, y);
     }
 
+    /// Set text rise (baseline offset) in points — positive = superscript, negative = subscript.
+    pub fn set_text_rise(&mut self, rise: f32) {
+        let _ = writeln!(&mut self.operations, "{} Ts", rise);
+    }
+
+    /// Set text rendering mode: 0=fill, 1=stroke, 2=fill+stroke, 3=invisible, 4=fill+clip, etc.
+    pub fn set_text_rendering_mode(&mut self, mode: i32) {
+        let _ = writeln!(&mut self.operations, "{} Tr", mode);
+    }
+
+    /// Save the current graphics state (`q`).
+    pub fn save_state(&mut self) {
+        self.operations.push(b'q');
+        self.operations.push(b'\n');
+    }
+
+    /// Restore the previous graphics state (`Q`).
+    pub fn restore_state(&mut self) {
+        self.operations.push(b'Q');
+        self.operations.push(b'\n');
+    }
+
+    /// Concatenate a transformation matrix to the current CTM (`a b c d e f cm`).
+    pub fn concat_matrix(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
+        let _ = writeln!(&mut self.operations, "{} {} {} {} {} {} cm", a, b, c, d, e, f);
+    }
+
     /// Show text using UTF-16BE hex encoding for Unicode support
     pub fn show_text(&mut self, text: &str) {
         // Encode text as UTF-16BE

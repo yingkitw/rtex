@@ -43,7 +43,7 @@ pub fn replace_math_symbols(text: &str) -> String {
                     }
 
                     // Text commands: strip the command and consume the braced argument
-                    if matches!(name.as_str(), "text" | "mathrm" | "mathbf" | "mathit" | "mathcal" | "mathsf" | "mathtt" | "mathfrak" | "mathbb" | "mathscr" | "mathnormal") {
+                    if matches!(name.as_str(), "text" | "mathrm" | "mathscr" | "mathnormal") {
                         if let Some(&'{') = iter.peek() {
                             iter.next(); // consume opening brace
                             while let Some(&c) = iter.peek() {
@@ -628,10 +628,6 @@ fn lookup_symbol(name: &str) -> Option<&'static str> {
         "circledS" => "Ⓢ",
 
         // Font style commands that strip content
-        "mathsf" => "",
-        "mathtt" => "",
-        "mathfrak" => "",
-        "mathbb" => "",
         "mathscr" => "",
         "mathnormal" => "",
 
@@ -823,9 +819,11 @@ mod tests {
 
     #[test]
     fn test_font_commands_strip_braces() {
-        // These should strip the braces and not output the command
-        assert_eq!(replace_math_symbols("\\mathbb{R}"), "R");
-        assert_eq!(replace_math_symbols("\\mathfrak{g}"), "g");
+        // text and mathscr still strip braces; math alphabets now pass through for later processing
         assert_eq!(replace_math_symbols("\\mathscr{A}"), "A");
+        assert_eq!(replace_math_symbols("\\text{R}"), "R");
+        // Math alphabets are preserved so format_math_alphabets can transform them
+        assert_eq!(replace_math_symbols("\\mathbb{R}"), "\\mathbb{R}");
+        assert_eq!(replace_math_symbols("\\mathfrak{g}"), "\\mathfrak{g}");
     }
 }

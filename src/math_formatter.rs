@@ -20,6 +20,8 @@ impl MathFormatter {
         result = Self::format_sqrt(&result);
         result = Self::format_fractions(&result);
         result = crate::math::symbols::replace_math_symbols(&result);
+        result = Self::format_math_alphabets(&result);
+        result = Self::format_accents(&result);
         result = Self::format_superscripts(&result);
         result = Self::format_subscripts(&result);
         // Unicode symbols now supported with DejaVu font - no ASCII fallbacks needed
@@ -82,6 +84,94 @@ impl MathFormatter {
     
     fn format_fractions(text: &str) -> String {
         crate::math::fractions::format_fractions(text, Self::format)
+    }
+
+    fn format_math_alphabets(text: &str) -> String {
+        let mut result = String::new();
+        let mut index = 0;
+
+        let alphabets: [(&str, fn(char) -> Option<char>); 7] = [
+            ("\\mathbb{", mathbb_char),
+            ("\\mathcal{", mathcal_char),
+            ("\\mathfrak{", mathfrak_char),
+            ("\\mathsf{", mathsf_char),
+            ("\\mathtt{", mathtt_char),
+            ("\\mathbf{", mathbf_char),
+            ("\\mathit{", mathit_char),
+        ];
+
+        while index < text.len() {
+            let remaining = &text[index..];
+            let mut matched = false;
+            for (prefix, mapper) in &alphabets {
+                if remaining.starts_with(prefix) {
+                    let arg_start = index + prefix.len();
+                    if let Some((arg, next_index)) = crate::utils::extract_braced(text, arg_start - 1) {
+                        let formatted = Self::format(&arg);
+                        for ch in formatted.chars() {
+                            if let Some(mapped) = mapper(ch) {
+                                result.push(mapped);
+                            } else {
+                                result.push(ch);
+                            }
+                        }
+                        index = next_index;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if matched {
+                continue;
+            }
+            let ch = remaining.chars().next().unwrap();
+            result.push(ch);
+            index += ch.len_utf8();
+        }
+
+        result
+    }
+
+    fn format_accents(text: &str) -> String {
+        let mut result = String::new();
+        let mut index = 0;
+
+        let accents = [
+            ("\\vec{", "\u{20d7}"),   // combining right arrow above
+            ("\\hat{", "\u{0302}"),   // combining circumflex
+            ("\\tilde{", "\u{0303}"), // combining tilde
+            ("\\bar{", "\u{0304}"),  // combining macron
+            ("\\dot{", "\u{0307}"),  // combining dot above
+            ("\\ddot{", "\u{0308}"), // combining diaeresis
+        ];
+
+        while index < text.len() {
+            let remaining = &text[index..];
+            let mut matched = false;
+            for (prefix, combining) in &accents {
+                if remaining.starts_with(prefix) {
+                    let arg_start = index + prefix.len();
+                    if let Some((arg, next_index)) = crate::utils::extract_braced(text, arg_start - 1) {
+                        let formatted = Self::format(&arg);
+                        for ch in formatted.chars() {
+                            result.push(ch);
+                            result.push_str(combining);
+                        }
+                        index = next_index;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if matched {
+                continue;
+            }
+            let ch = remaining.chars().next().unwrap();
+            result.push(ch);
+            index += ch.len_utf8();
+        }
+
+        result
     }
     
     fn format_superscripts(text: &str) -> String {
@@ -189,6 +279,73 @@ impl MathFormatter {
 
 }
 
+fn mathbb_char(ch: char) -> Option<char> {
+    // Double-struck (blackboard bold): U+1D538–U+1D56B
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D538 + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D552 + (ch as u32 - 'a' as u32)),
+        '0'..='9' => char::from_u32(0x1D7D8 + (ch as u32 - '0' as u32)),
+        _ => None,
+    }
+}
+
+fn mathcal_char(ch: char) -> Option<char> {
+    // Script: U+1D49C–U+1D4CF
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D49C + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D4B6 + (ch as u32 - 'a' as u32)),
+        _ => None,
+    }
+}
+
+fn mathfrak_char(ch: char) -> Option<char> {
+    // Fraktur: U+1D504–U+1D537
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D504 + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D51E + (ch as u32 - 'a' as u32)),
+        _ => None,
+    }
+}
+
+fn mathsf_char(ch: char) -> Option<char> {
+    // Sans-serif: U+1D5A0–U+1D5D3
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D5A0 + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D5BA + (ch as u32 - 'a' as u32)),
+        '0'..='9' => char::from_u32(0x1D7E2 + (ch as u32 - '0' as u32)),
+        _ => None,
+    }
+}
+
+fn mathtt_char(ch: char) -> Option<char> {
+    // Monospace: U+1D670–U+1D6A3
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D670 + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D68A + (ch as u32 - 'a' as u32)),
+        '0'..='9' => char::from_u32(0x1D7F6 + (ch as u32 - '0' as u32)),
+        _ => None,
+    }
+}
+
+fn mathbf_char(ch: char) -> Option<char> {
+    // Bold: U+1D400–U+1D433
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D400 + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D41A + (ch as u32 - 'a' as u32)),
+        '0'..='9' => char::from_u32(0x1D7CE + (ch as u32 - '0' as u32)),
+        _ => None,
+    }
+}
+
+fn mathit_char(ch: char) -> Option<char> {
+    // Italic: U+1D434–U+1D467
+    match ch {
+        'A'..='Z' => char::from_u32(0x1D434 + (ch as u32 - 'A' as u32)),
+        'a'..='z' => char::from_u32(0x1D44E + (ch as u32 - 'a' as u32)),
+        _ => None,
+    }
+}
+
 impl Default for MathFormatter {
     fn default() -> Self {
         Self::new()
@@ -230,5 +387,77 @@ mod tests {
     fn format_unmappable_script_falls_back_to_parenthesized_form() {
         let formatted = MathFormatter::format("x^\\infty");
         assert_eq!(formatted, "x^∞"); // Infinity as Unicode symbol with DejaVu font
+    }
+
+    #[test]
+    fn format_vec_accent() {
+        let formatted = MathFormatter::format("\\vec{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{20d7}'));
+    }
+
+    #[test]
+    fn format_hat_accent() {
+        let formatted = MathFormatter::format("\\hat{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0302}'));
+    }
+
+    #[test]
+    fn format_tilde_accent() {
+        let formatted = MathFormatter::format("\\tilde{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0303}'));
+    }
+
+    #[test]
+    fn format_bar_accent() {
+        let formatted = MathFormatter::format("\\bar{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0304}'));
+    }
+
+    #[test]
+    fn format_dot_accent() {
+        let formatted = MathFormatter::format("\\dot{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0307}'));
+    }
+
+    #[test]
+    fn format_ddot_accent() {
+        let formatted = MathFormatter::format("\\ddot{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0308}'));
+    }
+
+    #[test]
+    fn format_mathbb() {
+        let formatted = MathFormatter::format("\\mathbb{R}");
+        assert!(formatted.contains('\u{1d549}')); // 𝕉 (U+1D549) — double-struck R
+    }
+
+    #[test]
+    fn format_mathcal() {
+        let formatted = MathFormatter::format("\\mathcal{L}");
+        assert!(formatted.contains('\u{1d4a7}')); // 𝓧 (U+1D4A7) — script L
+    }
+
+    #[test]
+    fn format_mathfrak() {
+        let formatted = MathFormatter::format("\\mathfrak{g}");
+        assert!(formatted.contains('\u{1d524}')); // 𝔤 (U+1D524) — fraktur g
+    }
+
+    #[test]
+    fn format_mathbf() {
+        let formatted = MathFormatter::format("\\mathbf{F}");
+        assert!(formatted.contains('\u{1d405}')); // 𝐅 (U+1D405) — bold F
+    }
+
+    #[test]
+    fn format_mathit() {
+        let formatted = MathFormatter::format("\\mathit{x}");
+        assert!(formatted.contains('\u{1d465}')); // 𝑥 (U+1D465) — italic x
     }
 }

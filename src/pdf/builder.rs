@@ -528,11 +528,13 @@ impl PdfBuilder {
                     sections_seen.push((*level, title.clone(), state.pages.len()));
                     let headings = self.template.as_ref().map(|t| t.headings.clone()).unwrap_or_default();
                     let font_size = match *level {
+                        0 => 25.0,
                         1 => headings.h1,
                         2 => headings.h2,
                         3 => headings.h3,
                         4 => headings.h4,
                         5 => headings.h5,
+                        6 => 18.0,
                         _ => headings.h6,
                     };
                     state.ensure_space(font_size + 6.0);
@@ -650,14 +652,16 @@ impl PdfBuilder {
                     stream.end_text();
                     state.advance(line_height + 10.0);
                 }
-                TexElement::ItemList { ordered, items } => {
+                TexElement::ItemList { ordered, labels, items } => {
                     if !accumulated_text.is_empty() {
                         self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
                     state.ensure_space(items.len() as f32 * line_height);
                     for (idx, item) in items.iter().enumerate() {
-                        let bullet = if *ordered {
+                        let bullet = if let Some(label) = labels.get(idx).and_then(|l| l.as_ref()) {
+                            label.clone()
+                        } else if *ordered {
                             format!("{}.", idx + 1)
                         } else {
                             "•".to_string()
@@ -819,12 +823,205 @@ impl PdfBuilder {
                         state.centering = true;
                         continue;
                     }
+                    if name == "raggedright" || name == "flushleft" {
+                        state.raggedleft = false;
+                        continue;
+                    }
+                    if name == "raggedleft" || name == "flushright" {
+                        state.raggedleft = true;
+                        continue;
+                    }
+                    if name == "noindent" {
+                        state.noindent = true;
+                        continue;
+                    }
                     // Text formatting — render the text even if we can't
                     // yet apply bold/italic/monospace styling.
-                    if matches!(name.as_str(), "textbf" | "textit" | "texttt" | "emph") {
+                    if matches!(name.as_str(), "textbf" | "textit" | "texttt" | "emph" | "textsuperscript" | "textsubscript" | "text" | "ensuremath" | "textsc" | "textrm" | "textsf" | "textsl" | "textup" | "textmd") {
                         if let Some(text) = args.first() {
                             accumulated_text.push_str(text);
                             accumulated_text.push(' ');
+                        }
+                        continue;
+                    }
+                    if name == "overline" {
+                        if let Some(text) = args.first() {
+                            let with_overline: String = text.chars().map(|c| format!("{}̅", c)).collect();
+                            accumulated_text.push_str(&with_overline);
+                            accumulated_text.push(' ');
+                        }
+                        continue;
+                    }
+                    if name == "sout" {
+                        if let Some(text) = args.first() {
+                            let with_strike: String = text.chars().map(|c| format!("{}̶", c)).collect();
+                            accumulated_text.push_str(&with_strike);
+                            accumulated_text.push(' ');
+                        }
+                        continue;
+                    }
+                    if name == "today" {
+                        let now = chrono::Local::now();
+                        accumulated_text.push_str(&now.format("%B %e, %Y").to_string());
+                        accumulated_text.push(' ');
+                        continue;
+                    }
+                    if name == "url" {
+                        if let Some(text) = args.first() {
+                            accumulated_text.push_str(text);
+                            accumulated_text.push(' ');
+                        }
+                        continue;
+                    }
+                    if name == "phantom" || name == "vphantom" || name == "hphantom" {
+                        if let Some(text) = args.first() {
+                            if !text.is_empty() {
+                                // Flush accumulated text first
+                                if !accumulated_text.is_empty() {
+                                    self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                                    accumulated_text.clear();
+                                }
+                                let font_size = state.current_font_size;
+                                let x = state.left_margin();
+                                let y = state.current_y;
+                                let stream = state.current_stream();
+                                stream.begin_text();
+                                stream.set_font("F1", font_size);
+                                stream.set_text_rendering_mode(3); // invisible
+                                stream.set_position(x, y);
+                                stream.show_text(text);
+                                stream.set_text_rendering_mode(0); // back to visible
+                                stream.end_text();
+                                if name == "vphantom" || name == "phantom" {
+                                    state.advance(line_height);
+                                }
+                                // For hphantom, we don't advance vertically; the width is consumed by the invisible text
+                            }
+                        }
+                        continue;
+                    }
+                    if name == "raisebox" && args.len() >= 2 {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let distance = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                        let text = &args[1];
+                        let font_size = state.current_font_size;
+                        state.ensure_space(font_size + distance.abs());
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let stream = state.current_stream();
+                        stream.begin_text();
+                        stream.set_font("F1", font_size);
+                        stream.set_text_rise(distance);
+                        stream.set_position(x, y);
+                        stream.show_text(text);
+                        stream.set_text_rise(0.0);
+                        stream.end_text();
+                        state.advance(line_height);
+                        continue;
+                    }
+                    if name == "rotatebox" && args.len() >= 2 {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let angle_deg: f32 = args[0].parse().unwrap_or(0.0);
+                        let text = &args[1];
+                        let font_size = state.current_font_size;
+                        let theta = angle_deg * std::f32::consts::PI / 180.0;
+                        let cos_t = theta.cos();
+                        let sin_t = theta.sin();
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let stream = state.current_stream();
+                        stream.save_state();
+                        // Translate to text position, rotate, then translate back
+                        stream.concat_matrix(1.0, 0.0, 0.0, 1.0, x, y);
+                        stream.concat_matrix(cos_t, sin_t, -sin_t, cos_t, 0.0, 0.0);
+                        stream.concat_matrix(1.0, 0.0, 0.0, 1.0, -x, -y);
+                        stream.begin_text();
+                        stream.set_font("F1", font_size);
+                        stream.set_position(x, y);
+                        stream.show_text(text);
+                        stream.end_text();
+                        stream.restore_state();
+                        state.advance(line_height);
+                        continue;
+                    }
+                    if name == "scalebox" && args.len() >= 2 {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let scale: f32 = args[0].parse().unwrap_or(1.0);
+                        let text = &args[1];
+                        let font_size = state.current_font_size;
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let stream = state.current_stream();
+                        stream.save_state();
+                        // Translate to text position, scale, then translate back
+                        stream.concat_matrix(1.0, 0.0, 0.0, 1.0, x, y);
+                        stream.concat_matrix(scale, 0.0, 0.0, scale, 0.0, 0.0);
+                        stream.concat_matrix(1.0, 0.0, 0.0, 1.0, -x, -y);
+                        stream.begin_text();
+                        stream.set_font("F1", font_size);
+                        stream.set_position(x, y);
+                        stream.show_text(text);
+                        stream.end_text();
+                        stream.restore_state();
+                        state.advance(line_height);
+                        continue;
+                    }
+                    if name == "fbox" && !args.is_empty() {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let text = &args[0];
+                        state.ensure_space(line_height + 2.0);
+                        let font_size = state.current_font_size;
+                        let text_width = text.len() as f32 * font_size * 0.55;
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let padding = 2.0;
+                        {
+                            let stream = state.current_stream();
+                            // Draw box around text
+                            stream.move_to(x, y + font_size + padding);
+                            stream.line_to(x + text_width + padding * 2.0, y + font_size + padding);
+                            stream.line_to(x + text_width + padding * 2.0, y - padding);
+                            stream.line_to(x, y - padding);
+                            stream.line_to(x, y + font_size + padding);
+                            stream.stroke();
+                            // Draw text inside
+                            stream.begin_text();
+                            stream.set_font("F1", font_size);
+                            stream.set_position(x + padding, y);
+                            stream.show_text(text);
+                            stream.end_text();
+                        }
+                        state.advance(line_height + 4.0);
+                        continue;
+                    }
+                    if name == "rule" && args.len() >= 2 {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let width = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                        let height = crate::tex::Dimension::parse(&args[1]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                        if width > 0.0 && height > 0.0 {
+                            state.ensure_space(height.max(line_height));
+                            let x = state.left_margin();
+                            let y = state.current_y;
+                            let stream = state.current_stream();
+                            stream.move_to(x, y);
+                            stream.line_to(x + width, y);
+                            stream.stroke();
+                            state.advance(height.max(line_height));
                         }
                         continue;
                     }
@@ -889,6 +1086,92 @@ impl PdfBuilder {
                     stream.end_text();
                     state.advance(caption_font_size + 4.0);
                 }
+                TexElement::ListOfFigures => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.ensure_space(30.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", 16.0);
+                    stream.set_position(x, y);
+                    stream.show_text("List of Figures");
+                    stream.end_text();
+                    state.advance(24.0);
+                }
+                TexElement::ListOfTables => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.ensure_space(30.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", 16.0);
+                    stream.set_position(x, y);
+                    stream.show_text("List of Tables");
+                    stream.end_text();
+                    state.advance(24.0);
+                }
+                TexElement::Quote(inner) => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    let indent = 20.0;
+                    let saved_left = state.layout.margin_left;
+                    state.layout.margin_left += indent;
+                    for inner_elem in inner {
+                        if let TexElement::Text(t) = inner_elem {
+                            accumulated_text.push_str(t);
+                            accumulated_text.push(' ');
+                        }
+                    }
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.layout.margin_left = saved_left;
+                    state.advance(line_height);
+                }
+                TexElement::Abstract(inner) => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.ensure_space(30.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", 14.0);
+                    stream.set_position(x, y);
+                    stream.show_text("Abstract");
+                    stream.end_text();
+                    state.advance(20.0);
+                    let saved_left = state.layout.margin_left;
+                    let saved_right = state.layout.margin_right;
+                    state.layout.margin_left += 20.0;
+                    state.layout.margin_right += 20.0;
+                    for inner_elem in inner {
+                        if let TexElement::Text(t) = inner_elem {
+                            accumulated_text.push_str(t);
+                            accumulated_text.push(' ');
+                        }
+                    }
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.layout.margin_left = saved_left;
+                    state.layout.margin_right = saved_right;
+                    state.advance(line_height);
+                }
             }
         }
 
@@ -918,6 +1201,7 @@ impl PdfBuilder {
         let left_margin = state.left_margin();
         let content_width = state.content_width();
         let centering = state.centering;
+        let raggedleft = state.raggedleft;
 
         for line in lines {
             if state.current_y - line_height < state.content_bottom() {
@@ -928,6 +1212,8 @@ impl PdfBuilder {
             let text_width = line.len() as f32 * font_size * 0.55;
             let x = if centering {
                 left_margin + (content_width - text_width).max(0.0) / 2.0
+            } else if raggedleft {
+                (left_margin + content_width - text_width).max(left_margin)
             } else {
                 left_margin
             };
@@ -953,6 +1239,7 @@ impl PdfBuilder {
             state.advance(line_height);
         }
         state.centering = false;
+        state.raggedleft = false;
     }
     
     fn add_math_spacing(&self, math: &str) -> String {

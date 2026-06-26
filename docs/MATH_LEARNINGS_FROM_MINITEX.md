@@ -1,7 +1,7 @@
 # Math Processing Learnings from MiniTeX
 
 ## Overview
-This document captures key learnings from the MiniTeX project's math handling implementation that can improve latex-rs.
+This document captures key learnings from the MiniTeX project's math handling implementation that can improve rtex.
 
 ## Key Architecture Patterns
 
@@ -24,7 +24,7 @@ fn extract_braced_content(text: &str, start: usize) -> Option<(String, usize)> {
 }
 ```
 
-**Current latex-rs**: We have similar logic but scattered across methods.
+**Current rtex**: We have similar logic but scattered across methods.
 **Improvement**: Extract to a shared utility function.
 
 ### 3. **Comprehensive Unicode Mappings**
@@ -34,25 +34,25 @@ fn extract_braced_content(text: &str, start: usize) -> Option<(String, usize)> {
 - Uppercase: Α, Β, Γ, Δ, Ε, Ζ, Η, Θ, Ι, Κ, Λ, Μ, Ν, Ξ, Ο, Π, Ρ, Σ, Τ, Υ, Φ, Χ, Ψ, Ω
 - Variants: \varepsilon, \varphi, \vartheta, etc.
 
-**Current latex-rs**: ~30 symbols
+**Current rtex**: ~30 symbols
 **Improvement**: Add missing Greek variants and uppercase letters.
 
 #### Mathematical Operators (115+ symbols)
 Including: ⊕, ⊖, ⊗, ⊘, ⊙, ◯, †, ‡, ⨿, ⋆, ∘, •, ⊎, ⊓, ⊔, ∨, ∧, ∖, ≀, ⋄, etc.
 
-**Current latex-rs**: ~20 operators
+**Current rtex**: ~20 operators
 **Improvement**: Expand operator coverage significantly.
 
 #### Relations (40+ symbols)
 Including: ≺, ⪯, ≪, ⊏, ⊑, ⊢, ≻, ⪰, ≫, ⊐, ⊒, ∋, ⊣, ∼, ≃, ≍, ≅, ≐, ⊨, ⊥, ∣, ∥, ⋈, ⌣, ⌢, ∝
 
-**Current latex-rs**: ~15 relations
+**Current rtex**: ~15 relations
 **Improvement**: Add comprehensive relation symbols.
 
 #### Arrows (28+ variants)
 Including: ↩, ↼, ↽, ⇌, ⟵, ⟸, ⟶, ⟹, ⟷, ⟺, ⟼, ↪, ⇀, ⇁, ⇝, ↗, ↘, ↙, ↖
 
-**Current latex-rs**: ~10 arrows
+**Current rtex**: ~10 arrows
 **Improvement**: Add long arrows and harpoons.
 
 #### Advanced Symbols
@@ -76,7 +76,7 @@ Including: ↩, ↼, ↽, ⇌, ⟵, ⟸, ⟶, ⟹, ⟷, ⟺, ⟼, ↪, ⇀, ⇁,
 - Letters: ₐᵦᶜᵈₑᶠᵍₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ
 - Symbols: ₊₋₌₍₎
 
-**Current latex-rs**: Limited character set
+**Current rtex**: Limited character set
 **Improvement**: Add full alphabet support for super/subscripts.
 
 #### Fallback Strategy
@@ -89,7 +89,7 @@ if all_converted {
 }
 ```
 
-**Current latex-rs**: No fallback mechanism
+**Current rtex**: No fallback mechanism
 **Improvement**: Consider fallback for unsupported characters.
 
 ### 5. **Fraction Processing Improvements**
@@ -98,7 +98,7 @@ if all_converted {
 MiniTeX has 15 Unicode fractions:
 - ½, ⅓, ⅔, ¼, ¾, ⅕, ⅖, ⅗, ⅘, ⅙, ⅚, ⅐, ⅛, ⅜, ⅝, ⅞, ⅑, ⅒
 
-**Current latex-rs**: Basic Unicode fractions
+**Current rtex**: Basic Unicode fractions
 **Improvement**: Add 1/7, 1/9, 1/10.
 
 #### Smart Parenthesization
@@ -110,7 +110,7 @@ let num_str = if num.len() == 1 || num.chars().all(|c| c.is_alphanumeric()) {
 };
 ```
 
-**Current latex-rs**: Always adds parentheses
+**Current rtex**: Always adds parentheses
 **Improvement**: Only add parentheses when needed.
 
 ### 6. **Radical (Square Root) Improvements**
@@ -119,7 +119,7 @@ let num_str = if num.len() == 1 || num.chars().all(|c| c.is_alphanumeric()) {
 - ∛ (cube root) for `\sqrt[3]{x}`
 - ∜ (fourth root) for `\sqrt[4]{x}`
 
-**Current latex-rs**: Uses `3√` and `4√`
+**Current rtex**: Uses `3√` and `4√`
 **Improvement**: Use proper Unicode symbols.
 
 #### Smart Content Wrapping
@@ -131,7 +131,7 @@ if content.len() == 1 {
 }
 ```
 
-**Current latex-rs**: Always wraps in parentheses
+**Current rtex**: Always wraps in parentheses
 **Improvement**: Only wrap multi-character content.
 
 ### 7. **Function Name Support**
@@ -139,7 +139,7 @@ MiniTeX handles 25+ function names:
 - Trig: arccos, arcsin, arctan, cos, sin, tan, cosh, sinh, tanh, cot, coth, csc, sec
 - Other: exp, log, ln, lim, max, min, sup, inf, det, dim, gcd, hom, ker, deg, arg, Pr
 
-**Current latex-rs**: No function name handling
+**Current rtex**: No function name handling
 **Improvement**: Add function name recognition.
 
 ## Implementation Priorities
@@ -170,7 +170,7 @@ MiniTeX handles 25+ function names:
 4. **Performance** - Uses `LazyLock` for static symbol maps
 5. **DRY principle** - Shared utilities like `extract_braced_content()`
 
-### What We Can Improve in latex-rs
+### What We Can Improve in rtex
 1. **Test coverage** - Add more math-specific tests
 2. **Documentation** - Document the math formatter module
 3. **Modularity** - Consider splitting math_formatter into submodules
@@ -209,4 +209,4 @@ MiniTeX demonstrates a mature, well-architected approach to math processing. The
 - **Testing**: Thorough unit tests for each feature
 - **Performance**: Efficient symbol lookups with static maps
 
-By applying these patterns, latex-rs can significantly improve its math rendering capabilities while maintaining code quality and maintainability.
+By applying these patterns, rtex can significantly improve its math rendering capabilities while maintaining code quality and maintainability.

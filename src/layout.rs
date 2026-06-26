@@ -17,6 +17,10 @@ pub struct LayoutState {
     pub current_font_size: f32,
     /// Whether subsequent text blocks should be centered.
     pub centering: bool,
+    /// Whether subsequent text blocks should be right-aligned.
+    pub raggedleft: bool,
+    /// Whether to suppress paragraph indentation on next paragraph.
+    pub noindent: bool,
     /// Footnotes collected for the current page (number, text).
     pub current_page_footnotes: Vec<(usize, String)>,
     /// Footnotes per completed page.
@@ -32,6 +36,8 @@ impl LayoutState {
             pages: vec![ContentStream::new()],
             current_font_size: 11.0,
             centering: false,
+            raggedleft: false,
+            noindent: false,
             current_page_footnotes: Vec::new(),
             all_footnotes: Vec::new(),
         }

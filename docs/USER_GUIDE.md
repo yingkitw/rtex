@@ -10,14 +10,14 @@ cd latex-rs
 cargo build --release
 ```
 
-The binary will be at `target/release/latex-rs`.
+The binary will be at `target/release/rtex`.
 
 ## Quick Start
 
 Convert a TeX file to PDF:
 
 ```bash
-latex-rs input.tex
+rtex input.tex
 ```
 
 Output is written to `output/input.pdf` by default.
@@ -25,7 +25,7 @@ Output is written to `output/input.pdf` by default.
 Specify an output path:
 
 ```bash
-latex-rs input.tex --output my_document.pdf
+rtex input.tex --output my_document.pdf
 ```
 
 ## Supported LaTeX
@@ -139,7 +139,7 @@ Unknown commands are skipped with a warning. If a command is critical, open an i
 
 ## Limitations
 
-latex-rs is a native converter and does not require an external LaTeX installation. However, it supports a subset of LaTeX features. Notable limitations:
+rtex is a native converter and does not require an external LaTeX installation. However, it supports a subset of LaTeX features. Notable limitations:
 
 - No TikZ or PGFPlots graphics
 - No BibTeX / bibliography support

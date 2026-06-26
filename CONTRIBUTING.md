@@ -1,11 +1,11 @@
-# Contributing to latex-rs
+# Contributing to rtex
 
 Thank you for your interest in contributing! This guide covers how to get started.
 
 ## Development Setup
 
 1. **Prerequisites**
-   - Rust toolchain (latest stable)
+   - Rust toolchain (latest stable, edition 2024)
    - `cargo` and `rustc`
 
 2. **Clone and build**
@@ -24,20 +24,39 @@ Thank you for your interest in contributing! This guide covers how to get starte
 
 ```
 src/
-  lib.rs              # Core conversion logic
-  main.rs             # CLI entry point
-  parser.rs           # LaTeX parser
-  math_formatter.rs   # Math expression formatting
-  pdf_builder.rs      # PDF document generation
-  pdf_core.rs         # Low-level PDF primitives
-  pdf_text_renderer.rs # Text rendering utilities
-  config.rs           # Configuration system
-  error.rs            # Error types
-  page_layout.rs      # Page dimensions and helpers
-  traits.rs           # Composable trait definitions
+  lib.rs              # Core conversion logic and public API
+  main.rs             # CLI entry point (binary: rtex)
+  error.rs            # Structured error types with Position tracking
+  config.rs           # Configuration system with quality presets
+  common.rs           # Shared traits (Clear, Stats)
+  color.rs            # Color struct with RGB and named color parsing
+  table.rs            # Table parsing and PDF rendering
+  macros.rs           # Macro definition and expansion system
+  layout.rs           # LayoutState for text alignment and indentation
+  page_layout.rs      # Page dimensions, margins, orientation helpers
+  math_formatter.rs   # Math expression formatting orchestrator
+  parser/
+    mod.rs            # TexParser, TexElement enum, environment dispatch
+    text.rs           # Raw text accumulation
+    math.rs           # Inline/display math parsing
+    commands.rs       # Section, URL, rule, footnote, caption parsers
+    plugin.rs         # Plugin trait for extensible commands
   math/
-    symbols.rs        # LaTeX-to-Unicode mapping
-    scripts.rs        # Superscript/subscript conversion
+    symbols.rs        # 566+ LaTeX-to-Unicode mappings
+    scripts.rs        # Superscript/subscript Unicode conversion
+    radicals.rs       # Square root formatting with Unicode
+    fractions.rs      # Fraction → Unicode fraction or parenthesized form
+  pdf/
+    mod.rs            # PDF module re-exports
+    core.rs           # ContentStream, PdfGenerator, PdfObj, HEX_TABLE
+    builder.rs        # PdfBuilder, LayoutState, text block rendering
+    text_renderer.rs  # Text normalization and wrapping utilities
+    font_subset.rs    # Font subsetting to only used characters
+  bin/
+    debug_*.rs          # Debug/test binaries
+  plugins/
+    text_commands.rs  # Built-in text command plugins
+    math_commands.rs  # Built-in math command plugins
 ```
 
 ## Coding Guidelines

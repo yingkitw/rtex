@@ -1,5 +1,5 @@
 [package]
-name = "latex-rs"
+name = "rtex"
 version = "0.1.0"
 edition = "2024"
 

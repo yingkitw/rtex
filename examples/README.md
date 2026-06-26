@@ -1,6 +1,6 @@
 # Example TeX Files
 
-This directory contains example TeX files for testing the latex-rs converter.
+This directory contains example TeX files for testing the rtex converter.
 
 ## Files
 

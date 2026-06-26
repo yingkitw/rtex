@@ -1,4 +1,4 @@
-use latex_rs::MathFormatter;
+use rtex::MathFormatter;
 
 fn main() {
     let input = r"\int_0^\infty e^{-x} dx = 1";

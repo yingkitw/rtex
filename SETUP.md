@@ -4,7 +4,7 @@
 
 ### 1. Build the Project
 
-**No external dependencies required!** latex-rs is a native Rust implementation that doesn't need pdflatex or any LaTeX installation.
+**No external dependencies required!** rtex is a native Rust implementation that doesn't need pdflatex or any LaTeX installation.
 
 ```bash
 cd /Users/yingkitw/Desktop/myproject/latex-rs
@@ -65,7 +65,7 @@ rustup update
 Run the test suite:
 ```bash
 cargo test
-# Should show: 13 passed
+# Should show: 317 passed
 ```
 
 Generate a test PDF:

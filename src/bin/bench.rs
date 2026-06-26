@@ -29,7 +29,7 @@ fn main() {
             let output_path = format!("output/bench_{}_{}.pdf", example.replace('/', "_"), i);
             let output = Path::new(&output_path);
             let start = Instant::now();
-            let _ = latex_rs::convert_tex_to_pdf(input, output);
+            let _ = rtex::convert_tex_to_pdf(input, output);
             times.push(start.elapsed().as_millis() as f64);
         }
 

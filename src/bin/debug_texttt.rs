@@ -1,4 +1,4 @@
-use latex_rs::TexParser;
+use rtex::TexParser;
 
 fn main() {
     let content = r"demonstrate the \texttt{latex-rs} TeX to PDF converter.";

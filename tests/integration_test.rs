@@ -1,4 +1,4 @@
-use latex_rs::convert_tex_to_pdf;
+use rtex::convert_tex_to_pdf;
 use std::fs;
 use std::path::PathBuf;
 

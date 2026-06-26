@@ -3,7 +3,7 @@
 ## Date: January 12, 2026
 
 ## Overview
-Successfully completed Phase 1 of the latex-rs improvement plan, implementing key learnings from the MiniTeX project to enhance features and maintainability.
+Successfully completed Phase 1 of the rtex improvement plan, implementing key learnings from the MiniTeX project to enhance features and maintainability.
 
 ## Achievements
 
@@ -238,7 +238,7 @@ let config = Config::with_quality(QualityPreset::Print);
 
 ## Conclusion
 
-Phase 1 successfully established a solid foundation for latex-rs by:
+Phase 1 successfully established a solid foundation for rtex by:
 1. Implementing proper Unicode math symbol support
 2. Adding professional error handling
 3. Creating a flexible configuration system

@@ -1,7 +1,7 @@
 // Round-trip testing for LaTeX → PDF conversion
 // Tests deterministic conversion, structural validation, and regression detection
 
-use latex_rs::convert_tex_to_pdf;
+use rtex::convert_tex_to_pdf;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;

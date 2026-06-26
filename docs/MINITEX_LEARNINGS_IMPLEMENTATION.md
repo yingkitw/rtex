@@ -1,4 +1,4 @@
-# MiniTeX Best Practices - Implementation Plan for latex-rs
+# MiniTeX Best Practices - Implementation Plan for rtex
 
 ## Analysis Date: January 12, 2026
 
@@ -17,7 +17,7 @@
 - Easy to extend without breaking existing code
 - Better code navigation
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Split `math_formatter.rs` into submodules: `math/symbols.rs`, `math/radicals.rs`, `math/fractions.rs`, `math/scripts.rs`
 - Create `parser/` directory with specialized parsers
 - Create `pdf/` directory for PDF generation logic
@@ -30,12 +30,12 @@
 - Context-aware error messages
 - Error recovery strategies
 
-**Current latex-rs:**
+**Current rtex:**
 - Basic `String` errors
 - Limited error context
 - No error recovery
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Create `src/error.rs` with proper error types using `thiserror`
 - Add error context (line numbers, file positions)
 - Implement error recovery for common issues
@@ -48,12 +48,12 @@
 - 4 quality levels: Draft, Standard, High, Print
 - Feature flags for optional components
 
-**Current latex-rs:**
+**Current rtex:**
 - No configuration system
 - Hardcoded settings
 - No quality presets
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Create `src/config.rs` with configuration struct
 - Add quality presets
 - Make font embedding configurable
@@ -66,11 +66,11 @@
 - Compiled macro caching
 - Performance optimization
 
-**Current latex-rs:**
+**Current rtex:**
 - No caching
 - Re-parses everything
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Add `src/cache.rs` for parsed elements
 - Cache font metrics
 - Cache formatted math expressions
@@ -83,12 +83,12 @@
 - Integration tests in `tests/` directory
 - Test coverage reporting
 
-**Current latex-rs:**
+**Current rtex:**
 - 13 basic tests
 - No test fixtures
 - Limited coverage
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Create `src/testing/fixtures.rs` with common test data
 - Add unit tests for each module
 - Add integration tests for full workflows
@@ -106,12 +106,12 @@
 - Plugin system (`plugins.rs`)
 - Memory management (`memory.rs`, `memory_advanced.rs`)
 
-**Current latex-rs:**
+**Current rtex:**
 - Basic text and math only
 - No images, tables, colors
 - No advanced features
 
-**Apply to latex-rs (prioritized):**
+**Apply to rtex (prioritized):**
 1. Image support (PNG, JPEG)
 2. Table rendering
 3. Color support
@@ -132,11 +132,11 @@
 - Macro system (`tex_macro.rs`)
 - Math atoms (`tex_math.rs`)
 
-**Current latex-rs:**
+**Current rtex:**
 - Basic parser
 - Limited TeX compatibility
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Implement dimension system for proper spacing
 - Add basic macro support
 - Improve line breaking algorithm
@@ -151,12 +151,12 @@
 - KISS principle
 - Clear naming conventions
 
-**Current latex-rs:**
+**Current rtex:**
 - 1 warning (unused Environment variant)
 - Basic documentation
 - Some code duplication
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Fix all warnings
 - Add module-level documentation
 - Add function documentation
@@ -171,12 +171,12 @@
 - Lazy evaluation
 - Efficient data structures
 
-**Current latex-rs:**
+**Current rtex:**
 - Single-threaded
 - Loads everything in memory
 - No optimization
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Profile performance bottlenecks
 - Optimize hot paths
 - Add lazy parsing where possible
@@ -190,12 +190,12 @@
 - Inline code documentation
 - Examples for all features
 
-**Current latex-rs:**
+**Current rtex:**
 - Basic README.md
 - Limited documentation
 - Few examples
 
-**Apply to latex-rs:**
+**Apply to rtex:**
 - Expand ARCHITECTURE.md
 - Add CONTRIBUTING.md
 - Create user guide

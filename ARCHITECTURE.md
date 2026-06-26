@@ -2,7 +2,7 @@
 
 ## Overview
 
-latex-rs is a **native** TeX to PDF converter CLI built with Rust, requiring **no external dependencies**. It follows clean architecture principles with a modular design.
+rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no external dependencies**. It follows clean architecture principles with a modular design.
 
 ## Design Principles
 
@@ -162,59 +162,47 @@ The trait-based design allows for:
 ## File Organization
 
 ```
-latex-rs/
-├── Cargo.toml              # Dependencies and metadata
+rtex/
+├── Cargo.toml              # Dependencies and metadata (crate name: rtex)
 ├── src/
-│   ├── lib.rs              # Core conversion logic & trait definitions
-│   ├── main.rs             # CLI entry point
-│   ├── parser/             # LaTeX parser implementation
-│   │   ├── mod.rs          # Core parser, element types, environment parsing
-│   │   ├── commands.rs     # Backslash command handlers
-│   │   ├── math.rs         # Inline and display math delimiter parsing
-│   │   └── text.rs         # Plain-text accumulation
-│   ├── math_formatter.rs   # Math formatting orchestrator (delegates to math/ submodules)
-│   ├── image.rs            # Image loading and PDF embedding
+│   ├── lib.rs              # Core conversion logic & public API
+│   ├── main.rs             # CLI entry point (binary: rtex)
+│   ├── error.rs            # Structured error types with Position tracking
+│   ├── config.rs           # Configuration system with quality presets
+│   ├── common.rs           # Shared traits (Clear, Stats)
+│   ├── color.rs            # Color struct with RGB and named color parsing
 │   ├── table.rs            # Table parsing and PDF rendering
-│   ├── color.rs            # Color parsing and PDF RGB color operators
-│   ├── layout.rs           # Multi-page layout engine and page break management
-│   ├── macros.rs           # User-defined macro expansion (\newcommand, \def)
-│   ├── bibliography.rs     # BibTeX parsing and citation formatting
-│   ├── references.rs       # Cross-reference engine (\label, \ref, \pageref)
-│   ├── streaming.rs        # Chunked reading and progress reporting for large docs
-│   ├── plugins.rs          # Plugin trait and registry for custom commands/environments
-│   ├── typography.rs       # Ligature substitution and kerning adjustments
-│   ├── tex/                # TeX compatibility primitives
-│   │   ├── mod.rs          # Module re-exports
-│   │   ├── catcodes.rs     # Category-code table (CatCode, CatCodeTable)
-│   │   ├── tokens.rs       # Token enum and lexer (Token, TexLexer)
-│   │   └── dimensions.rs   # Dimension parsing in scaled points (Dimension)
-│   ├── cache.rs            # Document cache with TTL and LRU eviction
-│   ├── incremental.rs      # File-level incremental compilation tracker
-│   ├── math_processor.rs   # Math command registry and equation numbering
-│   ├── parallel.rs         # Multi-threaded batch conversion
-│   ├── watch.rs            # File-change polling and automatic recompilation
-│   ├── pdf/                # PDF generation module
-│   │   ├── mod.rs          # Module re-exports
-│   │   ├── builder.rs      # PDF generation implementation
-│   │   ├── core.rs         # Low-level PDF primitives
-│   │   ├── text_renderer.rs # Text rendering utilities
-│   │   └── font_subset.rs  # Font subsetting for smaller files
-│   ├── config.rs           # Configuration system
-│   ├── error.rs            # Structured error types
-│   ├── page_layout.rs      # Page layout and font helpers
-│   ├── traits.rs           # Composable trait definitions
-│   ├── utils.rs            # Shared utilities (brace extraction)
-│   ├── math/
-│   │   ├── mod.rs          # Math module re-exports
-│   │   ├── symbols.rs      # LaTeX-to-Unicode symbol mapping
-│   │   ├── scripts.rs      # Superscript/subscript conversion
-│   │   ├── radicals.rs     # Square-root formatting
-│   │   └── fractions.rs    # Fraction formatting with Unicode fallbacks
-│   ├── tests.rs            # Unit/integration tests
-│   ├── example_tests.rs    # Example-based tests
-│   └── bin/                # Auxiliary binaries (benchmarks, debug scripts)
-│       ├── bench.rs
-│       └── debug_*.rs
+│   ├── macros.rs           # Macro definition and expansion system
+│   ├── layout.rs           # LayoutState for text alignment and indentation
+│   ├── page_layout.rs      # Page dimensions, margins, orientation helpers
+│   ├── math_formatter.rs   # Math formatting orchestrator
+│   ├── parser/             # LaTeX parser implementation
+│   │   ├── mod.rs          # TexParser, TexElement enum, environment dispatch
+│   │   ├── text.rs         # Raw text accumulation
+│   │   ├── math.rs         # Inline and display math delimiter parsing
+│   │   ├── commands.rs     # Backslash command handlers (section, URL, rule, etc.)
+│   │   └── plugin.rs       # Plugin trait for extensible commands
+│   ├── math/               # Math formatting submodules
+│   │   ├── symbols.rs      # 566+ LaTeX-to-Unicode mappings
+│   │   ├── scripts.rs      # Superscript/subscript Unicode conversion
+│   │   ├── radicals.rs     # Square root formatting with Unicode
+│   │   └── fractions.rs    # Fraction → Unicode fraction or parenthesized form
+│   ├── pdf/                # PDF generation modules
+│   │   ├── mod.rs          # PDF module re-exports
+│   │   ├── core.rs         # ContentStream, PdfGenerator, PdfObj, HEX_TABLE
+│   │   ├── builder.rs      # PdfBuilder, LayoutState, text block rendering
+│   │   ├── text_renderer.rs # Text normalization and wrapping utilities
+│   │   └── font_subset.rs  # Font subsetting to only used characters
+│   ├── plugins/            # Built-in plugin implementations
+│   │   ├── text_commands.rs  # Text formatting command plugins
+│   │   └── math_commands.rs  # Math command plugins
+│   └── bin/                # Debug/test binaries
+│       ├── debug_parser.rs
+│       ├── debug_font.rs
+│       ├── debug_sample.rs
+│       ├── debug_math.rs
+│       ├── debug_texttt.rs
+│       └── bench.rs
 ├── examples/               # Example TeX files
 │   ├── minimal.tex
 │   ├── sample.tex

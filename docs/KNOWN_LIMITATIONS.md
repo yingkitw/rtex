@@ -66,12 +66,12 @@ For documents that need to be readable, you can:
    - → → ->
 
 3. **Use external LaTeX for final documents**:
-   - Use latex-rs for quick drafts
+   - Use rtex for quick drafts
    - Use pdflatex for final output
 
 ## Comparison
 
-| Feature | latex-rs (native) | pdflatex |
+| Feature | rtex (native) | pdflatex |
 |---------|------------------|----------|
 | Installation | Rust only | Full LaTeX distribution |
 | Speed | Fast | Slower |
@@ -91,6 +91,6 @@ Potential improvements (not yet implemented):
 
 ## Recommendation
 
-**For now**: Use latex-rs for simple documents and quick previews. For documents with mathematical notation, use a proper LaTeX distribution (pdflatex, xelatex, or lualatex) for the final output.
+**For now**: Use rtex for simple documents and quick previews. For documents with mathematical notation, use a proper LaTeX distribution (pdflatex, xelatex, or lualatex) for the final output.
 
 The native converter's strength is its simplicity and zero external dependencies, not comprehensive mathematical typesetting.

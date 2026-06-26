@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully refactored latex-rs to follow KISS (Keep It Simple, Stupid), DRY (Don't Repeat Yourself), and SoC (Separation of Concerns) principles. All 52 tests passing with no regressions.
+Successfully refactored rtex to follow KISS (Keep It Simple, Stupid), DRY (Don't Repeat Yourself), and SoC (Separation of Concerns) principles. All 52 tests passing with no regressions.
 
 ## Violations Identified and Fixed
 
@@ -241,7 +241,7 @@ pdf_text_renderer.rs (219 lines)
 
 ## Conclusion
 
-Successfully refactored latex-rs to follow KISS, DRY, and SoC principles:
+Successfully refactored rtex to follow KISS, DRY, and SoC principles:
 - ✅ **DRY**: Eliminated ~220 lines of duplicate code
 - ✅ **KISS**: Simplified complex logic, removed unused code
 - ✅ **SoC**: Created focused modules with clear responsibilities

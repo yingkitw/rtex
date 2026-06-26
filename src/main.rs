@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 use std::fs;
-use latex_rs::{StreamingConverter, ConsoleReporter, watch_single, DocumentTemplate};
+use rtex::{StreamingConverter, ConsoleReporter, watch_single, DocumentTemplate};
 
 #[derive(Parser)]
 #[command(name = "latex-rs")]

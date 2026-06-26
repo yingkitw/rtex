@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the improvements made to latex-rs PDF generation based on best practices learned from the pdfrs project architecture.
+This document summarizes the improvements made to rtex PDF generation based on best practices learned from the pdfrs project architecture.
 
 ## Key Learnings from pdfrs
 
@@ -109,7 +109,7 @@ let top = layout.content_top();
 
 ## Architecture Comparison
 
-### Before (latex-rs original)
+### Before (rtex original)
 ```
 PdfBuilder
 ├── Hardcoded page dimensions
@@ -184,7 +184,7 @@ All improvements are fully tested:
 
 ## Conclusion
 
-The improvements learned from pdfrs provide a solid foundation for better PDF generation in latex-rs. The PageLayout module is the first step in a series of architectural improvements that will make latex-rs more maintainable, flexible, and feature-rich.
+The improvements learned from pdfrs provide a solid foundation for better PDF generation in rtex. The PageLayout module is the first step in a series of architectural improvements that will make rtex more maintainable, flexible, and feature-rich.
 
 ### Key Takeaways
 1. **Modular Design**: Separate concerns into focused modules
@@ -198,4 +198,4 @@ The improvements learned from pdfrs provide a solid foundation for better PDF ge
 - pdfrs Architecture: `/Users/yingkitw/Desktop/myproject/pdfrs/ARCHITECTURE.md`
 - pdfrs Builder: `/Users/yingkitw/Desktop/myproject/pdfrs/src/builder.rs`
 - pdfrs PDF Generator: `/Users/yingkitw/Desktop/myproject/pdfrs/src/pdf_generator.rs`
-- latex-rs PageLayout: `/Users/yingkitw/Desktop/myproject/latex-rs/src/page_layout.rs`
+- rtex PageLayout: `/Users/yingkitw/Desktop/myproject/latex-rs/src/page_layout.rs`

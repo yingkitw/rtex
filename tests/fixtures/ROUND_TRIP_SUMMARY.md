@@ -1,7 +1,7 @@
 # Round-Trip Testing Implementation Summary
 
 ## Overview
-Successfully implemented comprehensive round-trip testing for LaTeX → PDF conversion in the latex-rs project. Since the project currently only supports forward conversion (LaTeX → PDF), the testing focuses on **determinism**, **structural validation**, and **regression detection**.
+Successfully implemented comprehensive round-trip testing for LaTeX → PDF conversion in the rtex project. Since the project currently only supports forward conversion (LaTeX → PDF), the testing focuses on **determinism**, **structural validation**, and **regression detection**.
 
 ## What Was Implemented
 

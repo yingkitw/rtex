@@ -1,4 +1,4 @@
-# latex-rs
+# rtex
 
 A native TeX to PDF converter CLI written in Rust with **no external dependencies**.
 
@@ -11,11 +11,22 @@ A native TeX to PDF converter CLI written in Rust with **no external dependencie
 - Comprehensive error handling
 - Test-friendly design
 - Supports common LaTeX features:
-  - Document structure (sections, subsections)
-  - Text formatting (bold, italic, monospace)
-  - Lists (itemize, enumerate)
-  - Mathematical equations (inline and display)
+  - Document structure (\part, \chapter, \section, \subsection, \appendix)
+  - Text formatting (\textbf, \textit, \texttt, \underline, \emph, \textsc, \sout, \overline)
+  - Lists (itemize, enumerate with optional \item[label], description-style labels)
+  - Mathematical equations (inline and display, 566+ Unicode symbols)
+  - Math alphabets (\mathbb, \mathcal, \mathfrak, \mathbf, \mathit, \mathsf, \mathtt)
+  - Math accents (\vec, \hat, \tilde, \bar, \dot, \ddot)
+  - Tables (tabular with alignment, booktabs rules)
+  - Environments (center, quote, quotation, abstract, equation, lstlisting)
+  - Graphics (\includegraphics with PNG/JPEG)
+  - References (\cite, \label, \ref, \pageref, \index, \glossary)
+  - Bibliography (\thebibliography, \bibliography, \bibliographystyle)
+  - PDF transformations (\rotatebox, \scalebox, \raisebox, \phantom)
   - Title, author, and date metadata
+  - Table of contents, list of figures, list of tables
+  - Font size commands, colors, alignment, page breaks, horizontal/vertical rules
+  - **201+ LaTeX commands supported**
 
 ## Text Output Quality Validation
 
@@ -32,14 +43,17 @@ This improves final PDF text stability for noisy or mixed TeX input.
 ✅ **Unicode Math Symbols**: Successfully implemented using `lopdf` with UTF-16BE encoding and DejaVu Sans font embedding.
 
 **Supported Features**:
-- 150+ mathematical symbols (Greek letters, operators, relations, arrows)
+- 566 mathematical symbols (Greek letters, operators, relations, arrows, integrals, summation)
 - Inline and display math equations
 - Special roots (∛ cube root, ∜ fourth root)
 - Full alphabet super/subscripts
+- Math alphabets: \mathbb, \mathcal, \mathfrak, \mathbf, \mathit, \mathsf, \mathtt
+- Math accents: \vec, \hat, \tilde, \bar, \dot, \ddot
+- Fractions with Unicode fraction characters and parenthesized form
 - Proper Unicode text encoding
 
 **Status**: 
-- ✅ Math formatter: 150+ LaTeX commands → Unicode symbols
+- ✅ Math formatter: 566 LaTeX commands → Unicode symbols
 - ✅ Font embedding: DejaVu Sans TrueType with full Unicode support
 - ✅ PDF generation: lopdf with UTF-16BE encoding
 - ⚠️ File size: ~750KB per PDF (due to embedded font)
@@ -77,10 +91,10 @@ cargo run -- input.tex -o custom_output.pdf
 Or after building:
 
 ```bash
-./target/release/latex-rs input.tex
+./target/release/rtex input.tex
 # Creates: output/input.pdf
 
-./target/release/latex-rs input.tex -o custom_output.pdf
+./target/release/rtex input.tex -o custom_output.pdf
 ```
 
 **Note:** The `output/` directory is created automatically if it doesn't exist.
@@ -130,13 +144,16 @@ cargo test
 ```
 
 The test suite includes:
-- 13 comprehensive tests
+- 317 comprehensive tests
 - Native PDF generation verification
 - File size validation
 - PDF header verification
 - Multiple document types (minimal, math, tables, lists, complex)
 - Error handling tests
 - Output directory creation tests
+- Round-trip tests for deterministic conversion
+- Math formatter tests (fractions, roots, symbols, accents, alphabets)
+- Parser tests for 201+ LaTeX commands
 
 All tests run without any external dependencies!
 

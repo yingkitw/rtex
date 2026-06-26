@@ -1,5 +1,5 @@
 use std::path::Path;
-use latex_rs::NativeTexConverter;
+use rtex::NativeTexConverter;
 
 fn main() {
     let input = Path::new("examples/sample.tex");
