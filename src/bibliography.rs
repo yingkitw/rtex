@@ -5,6 +5,72 @@
 //! handful of common styles.
 
 use std::collections::HashMap;
+use std::path::Path;
+
+/// Standard BibTeX entry types.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BibEntryType {
+    Article,
+    Book,
+    Booklet,
+    Conference,
+    Inbook,
+    Incollection,
+    Inproceedings,
+    Manual,
+    Mastersthesis,
+    Misc,
+    Phdthesis,
+    Proceedings,
+    Techreport,
+    Unpublished,
+    Custom(String),
+}
+
+impl From<&str> for BibEntryType {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "article" => BibEntryType::Article,
+            "book" => BibEntryType::Book,
+            "booklet" => BibEntryType::Booklet,
+            "conference" => BibEntryType::Conference,
+            "inbook" => BibEntryType::Inbook,
+            "incollection" => BibEntryType::Incollection,
+            "inproceedings" => BibEntryType::Inproceedings,
+            "manual" => BibEntryType::Manual,
+            "mastersthesis" => BibEntryType::Mastersthesis,
+            "misc" => BibEntryType::Misc,
+            "phdthesis" => BibEntryType::Phdthesis,
+            "proceedings" => BibEntryType::Proceedings,
+            "techreport" => BibEntryType::Techreport,
+            "unpublished" => BibEntryType::Unpublished,
+            _ => BibEntryType::Custom(s.to_string()),
+        }
+    }
+}
+
+impl std::fmt::Display for BibEntryType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            BibEntryType::Article => "article",
+            BibEntryType::Book => "book",
+            BibEntryType::Booklet => "booklet",
+            BibEntryType::Conference => "conference",
+            BibEntryType::Inbook => "inbook",
+            BibEntryType::Incollection => "incollection",
+            BibEntryType::Inproceedings => "inproceedings",
+            BibEntryType::Manual => "manual",
+            BibEntryType::Mastersthesis => "mastersthesis",
+            BibEntryType::Misc => "misc",
+            BibEntryType::Phdthesis => "phdthesis",
+            BibEntryType::Proceedings => "proceedings",
+            BibEntryType::Techreport => "techreport",
+            BibEntryType::Unpublished => "unpublished",
+            BibEntryType::Custom(s) => s,
+        };
+        write!(f, "{s}")
+    }
+}
 
 /// A single BibTeX entry (article, book, etc.).
 #[derive(Debug, Clone, PartialEq)]
@@ -313,6 +379,101 @@ pub fn format_citation(keys: &[String], cmap: &HashMap<String, usize>) -> String
     format!("[{}]", s)
 }
 
+/// Manages a collection of bibliography entries from one or more
+/// `.bib` files.
+#[derive(Debug, Clone)]
+pub struct BibliographyManager {
+    entries: HashMap<String, BibEntry>,
+    style: Option<String>,
+}
+
+impl BibliographyManager {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            style: None,
+        }
+    }
+
+    /// Load entries from a `.bib` file on disk.
+    pub fn load_file<P: AsRef<Path>>(&mut self, path: P) -> std::io::Result<()> {
+        let content = std::fs::read_to_string(path)?;
+        for entry in parse_bibtex(&content) {
+            self.entries.insert(entry.key.clone(), entry);
+        }
+        Ok(())
+    }
+
+    /// Add a single entry directly.
+    pub fn add_entry(&mut self, entry: BibEntry) {
+        self.entries.insert(entry.key.clone(), entry);
+    }
+
+    /// Look up an entry by its citation key.
+    pub fn get(&self, key: &str) -> Option<&BibEntry> {
+        self.entries.get(key)
+    }
+
+    /// Check whether a key is known.
+    pub fn has_key(&self, key: &str) -> bool {
+        self.entries.contains_key(key)
+    }
+
+    /// All loaded keys, sorted for stable output.
+    pub fn keys(&self) -> Vec<String> {
+        let mut keys: Vec<String> = self.entries.keys().cloned().collect();
+        keys.sort();
+        keys
+    }
+
+    /// Set the bibliography style (e.g. `"plain"`, `"numeric"`).
+    pub fn set_style(&mut self, style: String) {
+        self.style = Some(style);
+    }
+
+    /// Get the current style, if any.
+    pub fn style(&self) -> Option<&str> {
+        self.style.as_deref()
+    }
+
+    /// Format entries matching `keys` as bibliography lines.
+    pub fn format_bibliography(&self, keys: &[String]) -> Vec<String> {
+        let mut out = Vec::new();
+        for key in keys {
+            if let Some(e) = self.entries.get(key) {
+                out.push(e.format_plain());
+            }
+        }
+        out
+    }
+
+    /// Format *all* entries in key-sorted order.
+    pub fn format_all(&self) -> Vec<String> {
+        self.format_bibliography(&self.keys())
+    }
+
+    /// Remove all entries and reset style.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.style = None;
+    }
+
+    /// Number of loaded entries.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl Default for BibliographyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,5 +571,78 @@ mod tests {
         assert!(text.contains("\"The Title\""));
         assert!(text.contains("The Journal"));
         assert!(text.contains("2024"));
+    }
+
+    #[test]
+    fn test_entry_type_from_str() {
+        assert_eq!(BibEntryType::from("article"), BibEntryType::Article);
+        assert_eq!(BibEntryType::from("BOOK"), BibEntryType::Book);
+        assert_eq!(
+            BibEntryType::from("unknown"),
+            BibEntryType::Custom("unknown".to_string())
+        );
+    }
+
+    #[test]
+    fn test_entry_type_display() {
+        assert_eq!(BibEntryType::Article.to_string(), "article");
+        assert_eq!(BibEntryType::Book.to_string(), "book");
+        assert_eq!(
+            BibEntryType::Custom("thesis".to_string()).to_string(),
+            "thesis"
+        );
+    }
+
+    #[test]
+    fn test_bibliography_manager_add_and_get() {
+        let mut mgr = BibliographyManager::new();
+        let entry = BibEntry {
+            key: "test".to_string(),
+            entry_type: "article".to_string(),
+            fields: [
+                ("author".to_string(), "A. Author".to_string()),
+                ("title".to_string(), "Test Title".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        mgr.add_entry(entry);
+        assert!(mgr.has_key("test"));
+        assert_eq!(mgr.get("test").unwrap().get("author"), Some("A. Author"));
+        assert_eq!(mgr.len(), 1);
+    }
+
+    #[test]
+    fn test_bibliography_manager_format_all() {
+        let mut mgr = BibliographyManager::new();
+        mgr.add_entry(BibEntry {
+            key: "b".to_string(),
+            entry_type: "article".to_string(),
+            fields: [("title".to_string(), "B".to_string())].into_iter().collect(),
+        });
+        mgr.add_entry(BibEntry {
+            key: "a".to_string(),
+            entry_type: "article".to_string(),
+            fields: [("title".to_string(), "A".to_string())].into_iter().collect(),
+        });
+        let out = mgr.format_all();
+        assert_eq!(out.len(), 2);
+        // Should be sorted by key: a then b
+        assert!(out[0].contains("A"));
+        assert!(out[1].contains("B"));
+    }
+
+    #[test]
+    fn test_bibliography_manager_clear() {
+        let mut mgr = BibliographyManager::new();
+        mgr.add_entry(BibEntry {
+            key: "k".to_string(),
+            entry_type: "article".to_string(),
+            fields: HashMap::new(),
+        });
+        mgr.set_style("plain".to_string());
+        mgr.clear();
+        assert!(mgr.is_empty());
+        assert_eq!(mgr.style(), None);
     }
 }

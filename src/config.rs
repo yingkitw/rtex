@@ -1,12 +1,13 @@
 //! Configuration system for latex-rs.
 //!
 //! Provides quality presets and configurable options for PDF generation.
+//! Supports TOML and JSON serialization via `serde`.
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Quality preset for PDF generation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+/// Quality preset for PDF generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum QualityPreset {
     /// Draft quality - fast generation, larger files
     Draft,
@@ -20,9 +21,8 @@ pub enum QualityPreset {
 }
 
 
-/// Font embedding options
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+/// Font embedding options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum FontEmbedding {
     /// Don't embed fonts (smallest files, may not display correctly)
     None,
@@ -34,40 +34,30 @@ pub enum FontEmbedding {
 }
 
 
-/// Configuration for latex-rs operations
-#[derive(Debug, Clone)]
+/// Configuration for latex-rs operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// Quality preset
+    /// Quality preset.
     pub quality: QualityPreset,
-    
-    /// Font embedding strategy
+    /// Font embedding strategy.
     pub font_embedding: FontEmbedding,
-    
-    /// Custom font path (optional)
+    /// Custom font path (optional).
     pub custom_font: Option<PathBuf>,
-    
-    /// Enable verbose output
+    /// Enable verbose output.
     pub verbose: bool,
-    
-    /// Enable debug mode
+    /// Enable debug mode.
     pub debug: bool,
-    
-    /// Output directory
+    /// Output directory.
     pub output_dir: PathBuf,
-    
-    /// Keep intermediate files
+    /// Keep intermediate files.
     pub keep_intermediate: bool,
-    
-    /// Compression level (0-9, where 9 is maximum compression)
+    /// Compression level (0–9, where 9 is maximum compression).
     pub compression_level: u8,
-    
-    /// Enable math symbol caching
+    /// Enable math symbol caching.
     pub cache_math: bool,
-    
-    /// Enable font metrics caching
+    /// Enable font metrics caching.
     pub cache_fonts: bool,
-    
-    /// Maximum cache size in MB
+    /// Maximum cache size in MB.
     pub max_cache_size: usize,
 }
 
@@ -165,11 +155,31 @@ impl Config {
         self
     }
     
-    /// Enable or disable caching
+    /// Enable or disable caching.
     pub fn caching(mut self, enabled: bool) -> Self {
         self.cache_math = enabled;
         self.cache_fonts = enabled;
         self
+    }
+
+    /// Serialize to TOML string.
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        toml::to_string_pretty(self)
+    }
+
+    /// Deserialize from TOML string.
+    pub fn from_toml(s: &str) -> Result<Self, toml::de::Error> {
+        toml::from_str(s)
+    }
+
+    /// Serialize to JSON string.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+
+    /// Deserialize from JSON string.
+    pub fn from_json(s: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(s)
     }
 }
 
@@ -208,5 +218,27 @@ mod tests {
         assert!(config.debug);
         assert_eq!(config.compression_level, 8);
         assert!(!config.cache_math);
+    }
+
+    #[test]
+    fn test_toml_roundtrip() {
+        let config = Config::new()
+            .verbose(true)
+            .compression_level(7);
+        let toml_str = config.to_toml().unwrap();
+        let restored = Config::from_toml(&toml_str).unwrap();
+        assert_eq!(restored.verbose, true);
+        assert_eq!(restored.compression_level, 7);
+    }
+
+    #[test]
+    fn test_json_roundtrip() {
+        let config = Config::new()
+            .debug(true)
+            .caching(false);
+        let json_str = config.to_json().unwrap();
+        let restored = Config::from_json(&json_str).unwrap();
+        assert_eq!(restored.debug, true);
+        assert_eq!(restored.cache_math, false);
     }
 }

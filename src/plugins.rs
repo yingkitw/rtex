@@ -96,6 +96,32 @@ impl PluginRegistry {
     }
 }
 
+/// Errors that can occur during plugin operations.
+#[derive(Debug)]
+pub enum PluginError {
+    DuplicateCommand(String),
+    CommandNotFound(String),
+    ValidationError(String),
+    ProcessingError(String),
+}
+
+impl std::fmt::Display for PluginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PluginError::DuplicateCommand(cmd) => {
+                write!(f, "Command '{cmd}' is already registered")
+            }
+            PluginError::CommandNotFound(cmd) => {
+                write!(f, "No plugin found for command '{cmd}'")
+            }
+            PluginError::ValidationError(msg) => write!(f, "Validation error: {msg}"),
+            PluginError::ProcessingError(msg) => write!(f, "Processing error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for PluginError {}
+
 /// Load plugins from a directory by looking for `.texplugin` marker
 /// files (for future dynamic-loading support) and returning a
 /// pre-configured registry.
@@ -137,6 +163,60 @@ impl Plugin for UrlPlugin {
             return Some(TexElement::Text(format!("({})", args[0])));
         }
         None
+    }
+}
+
+/// Format type for custom text formatting.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FormatType {
+    Bold,
+    Italic,
+    Underline,
+}
+
+/// A plugin that provides custom formatting commands.
+pub struct CustomFormatPlugin {
+    command: String,
+    format_type: FormatType,
+}
+
+impl CustomFormatPlugin {
+    pub fn new(command: String, format_type: FormatType) -> Self {
+        Self { command, format_type }
+    }
+
+    pub fn bold(command: &str) -> Self {
+        Self::new(command.to_string(), FormatType::Bold)
+    }
+
+    pub fn italic(command: &str) -> Self {
+        Self::new(command.to_string(), FormatType::Italic)
+    }
+
+    pub fn underline(command: &str) -> Self {
+        Self::new(command.to_string(), FormatType::Underline)
+    }
+}
+
+impl Plugin for CustomFormatPlugin {
+    fn name(&self) -> &str {
+        &self.command
+    }
+
+    fn handle_command(&mut self, name: &str, args: &[String]) -> Option<TexElement> {
+        if name != self.command || args.is_empty() {
+            return None;
+        }
+        let content = args.join(" ");
+        let cmd_name = match self.format_type {
+            FormatType::Bold => "textbf",
+            FormatType::Italic => "textit",
+            FormatType::Underline => "underline",
+        };
+        Some(TexElement::Command {
+            name: cmd_name.to_string(),
+            args: vec![content],
+        })
     }
 }
 
@@ -184,5 +264,45 @@ mod tests {
         let mut reg = PluginRegistry::new();
         reg.register(Box::new(TodayPlugin));
         assert_eq!(reg.try_environment("custom", "body"), None);
+    }
+
+    #[test]
+    fn test_custom_format_plugin_bold() {
+        let mut reg = PluginRegistry::new();
+        reg.register(Box::new(CustomFormatPlugin::bold("strong")));
+        let result = reg.try_command("strong", &["hello".to_string()]);
+        assert_eq!(
+            result,
+            Some(TexElement::Command {
+                name: "textbf".to_string(),
+                args: vec!["hello".to_string()],
+            })
+        );
+    }
+
+    #[test]
+    fn test_custom_format_plugin_italic() {
+        let mut reg = PluginRegistry::new();
+        let result = CustomFormatPlugin::italic("em")
+            .handle_command("em", &["world".to_string()]);
+        assert_eq!(
+            result,
+            Some(TexElement::Command {
+                name: "textit".to_string(),
+                args: vec!["world".to_string()],
+            })
+        );
+    }
+
+    #[test]
+    fn test_custom_format_plugin_wrong_command() {
+        let mut plugin = CustomFormatPlugin::bold("bf");
+        assert_eq!(plugin.handle_command("other", &["x".to_string()]), None);
+    }
+
+    #[test]
+    fn test_plugin_error_display() {
+        let err = PluginError::CommandNotFound("foo".to_string());
+        assert!(err.to_string().contains("foo"));
     }
 }

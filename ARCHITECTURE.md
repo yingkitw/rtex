@@ -180,6 +180,10 @@ latex-rs/
 │   │   ├── catcodes.rs     # Category-code table (CatCode, CatCodeTable)
 │   │   ├── tokens.rs       # Token enum and lexer (Token, TexLexer)
 │   │   └── dimensions.rs   # Dimension parsing in scaled points (Dimension)
+│   ├── cache.rs            # Document cache with TTL and LRU eviction
+│   ├── incremental.rs      # File-level incremental compilation tracker
+│   ├── math_processor.rs   # Math command registry and equation numbering
+│   ├── parallel.rs         # Multi-threaded batch conversion
 │   ├── pdf_builder.rs      # PDF generation implementation
 │   ├── pdf_core.rs         # Low-level PDF primitives
 │   ├── pdf_text_renderer.rs # Text rendering utilities

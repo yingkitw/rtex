@@ -23,6 +23,11 @@ mod streaming;
 mod plugins;
 mod typography;
 mod tex;
+mod cache;
+mod incremental;
+mod math_processor;
+mod parallel;
+mod common;
 mod pdf;
 pub(crate) mod utils;
 pub mod error;
@@ -30,14 +35,20 @@ pub mod config;
 pub mod traits;
 pub mod page_layout;
 
-pub use error::LatexError;
+pub use error::{LatexError, Position};
 pub use parser::TexParser;
 pub use pdf_builder::PdfBuilder;
 pub use math_formatter::MathFormatter;
 pub use streaming::{StreamingConverter, ProgressReporter, NoOpReporter, ConsoleReporter};
-pub use plugins::{Plugin, PluginRegistry, TodayPlugin, UrlPlugin};
+pub use plugins::{Plugin, PluginRegistry, TodayPlugin, UrlPlugin, PluginError, FormatType, CustomFormatPlugin};
 pub use typography::{TypographyEngine, TypographyOptions, KerningTable, TextSegment};
 pub use tex::{CatCode, Token, TexLexer, Dimension};
+pub use cache::{DocumentCache, CacheConfig, CacheStats};
+pub use incremental::IncrementalCompiler;
+pub use math_processor::{MathProcessor, MathCommandType, MathCommandInfo};
+pub use parallel::{ParallelConverter, convert_dir};
+pub use common::{Clear, Stats};
+pub use bibliography::{BibEntry, BibEntryType, BibliographyManager};
 
 /// Trait for converting a LaTeX file to PDF.
 pub trait TexConverter {

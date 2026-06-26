@@ -5,6 +5,51 @@
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Line / column / offset location in a source file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    /// Line number (1-indexed).
+    pub line: usize,
+    /// Column number (1-indexed).
+    pub column: usize,
+    /// Byte offset in the input (0-indexed).
+    pub offset: usize,
+}
+
+impl Position {
+    pub fn new(line: usize, column: usize, offset: usize) -> Self {
+        Self { line, column, offset }
+    }
+
+    pub fn start() -> Self {
+        Self::new(1, 1, 0)
+    }
+
+    /// Advance by one character.
+    pub fn advance(&mut self, ch: char) {
+        if ch == '\n' {
+            self.line += 1;
+            self.column = 1;
+        } else {
+            self.column += 1;
+        }
+        self.offset += ch.len_utf8();
+    }
+
+    /// Advance by a whole string.
+    pub fn advance_str(&mut self, s: &str) {
+        for ch in s.chars() {
+            self.advance(ch);
+        }
+    }
+}
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.line, self.column)
+    }
+}
+
 /// Main error type for latex-rs operations
 #[derive(Error, Debug)]
 pub enum LatexError {
@@ -171,6 +216,37 @@ impl From<std::io::Error> for LatexError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_position_start() {
+        let p = Position::start();
+        assert_eq!(p.line, 1);
+        assert_eq!(p.column, 1);
+        assert_eq!(p.offset, 0);
+        assert_eq!(p.to_string(), "1:1");
+    }
+
+    #[test]
+    fn test_position_advance() {
+        let mut p = Position::start();
+        p.advance('a');
+        assert_eq!(p.line, 1);
+        assert_eq!(p.column, 2);
+        assert_eq!(p.offset, 1);
+        p.advance('\n');
+        assert_eq!(p.line, 2);
+        assert_eq!(p.column, 1);
+        assert_eq!(p.offset, 2);
+    }
+
+    #[test]
+    fn test_position_advance_str() {
+        let mut p = Position::start();
+        p.advance_str("hi\nworld");
+        assert_eq!(p.line, 2);
+        assert_eq!(p.column, 6);
+        assert_eq!(p.offset, 8);
+    }
 
     #[test]
     fn test_parse_error_display() {

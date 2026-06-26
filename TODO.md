@@ -199,11 +199,22 @@
   - Line breaking (Knuth-Plass algorithm)
 
 #### Performance
-- [ ] **Parallel processing** - `src/parallel.rs`
-  - Multi-threaded parsing
-  - Parallel page rendering
-  - Work stealing
-  - Thread pool
+- [x] **Document cache** - `src/cache.rs`
+  - `DocumentCache` with TTL and LRU eviction
+  - Caches parsed `Vec<TexElement>` and rendered PDF output paths
+  - `CacheStats` with per-cache and overall hit-rate tracking
+  - Content-hash keys avoid stale results on file changes
+- [x] **Incremental compilation** - `src/incremental.rs`
+  - `IncrementalCompiler` tracks source-file hashes and output timestamps
+  - Skips rebuild when source and dependencies are unchanged
+  - Dependency mtime tracking: rebuilds when `.tex` includes or `.bib` files change
+  - Hit-rate statistics for build optimization
+- [x] **Parallel processing** - `src/parallel.rs`
+  - `ParallelConverter` with configurable worker-thread pool
+  - `convert_batch` for independent `(input, output)` pairs
+  - `convert_dir` convenience helper for bulk `.tex` → `.pdf` conversion
+  - Per-job error isolation: one failure does not abort the batch
+  - Defaults to `num_cpus::get()` workers
 
 #### Optimization
 - [ ] **PDF optimization** - Reduce file sizes
@@ -243,7 +254,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 176 (100% passing)
+- Tests: 216 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 150+
 - LaTeX commands: ~50
