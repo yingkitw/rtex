@@ -4,7 +4,7 @@ use std::fs;
 use rtex::{StreamingConverter, ConsoleReporter, watch_single, DocumentTemplate};
 
 #[derive(Parser)]
-#[command(name = "latex-rs")]
+#[command(name = "rtex")]
 #[command(about = "Convert TeX files to PDF", long_about = None)]
 struct Cli {
     #[arg(help = "Input TeX file path")]

@@ -86,6 +86,7 @@ impl MathFormatter {
         crate::math::fractions::format_fractions(text, Self::format)
     }
 
+    #[allow(clippy::type_complexity)]
     fn format_math_alphabets(text: &str) -> String {
         let mut result = String::new();
         let mut index = 0;

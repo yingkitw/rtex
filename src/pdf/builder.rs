@@ -874,8 +874,8 @@ impl PdfBuilder {
                         continue;
                     }
                     if name == "phantom" || name == "vphantom" || name == "hphantom" {
-                        if let Some(text) = args.first() {
-                            if !text.is_empty() {
+                        if let Some(text) = args.first()
+                            && !text.is_empty() {
                                 // Flush accumulated text first
                                 if !accumulated_text.is_empty() {
                                     self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
@@ -897,7 +897,6 @@ impl PdfBuilder {
                                 }
                                 // For hphantom, we don't advance vertically; the width is consumed by the invisible text
                             }
-                        }
                         continue;
                     }
                     if name == "raisebox" && args.len() >= 2 {
