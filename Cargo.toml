@@ -2,6 +2,13 @@
 name = "rtex"
 version = "0.1.0"
 edition = "2024"
+description = "Native TeX to PDF converter written in Rust with zero external LaTeX dependencies"
+authors = ["Ying Kit WONG"]
+license = "Apache-2.0"
+repository = "https://github.com/yingkitw/rtex"
+keywords = ["latex", "pdf", "tex", "converter", "typesetting"]
+categories = ["command-line-utilities", "text-processing"]
+rust-version = "1.85"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
