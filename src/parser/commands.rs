@@ -35,20 +35,23 @@ impl TexParser {
         let remaining = &self.content[self.position..];
 
         let (_cmd_name, cmd_len) = if remaining.starts_with("\\texttt{") {
-            ("texttt", 8)
+            ("texttt", 7)
         } else if remaining.starts_with("\\textbf{") {
-            ("textbf", 8)
+            ("textbf", 7)
         } else if remaining.starts_with("\\textit{") {
-            ("textit", 8)
+            ("textit", 7)
         } else if remaining.starts_with("\\emph{") {
-            ("emph", 6)
+            ("emph", 5)
         } else {
             return None;
         };
 
         self.position += cmd_len;
 
-        self.parse_braced_content().map(TexElement::Text)
+        self.parse_braced_content().map(|arg| TexElement::Command {
+            name: _cmd_name.to_string(),
+            args: vec![arg],
+        })
     }
 
     pub(super) fn parse_includegraphics(&mut self) -> Option<TexElement> {
@@ -126,14 +129,19 @@ impl TexParser {
     }
 
     pub(super) fn parse_pagebreak(&mut self) -> Option<TexElement> {
-        if self.content[self.position..].starts_with("\\newpage") {
+        let name = if self.content[self.position..].starts_with("\\newpage") {
             self.position += "\\newpage".len();
+            "newpage"
         } else if self.content[self.position..].starts_with("\\clearpage") {
             self.position += "\\clearpage".len();
+            "clearpage"
         } else if self.content[self.position..].starts_with("\\pagebreak") {
             self.position += "\\pagebreak".len();
-        }
-        Some(TexElement::Command { name: "newpage".to_string(), args: vec![] })
+            "pagebreak"
+        } else {
+            "newpage"
+        };
+        Some(TexElement::Command { name: name.to_string(), args: vec![] })
     }
 
     pub(super) fn parse_input(&mut self) -> Option<TexElement> {
@@ -180,6 +188,13 @@ impl TexParser {
         let text = self.read_until('}');
         self.position += 1; // skip closing brace
         Some(TexElement::Footnote { text })
+    }
+
+    pub(super) fn parse_caption(&mut self) -> Option<TexElement> {
+        self.position += "\\caption{".len();
+        let text = self.read_until('}');
+        self.position += 1; // skip closing brace
+        Some(TexElement::Caption { text })
     }
 
     pub(super) fn parse_unknown_command(&mut self) {

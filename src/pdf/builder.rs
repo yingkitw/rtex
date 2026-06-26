@@ -516,6 +516,7 @@ impl PdfBuilder {
         // Process elements
         let mut accumulated_text = String::new();
         let mut footnote_counter = 0;
+        let mut sections_seen: Vec<(usize, String, usize)> = Vec::new();
 
         for (elem_idx, elem) in elements.iter().enumerate() {
             match elem {
@@ -524,6 +525,7 @@ impl PdfBuilder {
                         self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
                     }
+                    sections_seen.push((*level, title.clone(), state.pages.len()));
                     let headings = self.template.as_ref().map(|t| t.headings.clone()).unwrap_or_default();
                     let font_size = match *level {
                         1 => headings.h1,
@@ -543,6 +545,39 @@ impl PdfBuilder {
                     stream.show_text(title);
                     stream.end_text();
                     state.advance(font_size + 6.0);
+                }
+                TexElement::TableOfContents => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    state.ensure_space(30.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", 16.0);
+                    stream.set_position(x, y);
+                    stream.show_text("Contents");
+                    stream.end_text();
+                    state.advance(24.0);
+
+                    for (level, title, page) in &sections_seen {
+                        let indent = (*level as f32 - 1.0) * 15.0;
+                        let entry_font_size = 11.0;
+                        state.ensure_space(entry_font_size + 2.0);
+                        let x = state.left_margin() + indent;
+                        let y = state.current_y;
+                        let stream = state.current_stream();
+                        stream.begin_text();
+                        stream.set_font("F1", entry_font_size);
+                        stream.set_position(x, y);
+                        let entry_text = format!("{} {}", title, page);
+                        stream.show_text(&entry_text);
+                        stream.end_text();
+                        state.advance(entry_font_size + 2.0);
+                    }
+                    state.advance(10.0);
                 }
                 TexElement::Text(text) => {
                     accumulated_text.push_str(text);
@@ -739,7 +774,7 @@ impl PdfBuilder {
                     accumulated_text.push_str(&text);
                     accumulated_text.push(' ');
                 }
-                TexElement::Command { name, args } if name == "newpage" => {
+                TexElement::Command { name, args } if matches!(name.as_str(), "newpage" | "clearpage" | "pagebreak") => {
                     if !accumulated_text.is_empty() {
                         self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
                         accumulated_text.clear();
@@ -779,9 +814,18 @@ impl PdfBuilder {
                     }
                     state.advance(line_height);
                 }
-                TexElement::Command { name, args: _ } => {
+                TexElement::Command { name, args } => {
                     if name == "centering" {
                         state.centering = true;
+                        continue;
+                    }
+                    // Text formatting — render the text even if we can't
+                    // yet apply bold/italic/monospace styling.
+                    if matches!(name.as_str(), "textbf" | "textit" | "texttt" | "emph") {
+                        if let Some(text) = args.first() {
+                            accumulated_text.push_str(text);
+                            accumulated_text.push(' ');
+                        }
                         continue;
                     }
                     // Font size commands
@@ -826,6 +870,24 @@ impl PdfBuilder {
                     footnote_counter += 1;
                     accumulated_text.push_str(&format!("[{}]", footnote_counter));
                     state.current_page_footnotes.push((footnote_counter, text.clone()));
+                }
+                TexElement::Caption { text } => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                    }
+                    let caption_font_size = state.current_font_size * 0.9;
+                    state.ensure_space(caption_font_size + 4.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", caption_font_size);
+                    stream.set_position(x, y);
+                    let caption_text = format!("Figure: {}", text);
+                    stream.show_text(&caption_text);
+                    stream.end_text();
+                    state.advance(caption_font_size + 4.0);
                 }
             }
         }

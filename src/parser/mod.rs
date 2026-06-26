@@ -49,8 +49,12 @@ pub enum TexElement {
     PageRef { key: String },
     /// A centered block from `\begin{center}`.
     Center(Vec<TexElement>),
+    /// A table of contents placeholder (`\tableofcontents`).
+    TableOfContents,
     /// A footnote `\footnote{text}`.
     Footnote { text: String },
+    /// A caption `\caption{text}` for tables or figures.
+    Caption { text: String },
 }
 
 /// A single bibliography entry for `thebibliography`.
@@ -213,6 +217,11 @@ impl TexParser {
             });
         }
 
+        if remaining.starts_with("\\tableofcontents") {
+            self.position += "\\tableofcontents".len();
+            return Some(TexElement::TableOfContents);
+        }
+
         if remaining.starts_with("\\begin{") {
             return self.parse_environment();
         }
@@ -272,6 +281,11 @@ impl TexParser {
         // Footnote
         if remaining.starts_with("\\footnote{") {
             return self.parse_footnote();
+        }
+
+        // Caption
+        if remaining.starts_with("\\caption{") {
+            return self.parse_caption();
         }
 
         // Font size commands
@@ -481,6 +495,7 @@ impl TexParser {
             "enumerate" => self.parse_itemize(true),
             "equation" => self.parse_equation(),
             "lstlisting" => self.parse_lstlisting(),
+            "verbatim" => self.parse_lstlisting(),
             "tabular" => self.parse_tabular(),
             "table" => self.parse_table(),
             "thebibliography" => self.parse_thebibliography(),
@@ -760,6 +775,46 @@ Background info.
     }
 
     #[test]
+    fn parser_parses_verbatim_environment() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{verbatim}
+#include <stdio.h>
+int main() {
+    printf("Hello\n");
+    return 0;
+}
+\end{verbatim}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            matches!(element, TexElement::CodeBlock(code) if code.contains("#include") && code.contains("printf"))
+        }));
+    }
+
+    #[test]
+    fn parser_parses_tableofcontents() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{Intro}
+Some text.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|e| {
+            matches!(e, TexElement::TableOfContents)
+        }));
+    }
+
+    #[test]
     fn parser_parses_inline_math_in_text() {
         let content = r#"\documentclass{article}
 \begin{document}
@@ -866,14 +921,15 @@ Body text.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        let text_elements: Vec<_> = elements.iter().filter_map(|e| {
-            if let TexElement::Text(t) = e { Some(t.clone()) } else { None }
+        // \textbf, \textit, \texttt should produce Command elements
+        let cmds: Vec<_> = elements.iter().filter_map(|e| {
+            if let TexElement::Command { name, args } = e {
+                Some((name.clone(), args.clone()))
+            } else { None }
         }).collect();
-
-        let combined = text_elements.join(" ");
-        assert!(combined.contains("bold"));
-        assert!(combined.contains("italic"));
-        assert!(combined.contains("mono"));
+        assert!(cmds.iter().any(|(n, a)| n == "textbf" && a == &["bold".to_string()]));
+        assert!(cmds.iter().any(|(n, a)| n == "textit" && a == &["italic".to_string()]));
+        assert!(cmds.iter().any(|(n, a)| n == "texttt" && a == &["mono".to_string()]));
     }
 
     #[test]
@@ -1191,7 +1247,7 @@ Visit \url{https://example.com}.
         let content = r#"\emph{important}"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t == "important")));
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "emph" && args == &["important".to_string()])));
     }
 
     #[test]
@@ -1203,11 +1259,27 @@ Visit \url{https://example.com}.
     }
 
     #[test]
-    fn parser_parses_clearpage_as_newpage() {
+    fn parser_parses_clearpage() {
         let content = r#"\clearpage"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "newpage" && args.is_empty())));
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "clearpage" && args.is_empty())));
+    }
+
+    #[test]
+    fn parser_parses_pagebreak() {
+        let content = r#"\pagebreak"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "pagebreak" && args.is_empty())));
+    }
+
+    #[test]
+    fn parser_parses_caption() {
+        let content = r#"\caption{A diagram showing the workflow.}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Caption { text } if text == "A diagram showing the workflow.")));
     }
 
     #[test]
@@ -1255,7 +1327,7 @@ Visit \url{https://example.com}.
             .with_base_dir(tmp.path());
         let elements = parser.parse();
         assert!(elements.iter().any(|e| {
-            if let TexElement::Text(t) = e { t.contains("included") } else { false }
+            matches!(e, TexElement::Command { name, args } if name == "textbf" && args == &["included".to_string()])
         }));
     }
 

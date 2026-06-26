@@ -589,20 +589,10 @@ Test output directory creation.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
         
-        println!("Input: {}", content);
-        println!("Parsed elements:");
-        for (i, elem) in elements.iter().enumerate() {
-            println!("  {}: {:?}", i, elem);
-        }
-        
-        // Check that texttt is parsed correctly
+        // \texttt should produce a Command element with the text content
         assert!(elements.iter().any(|e| {
-            if let TexElement::Text(text) = e {
-                text.contains("latex-rs") && !text.contains("latex-rs}")
-            } else {
-                false
-            }
-        }), "texttt content should be parsed without extra brace");
+            matches!(e, TexElement::Command { name, args } if name == "texttt" && args == &["latex-rs".to_string()])
+        }), "texttt should be parsed as Command with correct args");
     }
 
     #[test]
@@ -637,5 +627,29 @@ Test output directory creation.
         // Check that infinity is properly formatted (with Unicode symbols using DejaVu)
         assert!(output.contains("∫") || output.contains("∞"), 
                 "Infinity and integral should be formatted with Unicode symbols, got: {}", output);
+    }
+
+    #[test]
+    fn test_text_formatting_renders_in_pdf() {
+        let temp_dir = tempdir().unwrap();
+        let input_path = temp_dir.path().join("formatting.tex");
+        let output_path = temp_dir.path().join("formatting.pdf");
+
+        let tex_content = r#"\documentclass{article}
+\begin{document}
+\textbf{bold} and \textit{italic} and \texttt{mono}.
+\end{document}
+"#;
+        fs::write(&input_path, tex_content).unwrap();
+
+        let converter = NativeTexConverter::new();
+        converter.convert(&input_path, &output_path).unwrap();
+
+        assert!(output_path.exists(), "PDF should be generated");
+        let pdf_data = fs::read(&output_path).unwrap();
+        // PDF uses UTF-16BE hex encoding for text; just verify the file is
+        // non-trivial and starts with %PDF header.
+        assert!(pdf_data.starts_with(b"%PDF"), "should be a valid PDF");
+        assert!(pdf_data.len() > 500, "PDF should contain actual content");
     }
 }

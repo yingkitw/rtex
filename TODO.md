@@ -259,10 +259,10 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 261 (100% passing)
+- Tests: 264 (100% passing)
 - Warnings: 0
 - Math symbols: 566
-- LaTeX commands: ~140 (parser + math symbols + section levels)
+- LaTeX commands: ~143 (parser + math symbols + section levels + TOC + text formatting)
 - Documentation: ~30%
 - File size: ~750KB per PDF (content streams compressed, font subsetting active)
 
