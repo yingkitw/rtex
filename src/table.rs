@@ -2,7 +2,7 @@
 //!
 //! Handles `tabular` environments, including cell alignment and horizontal rules.
 
-use crate::pdf_core::ContentStream;
+use crate::pdf::core::ContentStream;
 
 /// Horizontal alignment for a table column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

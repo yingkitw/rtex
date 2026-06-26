@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod example_tests {
     use std::fs;
     use std::path::Path;

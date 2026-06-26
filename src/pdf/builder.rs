@@ -6,8 +6,8 @@
 
 use crate::parser::TexElement;
 use crate::math_formatter::MathFormatter;
-use crate::pdf_text_renderer::PdfTextRenderer;
-use crate::pdf_core::{PdfGenerator, DictBuilder};
+use crate::pdf::text_renderer::PdfTextRenderer;
+use crate::pdf::core::{PdfGenerator, DictBuilder};
 use std::path::Path;
 
 /// Converts a sequence of `TexElement`s into a PDF file.
@@ -64,8 +64,8 @@ impl PdfBuilder {
         let full_font_data = std::fs::read(&font_path).map_err(|e| format!("Failed to load font: {}", e))?;
 
         // Subset font to only characters used in the document
-        let used_chars = crate::font_subset::collect_used_chars(&elements);
-        let font_data = crate::font_subset::subset_font(&full_font_data, &used_chars)
+        let used_chars = crate::pdf::font_subset::collect_used_chars(&elements);
+        let font_data = crate::pdf::font_subset::subset_font(&full_font_data, &used_chars)
             .unwrap_or(full_font_data);
 
         // Create font objects
@@ -176,6 +176,34 @@ impl PdfBuilder {
             );
             generator.objects[*page_id as usize - 1].content = page_with_parent;
         }
+
+        // Create Info dictionary
+        let mut info_entries = Vec::new();
+        if let Some(title) = &self.title {
+            info_entries.push(format!("/Title {}", Self::pdf_string_literal(title)));
+        }
+        if let Some(author) = &self.author {
+            info_entries.push(format!("/Author {}", Self::pdf_string_literal(author)));
+        }
+        if let Some(date) = &self.date {
+            let date_text = if date == "\\today" {
+                chrono::Local::now().format("%B %d, %Y").to_string()
+            } else {
+                date.clone()
+            };
+            info_entries.push(format!("/CreationDate {}", Self::pdf_string_literal(&date_text)));
+        }
+        info_entries.push(format!(
+            "/Producer {} /Creator {}",
+            Self::pdf_string_literal("latex-rs"),
+            Self::pdf_string_literal("latex-rs")
+        ));
+        let info_content = format!(
+            "<<\n{}\n>>\n",
+            info_entries.join("\n")
+        );
+        let info_id = generator.add_object(info_content);
+        generator.set_info(info_id);
 
         // Create catalog
         let catalog_content = format!(
@@ -961,7 +989,7 @@ impl PdfBuilder {
 
     fn render_page_footnotes(
         &self,
-        stream: &mut crate::pdf_core::ContentStream,
+        stream: &mut crate::pdf::core::ContentStream,
         footnotes: &[(usize, String)],
         page_layout: &crate::page_layout::PageLayout,
     ) {
@@ -985,6 +1013,28 @@ impl PdfBuilder {
             stream.show_text(&format!("{} {}", num, text));
             stream.end_text();
         }
+    }
+
+    /// Wrap a Rust string in PDF literal-string parentheses, escaping
+    /// backslashes, parentheses, and non-ASCII bytes per PDF spec.
+    fn pdf_string_literal(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() + 2);
+        out.push('(');
+        for b in s.bytes() {
+            match b {
+                b'\\' | b'(' | b')' => {
+                    out.push('\\');
+                    out.push(b as char);
+                }
+                0x20..=0x7E => out.push(b as char),
+                _ => {
+                    // Escape non-ASCII as octal \ddd
+                    out.push_str(&format!("\\{:03o}", b));
+                }
+            }
+        }
+        out.push(')');
+        out
     }
 }
 

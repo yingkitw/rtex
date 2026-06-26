@@ -20,6 +20,7 @@ pub struct PdfObject {
 pub struct PdfGenerator {
     pub objects: Vec<PdfObject>,
     pub next_id: u32,
+    info_id: Option<u32>,
 }
 
 impl PdfGenerator {
@@ -27,7 +28,13 @@ impl PdfGenerator {
         PdfGenerator {
             objects: Vec::new(),
             next_id: 1,
+            info_id: None,
         }
+    }
+
+    /// Set the Info dictionary object ID for the trailer.
+    pub fn set_info(&mut self, id: u32) {
+        self.info_id = Some(id);
     }
 
     /// Add a dictionary object and return its ID
@@ -103,6 +110,9 @@ impl PdfGenerator {
         if !self.objects.is_empty() {
             // Root is the last object (catalog)
             let _ = writeln!(&mut pdf, "/Root {} 0 R", self.objects.len());
+        }
+        if let Some(info_id) = self.info_id {
+            let _ = writeln!(&mut pdf, "/Info {} 0 R", info_id);
         }
         pdf.extend_from_slice(b">>\n");
         pdf.extend_from_slice(b"startxref\n");
@@ -418,5 +428,17 @@ mod tests {
         assert_eq!(id1, 1);
         assert_eq!(id2, 2);
         assert_eq!(id3, 3);
+    }
+
+    #[test]
+    fn test_trailer_includes_info_dictionary() {
+        let mut generator = PdfGenerator::new();
+        let info_id = generator.add_object("<< /Title (Hello) >>".to_string());
+        generator.set_info(info_id);
+        generator.add_object("<< /Type /Catalog >>".to_string());
+
+        let pdf = generator.generate();
+        let pdf_str = String::from_utf8_lossy(&pdf);
+        assert!(pdf_str.contains("/Info 1 0 R"));
     }
 }

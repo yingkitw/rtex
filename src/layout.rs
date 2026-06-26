@@ -3,7 +3,7 @@
 //! Tracks current page, Y position, margins, and handles automatic
 //! page breaks when content overflows the printable area.
 
-use crate::pdf_core::ContentStream;
+use crate::pdf::core::ContentStream;
 use crate::page_layout::PageLayout;
 
 /// State machine that manages content placement across multiple pages.

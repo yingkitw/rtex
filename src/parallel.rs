@@ -60,7 +60,7 @@ impl ParallelConverter {
             let work_rx = Arc::clone(&work_rx);
             let res_tx = res_tx.clone();
             let handle = thread::spawn(move || {
-                let converter = NativeTexConverter;
+                let converter = NativeTexConverter::new();
                 loop {
                     let (idx, input, output) = {
                         let lock = work_rx.lock().unwrap();

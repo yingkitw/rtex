@@ -31,46 +31,45 @@ latex-rs is a **native** TeX to PDF converter CLI built with Rust, requiring **n
   - Generates PDF using native PDF builder
   - No external process calls
 
-### TeX Parser (`src/parser.rs`)
+### TeX Parser (`src/parser/`)
 
-- `TexParser`: Parses LaTeX source into structured elements
-  - Handles document structure (sections, subsections)
-  - Parses environments (itemize, enumerate, equation)
-  - Extracts metadata (title, author, date)
-  - Processes text formatting commands
-  - Supports inline and display math
-
-- `TexElement`: Enum representing parsed LaTeX elements
-  - Text, Command, Environment
-  - Section, Paragraph
-  - MathInline, MathDisplay
-  - ItemList (ordered/unordered)
+- `mod.rs`: Core parser struct, element types, and main dispatch
+  - `TexParser`: Parses LaTeX source into structured elements
+  - `TexElement`: Enum representing parsed LaTeX elements
+  - Environment parsing (itemize, enumerate, equation, center, etc.)
+  - Plugin command/environment dispatch
+- `commands.rs`: Backslash command handlers
+  - Sections, text formatting, includegraphics, citations, labels/refs
+  - Font size commands, page breaks, footnotes
+- `math.rs`: Inline and display math delimiter parsing
+- `text.rs`: Plain-text accumulation with inline-math preservation
 
 ### Math Processing (`src/math/`)
 
 - `symbols.rs`: LaTeX-to-Unicode symbol mapping table (150+ symbols)
   - Greek letters, operators, relations, arrows, special symbols
 - `scripts.rs`: Unicode superscript/subscript character conversion
+- `radicals.rs`: Square-root formatting (`\sqrt{...}`)
+- `fractions.rs`: Fraction formatting (`\frac{n}{d}`) with Unicode fallbacks
 
 - `MathFormatter` (`src/math_formatter.rs`): Orchestrates math formatting
-  - Fractions, square roots, superscripts, subscripts, matrices
+  - Delegates to submodule handlers for radicals, fractions, scripts, and symbols
 
-### PDF Generation (`src/pdf/` and `src/pdf_builder.rs`)
+### PDF Generation (`src/pdf/`)
 
-- `PdfBuilder` (`src/pdf_builder.rs`): Converts parsed elements to PDF
-  - Page layout and text positioning
-  - Automatic page breaks
-  - Text wrapping
-  - Font management (DejaVu Sans with Unicode support)
-  - Supports titles, sections, lists, and math
-
-- `pdf_core.rs`: Low-level PDF generation primitives
+- `builder.rs`: Converts parsed elements to PDF
+  - `PdfBuilder`: Page layout, text positioning, automatic page breaks
+  - Font management (DejaVu Sans with Unicode support, subsetting)
+  - Supports titles, sections, lists, math, images, tables
+- `core.rs`: Low-level PDF generation primitives
   - `PdfGenerator`: Object management and PDF serialization
   - `DictBuilder`: PDF dictionary construction
   - `ContentStream`: PDF content stream operations
-
-- `pdf_text_renderer.rs`: Text rendering utilities
+- `text_renderer.rs`: Text rendering utilities
   - Text normalization, character counting, word wrapping
+- `font_subset.rs`: Font subsetting to reduce file sizes
+  - Collects used Unicode characters from parsed document
+  - Subsets TrueType fonts via the `font-subset` crate
 
 ### Configuration (`src/config.rs`)
 
@@ -108,7 +107,9 @@ latex-rs is a **native** TeX to PDF converter CLI built with Rust, requiring **n
 - Uses clap with derive macros for argument parsing
 - Simple command structure:
   - Required: input file path
-  - Optional: output file path (defaults to input with .pdf extension)
+  - Optional: output file path (defaults to `output/<input_stem>.pdf`)
+  - `--watch`: Poll for file changes and auto-rebuild (dependency-aware)
+  - `--template <path>`: Apply a TOML template for styling
 - Minimal error handling delegation to library
 
 ### Tests
@@ -117,7 +118,7 @@ latex-rs is a **native** TeX to PDF converter CLI built with Rust, requiring **n
 - `src/example_tests.rs`: Example-based tests
 - `tests/integration_test.rs`: Full workflow integration tests
 - `tests/round_trip_test.rs`: Deterministic conversion and regression tests
-- Module-level tests in `error.rs`, `config.rs`, `page_layout.rs`, `parser.rs`, `pdf_core.rs`, `pdf_text_renderer.rs`, `math/symbols.rs`, `math/scripts.rs`
+- Module-level tests in `error.rs`, `config.rs`, `page_layout.rs`, `parser/mod.rs`, `pdf/core.rs`, `pdf/text_renderer.rs`, `math/symbols.rs`, `math/scripts.rs`, `watch.rs`
 
 ## Dependencies
 
@@ -126,8 +127,11 @@ latex-rs is a **native** TeX to PDF converter CLI built with Rust, requiring **n
 - **thiserror**: Custom error types
 - **chrono**: Date handling for `\today` command
 - **tempfile**: Temporary directory management (for tests)
-- **rusttype**: Font metrics (deprecated, may be removed)
+- **image**: PNG/JPEG decoding for `\includegraphics`
+- **font-subset**: TrueType font subsetting for smaller PDFs
 - **flate2**: Compression support
+- **serde** + **serde_json** + **toml**: Template serialization
+- **num_cpus**: Parallel worker pool sizing
 
 ## Data Flow
 
@@ -163,8 +167,12 @@ latex-rs/
 ├── src/
 │   ├── lib.rs              # Core conversion logic & trait definitions
 │   ├── main.rs             # CLI entry point
-│   ├── parser.rs           # LaTeX parser implementation
-│   ├── math_formatter.rs   # Math formatting orchestrator
+│   ├── parser/             # LaTeX parser implementation
+│   │   ├── mod.rs          # Core parser, element types, environment parsing
+│   │   ├── commands.rs     # Backslash command handlers
+│   │   ├── math.rs         # Inline and display math delimiter parsing
+│   │   └── text.rs         # Plain-text accumulation
+│   ├── math_formatter.rs   # Math formatting orchestrator (delegates to math/ submodules)
 │   ├── image.rs            # Image loading and PDF embedding
 │   ├── table.rs            # Table parsing and PDF rendering
 │   ├── color.rs            # Color parsing and PDF RGB color operators
@@ -184,9 +192,13 @@ latex-rs/
 │   ├── incremental.rs      # File-level incremental compilation tracker
 │   ├── math_processor.rs   # Math command registry and equation numbering
 │   ├── parallel.rs         # Multi-threaded batch conversion
-│   ├── pdf_builder.rs      # PDF generation implementation
-│   ├── pdf_core.rs         # Low-level PDF primitives
-│   ├── pdf_text_renderer.rs # Text rendering utilities
+│   ├── watch.rs            # File-change polling and automatic recompilation
+│   ├── pdf/                # PDF generation module
+│   │   ├── mod.rs          # Module re-exports
+│   │   ├── builder.rs      # PDF generation implementation
+│   │   ├── core.rs         # Low-level PDF primitives
+│   │   ├── text_renderer.rs # Text rendering utilities
+│   │   └── font_subset.rs  # Font subsetting for smaller files
 │   ├── config.rs           # Configuration system
 │   ├── error.rs            # Structured error types
 │   ├── page_layout.rs      # Page layout and font helpers
@@ -195,9 +207,9 @@ latex-rs/
 │   ├── math/
 │   │   ├── mod.rs          # Math module re-exports
 │   │   ├── symbols.rs      # LaTeX-to-Unicode symbol mapping
-│   │   └── scripts.rs      # Superscript/subscript conversion
-│   ├── pdf/
-│   │   └── mod.rs          # PDF module re-exports
+│   │   ├── scripts.rs      # Superscript/subscript conversion
+│   │   ├── radicals.rs     # Square-root formatting
+│   │   └── fractions.rs    # Fraction formatting with Unicode fallbacks
 │   ├── tests.rs            # Unit/integration tests
 │   ├── example_tests.rs    # Example-based tests
 │   └── bin/                # Auxiliary binaries (benchmarks, debug scripts)

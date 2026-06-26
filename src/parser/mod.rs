@@ -7,6 +7,11 @@ use crate::table::Table;
 use crate::utils::extract_braced;
 use std::path::{Path, PathBuf};
 
+mod text;
+mod math;
+mod commands;
+
+
 /// A structured element parsed from a LaTeX document.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TexElement {
@@ -176,6 +181,18 @@ impl TexParser {
             return self.parse_section(2);
         }
 
+        if remaining.starts_with("\\subsubsection") {
+            return self.parse_section(3);
+        }
+
+        if remaining.starts_with("\\paragraph") {
+            return self.parse_section(4);
+        }
+
+        if remaining.starts_with("\\subparagraph") {
+            return self.parse_section(5);
+        }
+
         if remaining.starts_with("\\title") {
             return self.parse_command("title");
         }
@@ -315,177 +332,6 @@ impl TexParser {
                 break;
             }
         }
-    }
-
-    fn parse_section(&mut self, level: u8) -> Option<TexElement> {
-        let cmd = if level == 1 { "\\section" } else { "\\subsection" };
-        self.position += cmd.len();
-        
-        self.skip_whitespace_and_comments();
-        
-        self.parse_braced_content().map(|title| TexElement::Section { level: level as usize, title })
-    }
-
-    fn parse_command(&mut self, name: &str) -> Option<TexElement> {
-        self.position += name.len() + 1;
-        
-        self.skip_whitespace_and_comments();
-        
-        self.parse_braced_content().map(|arg| TexElement::Command {
-                name: name.to_string(),
-                args: vec![arg],
-            })
-    }
-
-    fn parse_text_command(&mut self) -> Option<TexElement> {
-        let remaining = &self.content[self.position..];
-        
-        let (_cmd_name, cmd_len) = if remaining.starts_with("\\texttt{") {
-            ("texttt", 8)
-        } else if remaining.starts_with("\\textbf{") {
-            ("textbf", 8)
-        } else if remaining.starts_with("\\textit{") {
-            ("textit", 8)
-        } else if remaining.starts_with("\\emph{") {
-            ("emph", 6)
-        } else {
-            return None;
-        };
-
-        self.position += cmd_len;
-        
-        self.parse_braced_content().map(TexElement::Text)
-    }
-
-    fn parse_includegraphics(&mut self) -> Option<TexElement> {
-        self.position += "\\includegraphics".len();
-        self.skip_whitespace_and_comments();
-
-        let mut width = None;
-        let mut height = None;
-
-        // Optional [width=...,height=...] arguments
-        if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
-            self.position += 1;
-            let opts = self.read_until(']');
-            self.position += 1;
-
-            for part in opts.split(',') {
-                let part = part.trim();
-                if let Some(val) = part.strip_prefix("width=") {
-                    width = Some(val.trim().to_string());
-                } else if let Some(val) = part.strip_prefix("height=") {
-                    height = Some(val.trim().to_string());
-                }
-            }
-        }
-
-        self.skip_whitespace_and_comments();
-
-        let path = self.parse_braced_content()?;
-        Some(TexElement::Image { path, width, height })
-    }
-
-    fn parse_textcolor(&mut self) -> Option<TexElement> {
-        self.position += "\\textcolor".len();
-        self.skip_whitespace_and_comments();
-
-        let color = self.parse_braced_content()?;
-        self.skip_whitespace_and_comments();
-
-        let text = self.parse_braced_content()?;
-        Some(TexElement::ColoredText { color, text })
-    }
-
-    fn parse_cite(&mut self) -> Option<TexElement> {
-        self.position += "\\cite".len();
-        self.skip_whitespace_and_comments();
-
-        let keys_str = self.parse_braced_content()?;
-        let keys: Vec<String> = keys_str
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        Some(TexElement::Citation { keys })
-    }
-
-    fn parse_label(&mut self) -> Option<TexElement> {
-        self.position += "\\label".len();
-        self.skip_whitespace_and_comments();
-        let key = self.parse_braced_content()?;
-        Some(TexElement::Label { key })
-    }
-
-    fn parse_ref(&mut self) -> Option<TexElement> {
-        self.position += "\\ref".len();
-        self.skip_whitespace_and_comments();
-        let key = self.parse_braced_content()?;
-        Some(TexElement::Ref { key })
-    }
-
-    fn parse_pageref(&mut self) -> Option<TexElement> {
-        self.position += "\\pageref".len();
-        self.skip_whitespace_and_comments();
-        let key = self.parse_braced_content()?;
-        Some(TexElement::PageRef { key })
-    }
-
-    fn parse_pagebreak(&mut self) -> Option<TexElement> {
-        if self.content[self.position..].starts_with("\\newpage") {
-            self.position += "\\newpage".len();
-        } else if self.content[self.position..].starts_with("\\clearpage") {
-            self.position += "\\clearpage".len();
-        } else if self.content[self.position..].starts_with("\\pagebreak") {
-            self.position += "\\pagebreak".len();
-        }
-        Some(TexElement::Command { name: "newpage".to_string(), args: vec![] })
-    }
-
-    fn parse_input(&mut self) -> Option<TexElement> {
-        self.position += "\\input{".len();
-        let filename = self.read_until('}');
-        self.position += 1; // skip closing brace
-
-        let mut path = if let Some(ref base) = self.base_dir {
-            base.join(&filename)
-        } else {
-            PathBuf::from(&filename)
-        };
-        // Ensure .tex extension if missing
-        if path.extension().is_none() {
-            path.set_extension("tex");
-        }
-
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            // Splice included content into current source at current position
-            let before = &self.content[..self.position];
-            let after = &self.content[self.position..];
-            self.content = format!("{}{}\n{}", before, content, after);
-        }
-        // Return None so the loop re-parses the spliced content
-        None
-    }
-
-    fn parse_vspace(&mut self) -> Option<TexElement> {
-        self.position += "\\vspace{".len();
-        let length = self.read_until('}');
-        self.position += 1; // skip closing brace
-        Some(TexElement::Command { name: "vspace".to_string(), args: vec![length] })
-    }
-
-    fn parse_underline(&mut self) -> Option<TexElement> {
-        self.position += "\\underline{".len();
-        let text = self.read_until('}');
-        self.position += 1; // skip closing brace
-        Some(TexElement::Command { name: "underline".to_string(), args: vec![text] })
-    }
-
-    fn parse_footnote(&mut self) -> Option<TexElement> {
-        self.position += "\\footnote{".len();
-        let text = self.read_until('}');
-        self.position += 1; // skip closing brace
-        Some(TexElement::Footnote { text })
     }
 
     fn parse_center(&mut self) -> Option<TexElement> {
@@ -740,83 +586,6 @@ impl TexParser {
 
         Some(TexElement::Text(String::new()))
     }
-
-    fn parse_math(&mut self) -> Option<TexElement> {
-        self.position += 1;
-        
-        let remaining = &self.content[self.position..];
-        
-        if remaining.starts_with('$') {
-            self.position += 1;
-            let content = self.read_until_str("$$");
-            self.position += 2;
-            Some(TexElement::MathDisplay(content))
-        } else {
-            let content = self.read_until('$');
-            self.position += 1;
-            Some(TexElement::MathInline(content))
-        }
-    }
-
-    fn parse_text(&mut self) -> Option<TexElement> {
-        let mut text = String::new();
-        
-        while self.position < self.content.len() {
-            let remaining = &self.content[self.position..];
-            
-            if remaining.starts_with('\\') || remaining.starts_with("\n\n") || remaining.starts_with('}') {
-                break;
-            }
-            
-            if remaining.starts_with('$') {
-                self.position += 1;
-                
-                if self.position < self.content.len() && self.content[self.position..].starts_with('$') {
-                    self.position -= 1;
-                    break;
-                }
-                
-                let math_content = self.read_until('$');
-                self.position += 1;
-                
-                // Keep $ delimiters so PDF builder can format the math
-                text.push_str(&format!("${}$", math_content));
-            } else if let Some(ch) = remaining.chars().next() {
-                text.push(ch);
-                self.position += ch.len_utf8();
-            }
-        }
-        
-        if text.is_empty() {
-            None
-        } else {
-            Some(TexElement::Text(text.trim().to_string()))
-        }
-    }
-
-    fn parse_unknown_command(&mut self) {
-        if self.position >= self.content.len() {
-            return;
-        }
-
-        self.position += 1;
-
-        while self.position < self.content.len() {
-            let remaining = &self.content[self.position..];
-            let Some(ch) = remaining.chars().next() else {
-                break;
-            };
-
-            if ch.is_alphabetic() || ch == '*' {
-                self.position += ch.len_utf8();
-            } else {
-                break;
-            }
-        }
-
-        self.skip_whitespace_and_comments();
-    }
-
     fn parse_braced_content(&mut self) -> Option<String> {
         if self.position >= self.content.len() {
             return None;
@@ -955,6 +724,38 @@ Background info.
         }));
         assert!(elements.iter().any(|element| {
             matches!(element, TexElement::Section { level: 2, title } if title == "Background")
+        }));
+    }
+
+    #[test]
+    fn parser_parses_deep_sections() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\section{Intro}
+\subsection{Method}
+\subsubsection{Details}
+\paragraph{Note}
+\subparagraph{Fine Print}
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|e| {
+            matches!(e, TexElement::Section { level: 1, title } if title == "Intro")
+        }));
+        assert!(elements.iter().any(|e| {
+            matches!(e, TexElement::Section { level: 2, title } if title == "Method")
+        }));
+        assert!(elements.iter().any(|e| {
+            matches!(e, TexElement::Section { level: 3, title } if title == "Details")
+        }));
+        assert!(elements.iter().any(|e| {
+            matches!(e, TexElement::Section { level: 4, title } if title == "Note")
+        }));
+        assert!(elements.iter().any(|e| {
+            matches!(e, TexElement::Section { level: 5, title } if title == "Fine Print")
         }));
     }
 

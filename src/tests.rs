@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::super::*;
     use std::env;
@@ -13,7 +14,42 @@ mod tests {
     #[test]
     fn test_converter_creation() {
         let converter = NativeTexConverter::new();
-        assert!(std::mem::size_of_val(&converter) == 0);
+        assert!(converter.cache.is_none());
+    }
+
+    #[test]
+    fn test_converter_with_cache() {
+        let converter = NativeTexConverter::with_cache();
+        assert!(converter.cache.is_some());
+    }
+
+    #[test]
+    fn test_cached_conversion_reuses_parsed_ast() {
+        let temp_dir = tempdir().unwrap();
+        let input_path = temp_dir.path().join("cached.tex");
+        let output1 = temp_dir.path().join("out1.pdf");
+        let output2 = temp_dir.path().join("out2.pdf");
+
+        let tex_content = r#"\documentclass{article}
+\begin{document}
+Cached content
+\end{document}
+"#;
+        fs::write(&input_path, tex_content).unwrap();
+
+        let converter = NativeTexConverter::with_cache();
+
+        // First conversion — cache miss
+        converter.convert(&input_path, &output1).unwrap();
+        let stats1 = converter.cache_stats().unwrap();
+        assert_eq!(stats1.parsed_hits, 0);
+        assert_eq!(stats1.parsed_misses, 1);
+
+        // Second conversion — cache hit (same file content)
+        converter.convert(&input_path, &output2).unwrap();
+        let stats2 = converter.cache_stats().unwrap();
+        assert_eq!(stats2.parsed_hits, 1);
+        assert_eq!(stats2.parsed_misses, 1);
     }
 
     #[test]

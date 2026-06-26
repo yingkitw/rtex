@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_custom_format_plugin_italic() {
-        let mut reg = PluginRegistry::new();
+        let _reg = PluginRegistry::new();
         let result = CustomFormatPlugin::italic("em")
             .handle_command("em", &["world".to_string()]);
         assert_eq!(

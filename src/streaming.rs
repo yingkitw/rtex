@@ -97,7 +97,7 @@ impl<R: ProgressReporter> StreamingConverter<R> {
 
         // Stage 3: build PDF (60–100%)
         self.reporter.stage_started("building PDF", 60.0);
-        let mut builder = crate::pdf_builder::PdfBuilder::new();
+        let mut builder = crate::pdf::builder::PdfBuilder::new();
         if let Some(template) = self.template.take() {
             builder = builder.with_template(template);
         }

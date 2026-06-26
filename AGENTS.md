@@ -9,11 +9,11 @@ Pick the next highest-priority item from `TODO.md` (or `ARCHITECTURE.md` if the 
 
 ### 2. Create Tests and Examples
 For every new capability:
-- Write tests next to components (`*.test.tsx`) that exercise the feature end-to-end where possible
+- Write integration tests in `tests/` and unit tests next to components that exercise the feature end-to-end where possible
 - Add unit tests for core logic where appropriate
 - Provide a minimal usage example if the feature is client-facing
 
-### 3. Ensure `bun test` Passes
+### 3. Ensure `cargo test` Passes
 Run the full test suite. Fix any failures before proceeding. Warnings are acceptable but should be noted.
 
 ### 4. Loop Back to Step 1
@@ -23,12 +23,12 @@ Return to `TODO.md` and pick the next item. Repeat until the backlog is clear.
 After each batch of features, perform a quality pass:
 - **Maintainability**: Are functions small and well-named? Is the module structure logical?
 - **Leanness**: Remove dead code, unused imports, and speculative abstractions
-- **Wiring**: Ensure all new features are properly integrated into `main.tsx`, `package.json` scripts, and docs
-- **Small footprint**: Avoid unnecessary npm packages; prefer the standard library or lightweight dependencies
+- **Wiring**: Ensure all new features are properly integrated into `main.rs`, `Cargo.toml` scripts, and docs
+- **Small footprint**: Avoid unnecessary crates; prefer the standard library or lightweight dependencies
 - **Consistency**: Match existing code style and patterns
 
 ### 6. Competitive Intelligence
-Research similar open-source local LLM and pipeline design tools (Open WebUI, OpenLLM Studio, ModelSmith, HFDesk, Piper, etc.). Identify capabilities they have that this project lacks. Add the most valuable ones to the `TODO.md` brainstorming section. Prioritize features that provide clear competitive advantage.
+Research similar open-source TeX to PDF converters (Tectonic, Pandoc, Typst, texlive). Identify capabilities they have that this project lacks. Add the most valuable ones to the `TODO.md` brainstorming section. Prioritize features that provide clear competitive advantage.
 
 ### 7. Update Documentation
 Keep all project docs aligned with the current implementation:

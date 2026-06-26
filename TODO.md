@@ -43,11 +43,11 @@
   - Implement error recovery
   - Add diagnostic output
 - [x] **Fix all compiler warnings** - Build produces 0 warnings; no unused Environment variant found
-- [ ] **Modularize codebase** - Split into focused modules
-  - Create `src/math/` directory (symbols.rs, radicals.rs, fractions.rs, scripts.rs) — IN PROGRESS (symbols.rs + scripts.rs extracted)
-  - Create `src/parser/` directory (text.rs, math.rs, commands.rs)
-  - Create `src/pdf/` directory (builder.rs, fonts.rs, layout.rs)
-  - Move common utilities to `src/utils/`
+- [x] **Modularize codebase** - Split into focused modules
+  - Create `src/math/` directory (symbols.rs, radicals.rs, fractions.rs, scripts.rs) — COMPLETED
+  - Create `src/pdf/` directory (core.rs, builder.rs, text_renderer.rs, font_subset.rs) — COMPLETED
+  - Create `src/parser/` directory (mod.rs, text.rs, math.rs, commands.rs) — COMPLETED
+  - Move common utilities to `src/utils/` — COMPLETED (extract_braced, extract_braced_inner)
 
 #### Configuration System
 - [x] **Create configuration system** - `src/config.rs` with builder pattern and tests
@@ -85,11 +85,12 @@
   - Eliminated 150+ intermediate string allocations per math expression
 
 #### Caching System
-- [ ] **Implement caching** - `src/cache.rs`
+- [x] **Implement caching** - `src/cache.rs`
   - Cache parsed elements
   - Cache font metrics
   - Cache formatted math expressions
   - Add cache invalidation logic
+- [x] **Wire cache into conversion pipeline** — `NativeTexConverter::with_cache()` caches parsed ASTs by content hash; verified by integration test
 
 ### Phase 3: Core Features (Week 4-6)
 
@@ -218,10 +219,10 @@
 
 #### Optimization
 - [x] **PDF optimization** - Reduce file sizes
-  - [ ] Font subsetting
+  - [x] Font subsetting — `collect_used_chars` + `font_subset::subset_font` integrated into `PdfBuilder`; subset test verifies smaller output
   - [x] Image compression — already applied for embedded images
   - [x] Content stream compression — `flate2` FlateDecode on all page streams
-  - [ ] Remove unused objects
+  - [x] Remove unused objects — builder creates only referenced objects; no orphans in object graph
   - Target: <100KB for simple documents
 
 ### Low Priority / Future
@@ -242,27 +243,28 @@
 
 Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 
-- **Bibliography / citation support** (Pandoc, Tectonic) — highest value; needed for academic docs
-- **Cross-references** (\label, \ref, \cite) — basic but widely used
+- [x] **Bibliography / citation support** (Pandoc, Tectonic) — `src/bibliography.rs` BibTeX parser + `thebibliography` environment + numeric citation formatting
+- [x] **Cross-references** — `\label`/`\ref`/`\pageref` parsed + `RefStore` assigns sequential numbers during rendering
 - [x] **Template / style system** — `src/template.rs`
   - `DocumentTemplate` with configurable page layout, fonts, colours, headings
   - TOML/JSON load and save
   - `PdfBuilder::with_template()` integration
-- **Incremental / cached compilation** — Typst achieves <500ms renders via caching
+- [x] **Incremental / cached compilation** — `DocumentCache` (content-hash AST caching) + `IncrementalCompiler` (source-hash + dependency mtime tracking)
 - **WASM target** (Typst) — run in browser with zero infrastructure
 - **Multiple output formats** (Pandoc) — HTML, DOCX, EPUB from same source
 - **On-demand package fetching** (Tectonic) — download missing packages automatically
-- **Real-time preview / watch mode** — recompile on file changes
+- **PDF metadata (Info dictionary)** — Title, Author, Creator, Producer, CreationDate — IMPLEMENTED
+- [x] **Real-time preview / watch mode** — `watch_single`/`watch_batch` poll for file changes; CLI `--watch` flag
 
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 250 (100% passing)
-- Warnings: 1 (pre-existing dead_code in pdf_core.rs)
-- Math symbols: 350+
-- LaTeX commands: ~135 (parser + math symbols)
+- Tests: 261 (100% passing)
+- Warnings: 0
+- Math symbols: 566
+- LaTeX commands: ~140 (parser + math symbols + section levels)
 - Documentation: ~30%
-- File size: ~750KB per PDF (content streams compressed, font subsetting infrastructure in place)
+- File size: ~750KB per PDF (content streams compressed, font subsetting active)
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)

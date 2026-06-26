@@ -227,7 +227,7 @@ mod tests {
             .compression_level(7);
         let toml_str = config.to_toml().unwrap();
         let restored = Config::from_toml(&toml_str).unwrap();
-        assert_eq!(restored.verbose, true);
+        assert!(restored.verbose);
         assert_eq!(restored.compression_level, 7);
     }
 
@@ -238,7 +238,7 @@ mod tests {
             .caching(false);
         let json_str = config.to_json().unwrap();
         let restored = Config::from_json(&json_str).unwrap();
-        assert_eq!(restored.debug, true);
-        assert_eq!(restored.cache_math, false);
+        assert!(restored.debug);
+        assert!(!restored.cache_math);
     }
 }
