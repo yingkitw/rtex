@@ -61,7 +61,12 @@ impl PdfBuilder {
 
         // Load font
         let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/DejaVuSans.ttf");
-        let font_data = std::fs::read(&font_path).map_err(|e| format!("Failed to load font: {}", e))?;
+        let full_font_data = std::fs::read(&font_path).map_err(|e| format!("Failed to load font: {}", e))?;
+
+        // Subset font to only characters used in the document
+        let used_chars = crate::font_subset::collect_used_chars(&elements);
+        let font_data = crate::font_subset::subset_font(&full_font_data, &used_chars)
+            .unwrap_or(full_font_data);
 
         // Create font objects
         let (font_id, _font_descriptor_id, _cid_font_id, _to_unicode_id) =
@@ -101,7 +106,19 @@ impl PdfBuilder {
         let media_box = format!("[0 0 {} {}]", page_layout.width, page_layout.height);
 
         // Build content streams (one per page)
-        let layout_state = self.build_content_stream(&elements, font_id, &image_xobjects, &page_layout)?;
+        let mut layout_state = self.build_content_stream(&elements, font_id, &image_xobjects, &page_layout)?;
+
+        // Render footnotes at the bottom of each page
+        let footnotes_per_page = std::mem::take(&mut layout_state.all_footnotes);
+        for (page_idx, footnotes) in footnotes_per_page.iter().enumerate() {
+            if !footnotes.is_empty() {
+                self.render_page_footnotes(
+                    &mut layout_state.pages[page_idx],
+                    footnotes,
+                    &page_layout,
+                );
+            }
+        }
 
         // Build XObject resource entries
         let mut xobj_entries = String::new();
@@ -395,7 +412,6 @@ impl PdfBuilder {
         // Resolve style values from template or use defaults
         let tp = self.template.as_ref().map(|t| &t.title_page);
         let base_font_size = self.template.as_ref().map(|t| t.base_font_size).unwrap_or(11.0);
-        let mut current_font_size = base_font_size;
         let mut line_height = state.line_height(base_font_size);
         let chars_per_line = ((state.content_width() / (base_font_size * 0.55)) as usize).clamp(60, 120);
 
@@ -471,6 +487,7 @@ impl PdfBuilder {
 
         // Process elements
         let mut accumulated_text = String::new();
+        let mut footnote_counter = 0;
 
         for (elem_idx, elem) in elements.iter().enumerate() {
             match elem {
@@ -734,7 +751,11 @@ impl PdfBuilder {
                     }
                     state.advance(line_height);
                 }
-                TexElement::Command { name, args } => {
+                TexElement::Command { name, args: _ } => {
+                    if name == "centering" {
+                        state.centering = true;
+                        continue;
+                    }
                     // Font size commands
                     let size = match name.as_str() {
                         "tiny" => 6.0,
@@ -754,7 +775,30 @@ impl PdfBuilder {
                         line_height = state.line_height(size);
                     }
                 }
-                _ => {}
+                TexElement::Center(inner) => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        accumulated_text.clear();
+                        state.centering = false;
+                    }
+                    let mut center_text = String::new();
+                    for inner_elem in inner {
+                        if let TexElement::Text(t) = inner_elem {
+                            center_text.push_str(t);
+                            center_text.push(' ');
+                        }
+                    }
+                    if !center_text.is_empty() {
+                        state.centering = true;
+                        self.render_text_block(&mut state, &center_text, line_height, chars_per_line);
+                        state.centering = false;
+                    }
+                }
+                TexElement::Footnote { text } => {
+                    footnote_counter += 1;
+                    accumulated_text.push_str(&format!("[{}]", footnote_counter));
+                    state.current_page_footnotes.push((footnote_counter, text.clone()));
+                }
             }
         }
 
@@ -762,6 +806,9 @@ impl PdfBuilder {
         if !accumulated_text.is_empty() {
             self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
         }
+
+        // Archive footnotes for the final page (empty vec if none)
+        state.all_footnotes.push(std::mem::take(&mut state.current_page_footnotes));
 
         Ok(state)
     }
@@ -779,6 +826,8 @@ impl PdfBuilder {
         };
         let lines = PdfTextRenderer::wrap_text(&validated_text, chars_per_line);
         let left_margin = state.left_margin();
+        let content_width = state.content_width();
+        let centering = state.centering;
 
         for line in lines {
             if state.current_y - line_height < state.content_bottom() {
@@ -786,10 +835,16 @@ impl PdfBuilder {
             }
             let y = state.current_y;
             let font_size = state.current_font_size;
+            let text_width = line.len() as f32 * font_size * 0.55;
+            let x = if centering {
+                left_margin + (content_width - text_width).max(0.0) / 2.0
+            } else {
+                left_margin
+            };
             let stream = state.current_stream();
             stream.begin_text();
             stream.set_font("F1", font_size);
-            stream.set_position(left_margin, y);
+            stream.set_position(x, y);
             if let Some(engine) = self.typography.as_ref() {
                 let segs = engine.process(&line);
                 if segs.len() == 1 && segs[0].adjustment == 0 {
@@ -807,6 +862,7 @@ impl PdfBuilder {
             stream.end_text();
             state.advance(line_height);
         }
+        state.centering = false;
     }
     
     fn add_math_spacing(&self, math: &str) -> String {
@@ -901,6 +957,34 @@ impl PdfBuilder {
         }
 
         result
+    }
+
+    fn render_page_footnotes(
+        &self,
+        stream: &mut crate::pdf_core::ContentStream,
+        footnotes: &[(usize, String)],
+        page_layout: &crate::page_layout::PageLayout,
+    ) {
+        let left = page_layout.margin_left;
+        let bottom = page_layout.margin_bottom;
+        let separator_y = bottom + 50.0;
+        let font_size = 8.0;
+        let line_height = font_size + 2.0;
+
+        // Draw separator line
+        stream.move_to(left, separator_y);
+        stream.line_to(left + 100.0, separator_y);
+        stream.stroke();
+
+        // Render footnotes from bottom up
+        for (idx, (num, text)) in footnotes.iter().enumerate() {
+            let y = separator_y - 6.0 - (idx as f32 * line_height);
+            stream.begin_text();
+            stream.set_font("F1", font_size);
+            stream.set_position(left, y);
+            stream.show_text(&format!("{} {}", num, text));
+            stream.end_text();
+        }
     }
 }
 

@@ -4,6 +4,8 @@
 
 use std::io::Write;
 
+static HEX_TABLE: &[u8; 16] = b"0123456789ABCDEF";
+
 /// PDF object representation
 #[derive(Debug)]
 pub struct PdfObject {
@@ -64,16 +66,13 @@ impl PdfGenerator {
         pdf.extend_from_slice(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
 
         // Calculate offsets for xref table
-        let mut offsets = Vec::new();
+        let mut offsets = Vec::with_capacity(self.objects.len());
         let mut current_offset = pdf.len() as u32;
 
         // Write objects and collect offsets
         for obj in &self.objects {
             offsets.push(current_offset);
-            
-            // Object header
-            let obj_header = format!("{} {} obj\n", obj.id, obj.generation);
-            pdf.extend_from_slice(obj_header.as_bytes());
+            let _ = writeln!(&mut pdf, "{} {} obj", obj.id, obj.generation);
             pdf.extend_from_slice(obj.content.as_bytes());
 
             // Stream data if present
@@ -90,24 +89,24 @@ impl PdfGenerator {
 
         // xref table
         let xref_offset = pdf.len() as u32;
-        pdf.extend_from_slice(format!("xref\n0 {}\n", self.objects.len() + 1).as_bytes());
+        let _ = writeln!(&mut pdf, "xref\n0 {}", self.objects.len() + 1);
         pdf.extend_from_slice(b"0000000000 65535 f \n");
 
         for offset in offsets {
-            pdf.extend_from_slice(format!("{:010} 00000 n \n", offset).as_bytes());
+            let _ = writeln!(&mut pdf, "{:010} 00000 n ", offset);
         }
 
         // trailer
         pdf.extend_from_slice(b"trailer\n");
         pdf.extend_from_slice(b"<<\n");
-        pdf.extend_from_slice(format!("/Size {}\n", self.objects.len() + 1).as_bytes());
+        let _ = writeln!(&mut pdf, "/Size {}", self.objects.len() + 1);
         if !self.objects.is_empty() {
             // Root is the last object (catalog)
-            pdf.extend_from_slice(format!("/Root {} 0 R\n", self.objects.len()).as_bytes());
+            let _ = writeln!(&mut pdf, "/Root {} 0 R", self.objects.len());
         }
         pdf.extend_from_slice(b">>\n");
         pdf.extend_from_slice(b"startxref\n");
-        pdf.extend_from_slice(format!("{}\n", xref_offset).as_bytes());
+        let _ = writeln!(&mut pdf, "{}", xref_offset);
         pdf.extend_from_slice(b"%%EOF\n");
 
         pdf
@@ -145,11 +144,13 @@ impl DictBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn add_ref(&mut self, key: &str, obj_id: u32) -> &mut Self {
         self.entries.push((key.to_string(), format!("{} 0 R", obj_id)));
         self
     }
 
+    #[allow(dead_code)]
     pub fn add_array(&mut self, key: &str, values: &[String]) -> &mut Self {
         let array = format!("[{}]", values.join(" "));
         self.entries.push((key.to_string(), array));
@@ -157,9 +158,14 @@ impl DictBuilder {
     }
 
     pub fn build(&self) -> String {
-        let mut dict = String::from("<<\n");
+        let mut dict = String::with_capacity(self.entries.len() * 32 + 8);
+        dict.push_str("<<\n");
         for (key, value) in &self.entries {
-            dict.push_str(&format!("/{} {}\n", key, value));
+            dict.push('/');
+            dict.push_str(key);
+            dict.push(' ');
+            dict.push_str(value);
+            dict.push('\n');
         }
         dict.push_str(">>\n");
         dict
@@ -196,16 +202,12 @@ impl ContentStream {
 
     /// Set font and size
     pub fn set_font(&mut self, font_name: &str, size: f32) {
-        self.operations.extend_from_slice(
-            format!("/{} {} Tf\n", font_name, size).as_bytes()
-        );
+        let _ = writeln!(&mut self.operations, "/{} {} Tf", font_name, size);
     }
 
     /// Set text position
     pub fn set_position(&mut self, x: f32, y: f32) {
-        self.operations.extend_from_slice(
-            format!("{} {} Td\n", x, y).as_bytes()
-        );
+        let _ = writeln!(&mut self.operations, "{} {} Td", x, y);
     }
 
     /// Show text using UTF-16BE hex encoding for Unicode support
@@ -232,7 +234,8 @@ impl ContentStream {
         // Write as hex string
         self.operations.push(b'<');
         for byte in utf16_bytes {
-            self.operations.extend_from_slice(format!("{:02X}", byte).as_bytes());
+            self.operations.push(HEX_TABLE[(byte >> 4) as usize]);
+            self.operations.push(HEX_TABLE[(byte & 0x0F) as usize]);
         }
         self.operations.extend_from_slice(b"> Tj\n");
     }
@@ -261,26 +264,23 @@ impl ContentStream {
             }
             self.operations.push(b'<');
             for byte in utf16_bytes {
-                self.operations.extend_from_slice(format!("{:02X}", byte).as_bytes());
+                self.operations.push(HEX_TABLE[(byte >> 4) as usize]);
+                self.operations.push(HEX_TABLE[(byte & 0x0F) as usize]);
             }
             self.operations.push(b'>');
-            self.operations.extend_from_slice(format!(" {}", adj).as_bytes());
+            let _ = write!(&mut self.operations, " {}", adj);
         }
         self.operations.extend_from_slice(b"] TJ\n");
     }
 
     /// Move to coordinate (x, y) for path construction.
     pub fn move_to(&mut self, x: f32, y: f32) {
-        self.operations.extend_from_slice(
-            format!("{} {} m\n", x, y).as_bytes()
-        );
+        let _ = writeln!(&mut self.operations, "{} {} m", x, y);
     }
 
     /// Draw a line to coordinate (x, y).
     pub fn line_to(&mut self, x: f32, y: f32) {
-        self.operations.extend_from_slice(
-            format!("{} {} l\n", x, y).as_bytes()
-        );
+        let _ = writeln!(&mut self.operations, "{} {} l", x, y);
     }
 
     /// Stroke the current path.
@@ -290,9 +290,7 @@ impl ContentStream {
 
     /// Set the non-stroking (fill) RGB color.
     pub fn set_color(&mut self, r: f32, g: f32, b: f32) {
-        self.operations.extend_from_slice(
-            format!("{} {} {} rg\n", r, g, b).as_bytes()
-        );
+        let _ = writeln!(&mut self.operations, "{} {} {} rg", r, g, b);
     }
 
     /// Draw an image XObject at the given position and size.
@@ -300,10 +298,8 @@ impl ContentStream {
     /// `name` is the resource name (e.g. "Im1").
     pub fn draw_image(&mut self, name: &str, x: f32, y: f32, width: f32, height: f32) {
         self.operations.extend_from_slice(b"q\n");
-        self.operations.extend_from_slice(
-            format!("{} 0 0 {} {} {} cm\n", width, height, x, y).as_bytes()
-        );
-        self.operations.extend_from_slice(format!("/{} Do\n", name).as_bytes());
+        let _ = writeln!(&mut self.operations, "{} 0 0 {} {} {} cm", width, height, x, y);
+        let _ = writeln!(&mut self.operations, "/{} Do", name);
         self.operations.extend_from_slice(b"Q\n");
     }
 

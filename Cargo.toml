@@ -9,7 +9,6 @@ anyhow = "1.0"
 thiserror = "1.0"
 tempfile = "3.13"
 chrono = "0.4"
-rusttype = "0.9"
 flate2 = "1.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1.0", features = ["derive"] }

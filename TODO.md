@@ -257,12 +257,12 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 245 (100% passing)
+- Tests: 250 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 350+
-- LaTeX commands: ~125 (parser + math symbols)
+- LaTeX commands: ~135 (parser + math symbols)
 - Documentation: ~30%
-- File size: ~750KB per PDF (content streams now compressed)
+- File size: ~750KB per PDF (content streams compressed, font subsetting infrastructure in place)
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)

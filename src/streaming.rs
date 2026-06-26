@@ -155,6 +155,7 @@ impl Default for StreamingConverter<NoOpReporter> {
 }
 
 /// Convenience one-shot conversion with progress reporting.
+#[allow(dead_code)]
 pub fn convert_with_progress<P: ProgressReporter>(
     input: &Path,
     output: &Path,

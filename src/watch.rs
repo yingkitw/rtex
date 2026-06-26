@@ -41,9 +41,7 @@ where
 
             if mtime > prev {
                 println!("  [change detected] {}", inp.display());
-                if let Err(e) = convert_fn(inp, out) {
-                    return Err(e);
-                }
+                convert_fn(inp, out)?;
                 println!("  [recompiled]  -> {}", out.display());
                 last_mtimes.insert(inp.clone(), mtime);
             }

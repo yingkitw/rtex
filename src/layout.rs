@@ -15,6 +15,12 @@ pub struct LayoutState {
     pub pages: Vec<ContentStream>,
     /// Current font size in points.
     pub current_font_size: f32,
+    /// Whether subsequent text blocks should be centered.
+    pub centering: bool,
+    /// Footnotes collected for the current page (number, text).
+    pub current_page_footnotes: Vec<(usize, String)>,
+    /// Footnotes per completed page.
+    pub all_footnotes: Vec<Vec<(usize, String)>>,
 }
 
 impl LayoutState {
@@ -25,6 +31,9 @@ impl LayoutState {
             current_y: layout.content_top(),
             pages: vec![ContentStream::new()],
             current_font_size: 11.0,
+            centering: false,
+            current_page_footnotes: Vec::new(),
+            all_footnotes: Vec::new(),
         }
     }
 
@@ -75,6 +84,7 @@ impl LayoutState {
 
     /// Finish the current page and start a fresh one.
     pub fn new_page(&mut self) {
+        self.all_footnotes.push(std::mem::take(&mut self.current_page_footnotes));
         self.pages.push(ContentStream::new());
         self.current_y = self.content_top();
     }

@@ -125,6 +125,7 @@ impl std::error::Error for PluginError {}
 /// Load plugins from a directory by looking for `.texplugin` marker
 /// files (for future dynamic-loading support) and returning a
 /// pre-configured registry.
+#[allow(dead_code)]
 pub fn load_plugins_from_dir(_dir: &std::path::Path) -> PluginRegistry {
     // Currently no dynamic loading; reserved for future work.
     PluginRegistry::new()

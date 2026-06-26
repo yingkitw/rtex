@@ -42,6 +42,10 @@ pub enum TexElement {
     Ref { key: String },
     /// A page reference `\pageref{key}`.
     PageRef { key: String },
+    /// A centered block from `\begin{center}`.
+    Center(Vec<TexElement>),
+    /// A footnote `\footnote{text}`.
+    Footnote { text: String },
 }
 
 /// A single bibliography entry for `thebibliography`.
@@ -248,6 +252,11 @@ impl TexParser {
             return self.parse_underline();
         }
 
+        // Footnote
+        if remaining.starts_with("\\footnote{") {
+            return self.parse_footnote();
+        }
+
         // Font size commands
         let sizes = [
             ("\\tiny", "tiny"),
@@ -266,6 +275,12 @@ impl TexParser {
                 self.position += prefix.len();
                 return Some(TexElement::Command { name: name.to_string(), args: vec![] });
             }
+        }
+
+        // Centering declaration
+        if remaining.starts_with("\\centering") {
+            self.position += "\\centering".len();
+            return Some(TexElement::Command { name: "centering".to_string(), args: vec![] });
         }
 
         if remaining.starts_with('\\') {
@@ -466,6 +481,25 @@ impl TexParser {
         Some(TexElement::Command { name: "underline".to_string(), args: vec![text] })
     }
 
+    fn parse_footnote(&mut self) -> Option<TexElement> {
+        self.position += "\\footnote{".len();
+        let text = self.read_until('}');
+        self.position += 1; // skip closing brace
+        Some(TexElement::Footnote { text })
+    }
+
+    fn parse_center(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{center}";
+        let body_start = self.position;
+        let body_end = self.content[self.position..].find(end_marker)?;
+        let body = self.content[body_start..body_start + body_end].to_string();
+        self.position = body_start + body_end + end_marker.len();
+
+        let mut inner_parser = TexParser::new(body);
+        let elements = inner_parser.parse();
+        Some(TexElement::Center(elements))
+    }
+
     #[allow(clippy::question_mark)]
     fn try_plugin_command(&mut self) -> Option<TexElement> {
         if self.plugins.is_none() {
@@ -604,6 +638,7 @@ impl TexParser {
             "tabular" => self.parse_tabular(),
             "table" => self.parse_table(),
             "thebibliography" => self.parse_thebibliography(),
+            "center" => self.parse_center(),
             _ => {
                 if let Some(elem) = self.try_plugin_environment(&env_name) {
                     return Some(elem);
@@ -1449,5 +1484,35 @@ Visit \url{https://example.com}.
         let elements = parser.parse();
         // Should not panic; parser skips the command and continues
         assert!(!elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "newpage")));
+    }
+
+    #[test]
+    fn parser_parses_centering_command() {
+        let content = r#"\centering centered text"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "centering" && args.is_empty())));
+    }
+
+    #[test]
+    fn parser_parses_center_environment() {
+        let content = r#"\begin{center}centered text\end{center}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| {
+            if let TexElement::Center(inner) = e {
+                inner.iter().any(|i| matches!(i, TexElement::Text(t) if t.contains("centered")))
+            } else {
+                false
+            }
+        }));
+    }
+
+    #[test]
+    fn parser_parses_footnote() {
+        let content = r#"Hello\footnote{This is a note.}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Footnote { text } if text == "This is a note.")));
     }
 }

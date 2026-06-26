@@ -30,6 +30,7 @@ mod parallel;
 mod watch;
 mod common;
 mod pdf;
+mod font_subset;
 pub(crate) mod utils;
 pub mod error;
 pub mod config;
