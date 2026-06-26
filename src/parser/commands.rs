@@ -272,6 +272,49 @@ impl TexParser {
         Some(TexElement::Command { name: "scalebox".to_string(), args: vec![factor, text] })
     }
 
+    /// Parse `\colorbox{color}{text}`.
+    pub(super) fn parse_colorbox(&mut self) -> Option<TexElement> {
+        self.position += "\\colorbox{".len();
+        let color = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let text = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let t = self.read_until('}');
+            self.position += 1;
+            t
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command { name: "colorbox".to_string(), args: vec![color, text] })
+    }
+
+    /// Parse `\fcolorbox{framecolor}{backcolor}{text}`.
+    pub(super) fn parse_fcolorbox(&mut self) -> Option<TexElement> {
+        self.position += "\\fcolorbox{".len();
+        let frame = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let back = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let b = self.read_until('}');
+            self.position += 1;
+            b
+        } else {
+            String::new()
+        };
+        self.skip_whitespace_and_comments();
+        let text = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let t = self.read_until('}');
+            self.position += 1;
+            t
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command { name: "fcolorbox".to_string(), args: vec![frame, back, text] })
+    }
+
     /// Parse any command of the form `\name{text}` into a [`TexElement::Command`].
     pub(super) fn parse_simple_braced_command(&mut self, name: &str, prefix_len: usize) -> Option<TexElement> {
         self.position += prefix_len;

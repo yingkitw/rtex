@@ -1005,6 +1005,81 @@ impl PdfBuilder {
                         state.advance(line_height + 4.0);
                         continue;
                     }
+                    if name == "colorbox" && args.len() >= 2 {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let color = crate::color::Color::parse(&args[0]);
+                        let text = &args[1];
+                        state.ensure_space(line_height + 2.0);
+                        let font_size = state.current_font_size;
+                        let text_width = text.len() as f32 * font_size * 0.55;
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let padding = 2.0;
+                        let box_width = text_width + padding * 2.0;
+                        let box_height = font_size + padding * 2.0;
+                        {
+                            let stream = state.current_stream();
+                            // Fill background rectangle
+                            if let Some(c) = color {
+                                stream.set_color(c.r, c.g, c.b);
+                            }
+                            stream.fill_rect(x, y - padding, box_width, box_height);
+                            // Reset to default black for text
+                            stream.set_color(0.0, 0.0, 0.0);
+                            // Draw text inside
+                            stream.begin_text();
+                            stream.set_font("F1", font_size);
+                            stream.set_position(x + padding, y);
+                            stream.show_text(text);
+                            stream.end_text();
+                        }
+                        state.advance(line_height + 4.0);
+                        continue;
+                    }
+                    if name == "fcolorbox" && args.len() >= 3 {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let frame_color = crate::color::Color::parse(&args[0]);
+                        let back_color = crate::color::Color::parse(&args[1]);
+                        let text = &args[2];
+                        state.ensure_space(line_height + 2.0);
+                        let font_size = state.current_font_size;
+                        let text_width = text.len() as f32 * font_size * 0.55;
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let padding = 2.0;
+                        let box_width = text_width + padding * 2.0;
+                        let box_height = font_size + padding * 2.0;
+                        {
+                            let stream = state.current_stream();
+                            // Fill background
+                            if let Some(c) = back_color {
+                                stream.set_color(c.r, c.g, c.b);
+                            }
+                            stream.fill_rect(x, y - padding, box_width, box_height);
+                            // Stroke frame
+                            if let Some(c) = frame_color {
+                                stream.set_stroke_color(c.r, c.g, c.b);
+                            }
+                            stream.stroke_rect(x, y - padding, box_width, box_height);
+                            // Reset to default black for text
+                            stream.set_color(0.0, 0.0, 0.0);
+                            stream.set_stroke_color(0.0, 0.0, 0.0);
+                            // Draw text inside
+                            stream.begin_text();
+                            stream.set_font("F1", font_size);
+                            stream.set_position(x + padding, y);
+                            stream.show_text(text);
+                            stream.end_text();
+                        }
+                        state.advance(line_height + 4.0);
+                        continue;
+                    }
                     if name == "rule" && args.len() >= 2 {
                         if !accumulated_text.is_empty() {
                             self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
@@ -1022,6 +1097,58 @@ impl PdfBuilder {
                             stream.stroke();
                             state.advance(height.max(line_height));
                         }
+                        continue;
+                    }
+                    // Spacing commands
+                    if matches!(name.as_str(), "medskip" | "bigskip" | "smallskip") {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        let advance = match name.as_str() {
+                            "bigskip" => 24.0,
+                            "medskip" => 12.0,
+                            "smallskip" => 6.0,
+                            _ => 0.0,
+                        };
+                        if advance > 0.0 {
+                            state.ensure_space(advance);
+                            state.advance(advance);
+                        }
+                        continue;
+                    }
+                    if name == "hrulefill" {
+                        if !accumulated_text.is_empty() {
+                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            accumulated_text.clear();
+                        }
+                        state.ensure_space(1.0);
+                        let x = state.left_margin();
+                        let y = state.current_y;
+                        let page_width = state.layout.content_width();
+                        let stream = state.current_stream();
+                        stream.move_to(x, y);
+                        stream.line_to(x + page_width, y);
+                        stream.stroke();
+                        state.advance(1.0);
+                        continue;
+                    }
+                    if matches!(name.as_str(), "hfill" | "vfill" | "dotfill" | "strut" | "mathstrut") {
+                        // No-op in basic renderer
+                        continue;
+                    }
+                    if matches!(name.as_str(), "qquad" | "quad" | "semicolon" | "comma" | "bang" | "colon" | "control_space") {
+                        let space = match name.as_str() {
+                            "qquad" => "  ",
+                            "quad" => " ",
+                            "semicolon" => " ",
+                            "comma" => " ",
+                            "bang" => "",
+                            "colon" => " ",
+                            "control_space" => " ",
+                            _ => "",
+                        };
+                        accumulated_text.push_str(space);
                         continue;
                     }
                     // Font size commands

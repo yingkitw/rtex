@@ -330,6 +330,27 @@ impl ContentStream {
         let _ = writeln!(&mut self.operations, "{} {} {} rg", r, g, b);
     }
 
+    /// Set the stroking RGB color.
+    pub fn set_stroke_color(&mut self, r: f32, g: f32, b: f32) {
+        let _ = writeln!(&mut self.operations, "{} {} {} RG", r, g, b);
+    }
+
+    /// Fill a rectangle at (x, y) with the given width and height.
+    pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        let _ = writeln!(&mut self.operations, "{} {} {} {} re f", x, y, width, height);
+    }
+
+    /// Stroke a rectangle at (x, y) with the given width and height.
+    pub fn stroke_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        let _ = writeln!(&mut self.operations, "{} {} {} {} re S", x, y, width, height);
+    }
+
+    #[allow(dead_code)]
+    /// Fill and stroke a rectangle at (x, y) with the given width and height.
+    pub fn fill_and_stroke_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        let _ = writeln!(&mut self.operations, "{} {} {} {} re B", x, y, width, height);
+    }
+
     /// Draw an image XObject at the given position and size.
     ///
     /// `name` is the resource name (e.g. "Im1").

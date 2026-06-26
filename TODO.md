@@ -259,10 +259,10 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 317 (100% passing)
+- Tests: 321 (100% passing)
 - Warnings: 0
 - Math symbols: 566
-- LaTeX commands: ~201 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + macro system)
+- LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)
 - Documentation: ~45%
 - File size: ~750KB per PDF (content streams compressed, font subsetting active; ~380KB is the embedded DejaVuSans subset — switching to a smaller base font would be needed for <100KB target)
 

@@ -319,6 +319,25 @@ impl TexParser {
             return Some(TexElement::Command { name: "today".to_string(), args: vec![] });
         }
 
+        // Special text characters (insert literal symbols)
+        let text_chars = [
+            ("\\textasciicircum", "^"),
+            ("\\textasciitilde", "~"),
+            ("\\textbackslash", "\\"),
+            ("\\textbar", "|"),
+            ("\\textbraceleft", "{"),
+            ("\\textbraceright", "}"),
+            ("\\textdollar", "$"),
+            ("\\textgreater", ">"),
+            ("\\textless", "<"),
+        ];
+        for (prefix, ch) in &text_chars {
+            if remaining.starts_with(prefix) {
+                self.position += prefix.len();
+                return Some(TexElement::Text(ch.to_string()));
+            }
+        }
+
         // URL
         if remaining.starts_with("\\url{") {
             return self.parse_url();
@@ -380,6 +399,14 @@ impl TexParser {
             return self.parse_scalebox();
         }
 
+        // Colored boxes
+        if remaining.starts_with("\\colorbox{") {
+            return self.parse_colorbox();
+        }
+        if remaining.starts_with("\\fcolorbox{") {
+            return self.parse_fcolorbox();
+        }
+
         // Superscript / subscript
         if remaining.starts_with("\\textsuperscript{") {
             return self.parse_simple_braced_command("textsuperscript", 17);
@@ -396,6 +423,32 @@ impl TexParser {
         // Rule / horizontal line
         if remaining.starts_with("\\rule{") {
             return self.parse_rule();
+        }
+
+        // Spacing commands
+        let spacing_cmds = [
+            ("\\hfill", "hfill"),
+            ("\\vfill", "vfill"),
+            ("\\hrulefill", "hrulefill"),
+            ("\\dotfill", "dotfill"),
+            ("\\medskip", "medskip"),
+            ("\\bigskip", "bigskip"),
+            ("\\smallskip", "smallskip"),
+            ("\\strut", "strut"),
+            ("\\mathstrut", "mathstrut"),
+            ("\\qquad", "qquad"),
+            ("\\quad", "quad"),
+            ("\\;", "semicolon"),
+            ("\\,", "comma"),
+            ("\\!", "bang"),
+            ("\\:", "colon"),
+            ("\\ ", "control_space"),
+        ];
+        for (prefix, name) in &spacing_cmds {
+            if remaining.starts_with(prefix) {
+                self.position += prefix.len();
+                return Some(TexElement::Command { name: name.to_string(), args: vec![] });
+            }
         }
 
         // Include external file content inline
@@ -1949,5 +2002,78 @@ Visit \url{https://example.com}.
         assert!(names.contains(&"tt"));
         assert!(names.contains(&"sc"));
         assert!(names.contains(&"sl"));
+    }
+
+    #[test]
+    fn parser_parses_text_special_chars() {
+        let cases = [
+            ("\\textasciicircum", "^"),
+            ("\\textasciitilde", "~"),
+            ("\\textbackslash", "\\"),
+            ("\\textbar", "|"),
+            ("\\textbraceleft", "{"),
+            ("\\textbraceright", "}"),
+            ("\\textdollar", "$"),
+            ("\\textgreater", ">"),
+            ("\\textless", "<"),
+        ];
+        for (cmd, expected) in &cases {
+            let mut parser = TexParser::new(cmd.to_string());
+            let elements = parser.parse();
+            assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t == *expected)),
+                "Command {} should produce text {}", cmd, expected);
+        }
+    }
+
+    #[test]
+    fn parser_parses_colorbox() {
+        let content = r#"\colorbox{red}{hello}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "colorbox" && args == &["red", "hello"])));
+    }
+
+    #[test]
+    fn parser_parses_fcolorbox() {
+        let content = r#"\fcolorbox{black}{yellow}{hello}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "fcolorbox" && args == &["black", "yellow", "hello"])));
+    }
+
+    #[test]
+    fn parser_parses_spacing_commands() {
+        let cmds = [
+            "\\hfill", "\\vfill", "\\hrulefill", "\\dotfill",
+            "\\medskip", "\\bigskip", "\\smallskip",
+            "\\strut", "\\mathstrut",
+            "\\qquad", "\\quad",
+            "\\;", "\\,", "\\!", "\\:", "\\ ",
+        ];
+        for cmd in &cmds {
+            let mut parser = TexParser::new(cmd.to_string());
+            let elements = parser.parse();
+            let expected_name = match *cmd {
+                "\\hfill" => "hfill",
+                "\\vfill" => "vfill",
+                "\\hrulefill" => "hrulefill",
+                "\\dotfill" => "dotfill",
+                "\\medskip" => "medskip",
+                "\\bigskip" => "bigskip",
+                "\\smallskip" => "smallskip",
+                "\\strut" => "strut",
+                "\\mathstrut" => "mathstrut",
+                "\\qquad" => "qquad",
+                "\\quad" => "quad",
+                "\\;" => "semicolon",
+                "\\," => "comma",
+                "\\!" => "bang",
+                "\\:" => "colon",
+                "\\ " => "control_space",
+                _ => "",
+            };
+            assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == expected_name && args.is_empty())),
+                "Command {} should produce Command {{ name: {}, args: [] }}", cmd, expected_name);
+        }
     }
 }
