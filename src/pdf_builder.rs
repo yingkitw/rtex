@@ -15,6 +15,8 @@ pub struct PdfBuilder {
     title: Option<String>,
     author: Option<String>,
     date: Option<String>,
+    plugins: Option<crate::plugins::PluginRegistry>,
+    typography: Option<crate::typography::TypographyEngine>,
 }
 
 impl PdfBuilder {
@@ -24,11 +26,29 @@ impl PdfBuilder {
             title: None,
             author: None,
             date: None,
+            plugins: None,
+            typography: None,
         }
+    }
+
+    /// Attach a plugin registry for element transformation.
+    pub fn with_plugins(mut self, plugins: crate::plugins::PluginRegistry) -> Self {
+        self.plugins = Some(plugins);
+        self
+    }
+
+    /// Attach a typography engine for ligatures and kerning.
+    pub fn with_typography(mut self, engine: crate::typography::TypographyEngine) -> Self {
+        self.typography = Some(engine);
+        self
     }
 
     /// Build a PDF from `elements` and write it to `output_path`.
     pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
+        let mut elements = elements;
+        if let Some(plugins) = self.plugins.as_mut() {
+            elements = plugins.transform(elements);
+        }
         let mut generator = PdfGenerator::new();
 
         // Load font
@@ -660,7 +680,20 @@ end";
             stream.begin_text();
             stream.set_font("F1", 11.0);
             stream.set_position(left_margin, y);
-            stream.show_text(&line);
+            if let Some(engine) = self.typography.as_ref() {
+                let segs = engine.process(&line);
+                if segs.len() == 1 && segs[0].adjustment == 0 {
+                    stream.show_text(&segs[0].text);
+                } else {
+                    let pairs: Vec<(String, i16)> = segs
+                        .iter()
+                        .map(|s| (s.text.clone(), s.adjustment))
+                        .collect();
+                    stream.show_text_with_kerning(&pairs);
+                }
+            } else {
+                stream.show_text(&line);
+            }
             stream.end_text();
             state.advance(line_height);
         }

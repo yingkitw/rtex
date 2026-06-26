@@ -167,29 +167,36 @@
   - Memory-efficient: large files read incrementally via `BufReader` instead of loading entire file into memory
 
 #### Plugin System
-- [ ] **Plugin architecture** - `src/plugins.rs`
-  - Plugin trait definition
-  - Plugin loading
-  - Custom command handlers
-  - Extension points
+- [x] **Plugin architecture** - `src/plugins.rs`
+  - `Plugin` trait with `handle_command`, `handle_environment`, `transform_elements` hooks
+  - `PluginRegistry` collects plugins and dispatches in registration order
+  - `TexParser::with_plugins` intercepts unknown commands and environments before fallback
+  - `PdfBuilder::with_plugins` applies `transform_elements` before PDF generation
+  - Built-in examples: `TodayPlugin` (`\today` → current date), `UrlPlugin` (`\url{...}` → plain text)
+  - `load_plugins_from_dir` stub for future dynamic loading
 
 ### Phase 5: Professional Features (Month 3+)
 
 #### Advanced Typography
-- [ ] **OpenType features** - `src/typography.rs`
-  - Ligatures
-  - Kerning
-  - Small caps
-  - Stylistic sets
+- [x] **OpenType features** - `src/typography.rs`
+  - Ligature substitution: `ffi` → `ﬃ` (U+FB03), `ffl` → `ﬄ` (U+FB04), `ff` → `ﬀ`, `fi` → `ﬁ`, `fl` → `ﬂ`
+  - Kerning table with common pairs (AV, To, Wa, Ye, etc.) expressed in thousandths of an em
+  - `TypographyEngine` segments text into `TextSegment`s with per-pair adjustments
+  - `PdfBuilder::with_typography` enables ligatures and kerning in PDF output
+  - `ContentStream::show_text_with_kerning` emits the PDF `TJ` operator for glyph-level spacing
+  - Small caps and stylistic sets: documented limitation (requires GSUB table parsing)
 
 #### TeX Compatibility
-- [ ] **Professional TeX features** - `src/tex/`
-  - Category codes
-  - Token system
-  - Dimension system
-  - Glue system
-  - Box model
-  - Line breaking (Knuth-Plass)
+- [x] **Core TeX primitives** - `src/tex/`
+  - `CatCode` enum with all 16 standard category codes
+  - `CatCodeTable` with default LaTeX assignments and per-character override
+  - `Token` enum (`Char`, `ControlSequence`, `EndOfFile`)
+  - `TexLexer` that tokenizes raw text respecting catcodes, comments, and space/EOL collapse
+  - `Dimension` parsed from strings (`pt`, `mm`, `cm`, `in`, `bp`, `em`, `ex`, etc.) into scaled points (sp)
+- [ ] **Advanced TeX features** (future work)
+  - Glue system (stretch / shrink)
+  - Box model (hbox, vbox)
+  - Line breaking (Knuth-Plass algorithm)
 
 #### Performance
 - [ ] **Parallel processing** - `src/parallel.rs`
@@ -236,7 +243,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 159 (100% passing)
+- Tests: 176 (100% passing)
 - Warnings: 1 (pre-existing dead_code in pdf_core.rs)
 - Math symbols: 150+
 - LaTeX commands: ~50

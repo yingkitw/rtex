@@ -7,7 +7,7 @@ use crate::table::Table;
 use crate::utils::extract_braced;
 
 /// A structured element parsed from a LaTeX document.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TexElement {
     /// Plain text content.
     Text(String),
@@ -54,6 +54,7 @@ pub struct BibEntry {
 pub struct TexParser {
     content: String,
     position: usize,
+    plugins: Option<crate::plugins::PluginRegistry>,
 }
 
 impl TexParser {
@@ -64,7 +65,15 @@ impl TexParser {
         let mut store = crate::macros::MacroStore::new();
         let stripped = store.extract_definitions(&content);
         let expanded = store.expand_all(&stripped);
-        Self { content: expanded, position: 0 }
+        Self { content: expanded, position: 0, plugins: None }
+    }
+
+    /// Create a parser with a plugin registry for custom command and
+    /// environment handlers.
+    pub fn with_plugins(content: String, plugins: crate::plugins::PluginRegistry) -> Self {
+        let mut parser = Self::new(content);
+        parser.plugins = Some(plugins);
+        parser
     }
 
     /// Parse the entire document into a sequence of elements.
@@ -212,6 +221,9 @@ impl TexParser {
         }
 
         if remaining.starts_with('\\') {
+            if let Some(elem) = self.try_plugin_command() {
+                return Some(elem);
+            }
             self.parse_unknown_command();
             return None;
         }
@@ -354,13 +366,76 @@ impl TexParser {
         Some(TexElement::PageRef { key })
     }
 
+    #[allow(clippy::question_mark)]
+    fn try_plugin_command(&mut self) -> Option<TexElement> {
+        if self.plugins.is_none() {
+            return None;
+        }
+
+        // Peek command name without advancing.
+        let start = self.position + 1; // skip '\'
+        let mut name_end = start;
+        while name_end < self.content.len() {
+            let ch = self.content[name_end..].chars().next()?;
+            if ch.is_alphabetic() || ch == '*' {
+                name_end += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+        let name = self.content[start..name_end].to_string();
+        if name.is_empty() {
+            return None;
+        }
+
+        // Temporarily advance to collect arguments.
+        let saved = self.position;
+        self.position = name_end;
+        self.skip_whitespace_and_comments();
+
+        let mut args = Vec::new();
+        while let Some(arg) = self.parse_braced_content() {
+            args.push(arg);
+            self.skip_whitespace_and_comments();
+        }
+
+        // Now borrow plugins mutably, after all self-borrows are done.
+        let plugins = self.plugins.as_mut().unwrap();
+        if let Some(elem) = plugins.try_command(&name, &args) {
+            return Some(elem);
+        }
+
+        // No plugin handled it — restore position.
+        self.position = saved;
+        None
+    }
+
+    #[allow(clippy::question_mark)]
+    fn try_plugin_environment(&mut self, env_name: &str) -> Option<TexElement> {
+        if self.plugins.is_none() {
+            return None;
+        }
+        let end_marker = format!("\\end{{{}}}", env_name);
+        let body_start = self.position;
+        let body_end = self.content[self.position..].find(&end_marker)?;
+        let body = self.content[body_start..body_start + body_end].to_string();
+
+        let plugins = self.plugins.as_mut().unwrap();
+        if let Some(elem) = plugins.try_environment(env_name, &body) {
+            self.position = body_start + body_end + end_marker.len();
+            return Some(elem);
+        }
+        None
+    }
+
+    #[allow(clippy::collapsible_if)]
     fn parse_thebibliography(&mut self) -> Option<TexElement> {
         // Skip optional argument {number}
         self.skip_whitespace_and_comments();
-        if self.content[self.position..].starts_with('{')
-            && let Some((_inner, end)) = extract_braced(&self.content, self.position)
-        {
-            self.position = end;
+        if self.content[self.position..].starts_with('{') {
+            if let Some((_inner, end)) = extract_braced(&self.content, self.position) {
+                self.position = end;
+            }
         }
 
         let mut entries = Vec::new();
@@ -430,6 +505,9 @@ impl TexParser {
             "table" => self.parse_table(),
             "thebibliography" => self.parse_thebibliography(),
             _ => {
+                if let Some(elem) = self.try_plugin_environment(&env_name) {
+                    return Some(elem);
+                }
                 self.skip_until(&format!("\\end{{{}}}", env_name));
                 None
             }
@@ -1125,6 +1203,50 @@ See page~\pageref{sec:intro}.
 
         assert!(elements.iter().any(|element| {
             matches!(element, TexElement::PageRef { key } if key == "sec:intro")
+        }));
+    }
+
+    #[test]
+    fn parser_plugin_handles_today() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Today is \today.
+\end{document}
+"#;
+
+        let mut plugins = crate::plugins::PluginRegistry::new();
+        plugins.register(Box::new(crate::plugins::TodayPlugin));
+        let mut parser = TexParser::with_plugins(content.to_string(), plugins);
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            if let TexElement::Text(t) = element {
+                t.contains("202")
+            } else {
+                false
+            }
+        }));
+    }
+
+    #[test]
+    fn parser_plugin_handles_url() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Visit \url{https://example.com}.
+\end{document}
+"#;
+
+        let mut plugins = crate::plugins::PluginRegistry::new();
+        plugins.register(Box::new(crate::plugins::UrlPlugin));
+        let mut parser = TexParser::with_plugins(content.to_string(), plugins);
+        let elements = parser.parse();
+
+        assert!(elements.iter().any(|element| {
+            if let TexElement::Text(t) = element {
+                t.contains("https://example.com")
+            } else {
+                false
+            }
         }));
     }
 }

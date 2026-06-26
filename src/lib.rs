@@ -20,6 +20,9 @@ mod macros;
 mod bibliography;
 mod references;
 mod streaming;
+mod plugins;
+mod typography;
+mod tex;
 mod pdf;
 pub(crate) mod utils;
 pub mod error;
@@ -32,6 +35,9 @@ pub use parser::TexParser;
 pub use pdf_builder::PdfBuilder;
 pub use math_formatter::MathFormatter;
 pub use streaming::{StreamingConverter, ProgressReporter, NoOpReporter, ConsoleReporter};
+pub use plugins::{Plugin, PluginRegistry, TodayPlugin, UrlPlugin};
+pub use typography::{TypographyEngine, TypographyOptions, KerningTable, TextSegment};
+pub use tex::{CatCode, Token, TexLexer, Dimension};
 
 /// Trait for converting a LaTeX file to PDF.
 pub trait TexConverter {

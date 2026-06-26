@@ -173,6 +173,13 @@ latex-rs/
 │   ├── bibliography.rs     # BibTeX parsing and citation formatting
 │   ├── references.rs       # Cross-reference engine (\label, \ref, \pageref)
 │   ├── streaming.rs        # Chunked reading and progress reporting for large docs
+│   ├── plugins.rs          # Plugin trait and registry for custom commands/environments
+│   ├── typography.rs       # Ligature substitution and kerning adjustments
+│   ├── tex/                # TeX compatibility primitives
+│   │   ├── mod.rs          # Module re-exports
+│   │   ├── catcodes.rs     # Category-code table (CatCode, CatCodeTable)
+│   │   ├── tokens.rs       # Token enum and lexer (Token, TexLexer)
+│   │   └── dimensions.rs   # Dimension parsing in scaled points (Dimension)
 │   ├── pdf_builder.rs      # PDF generation implementation
 │   ├── pdf_core.rs         # Low-level PDF primitives
 │   ├── pdf_text_renderer.rs # Text rendering utilities

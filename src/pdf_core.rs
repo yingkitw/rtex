@@ -237,6 +237,38 @@ impl ContentStream {
         self.operations.extend_from_slice(b"> Tj\n");
     }
 
+    /// Show text with per-segment kerning adjustments using the PDF `TJ`
+    /// operator.  `segments` is a slice of `(text, adjustment)` pairs where
+    /// `adjustment` is in thousandths of an em (negative = tighter).
+    pub fn show_text_with_kerning(&mut self, segments: &[(String, i16)]) {
+        self.operations.push(b'[');
+        for (text, adj) in segments {
+            let mut utf16_bytes = Vec::new();
+            for ch in text.chars() {
+                let code = ch as u32;
+                if code <= 0xFFFF {
+                    utf16_bytes.push((code >> 8) as u8);
+                    utf16_bytes.push((code & 0xFF) as u8);
+                } else {
+                    let code = code - 0x10000;
+                    let high = 0xD800 + (code >> 10);
+                    let low = 0xDC00 + (code & 0x3FF);
+                    utf16_bytes.push((high >> 8) as u8);
+                    utf16_bytes.push((high & 0xFF) as u8);
+                    utf16_bytes.push((low >> 8) as u8);
+                    utf16_bytes.push((low & 0xFF) as u8);
+                }
+            }
+            self.operations.push(b'<');
+            for byte in utf16_bytes {
+                self.operations.extend_from_slice(format!("{:02X}", byte).as_bytes());
+            }
+            self.operations.push(b'>');
+            self.operations.extend_from_slice(format!(" {}", adj).as_bytes());
+        }
+        self.operations.extend_from_slice(b"] TJ\n");
+    }
+
     /// Move to coordinate (x, y) for path construction.
     pub fn move_to(&mut self, x: f32, y: f32) {
         self.operations.extend_from_slice(
