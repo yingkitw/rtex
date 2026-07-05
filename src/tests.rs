@@ -111,6 +111,34 @@ Test document.
     }
 
     #[test]
+    fn test_convert_tex_string_to_pdf_bytes() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+Hello from in-memory conversion!
+\end{document}
+"#;
+        let pdf = convert_tex_string_to_pdf_bytes(tex).unwrap();
+        assert!(pdf.len() > 100);
+        assert!(pdf.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn test_convert_string_with_cache() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+Cached string conversion
+\end{document}
+"#;
+        let converter = NativeTexConverter::with_cache();
+        let pdf1 = converter.convert_string(tex).unwrap();
+        let pdf2 = converter.convert_string(tex).unwrap();
+        assert_eq!(pdf1, pdf2);
+        let stats = converter.cache_stats().unwrap();
+        assert_eq!(stats.parsed_hits, 1);
+        assert_eq!(stats.parsed_misses, 1);
+    }
+
+    #[test]
     fn test_invalid_tex_syntax() {
         let temp_dir = tempdir().unwrap();
         let input_path = temp_dir.path().join("invalid.tex");

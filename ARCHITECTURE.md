@@ -161,13 +161,25 @@ The trait-based design allows for:
 - Alternative output formats
 - Mock converters for testing
 
-## File Organization
+## WebAssembly
+
+rtex targets `wasm32-unknown-unknown` for zero-infrastructure browser preview:
+
+- **`convert_tex_string_to_pdf_bytes(tex)`** — parses and renders entirely in memory (no file I/O)
+- **`src/fonts.rs`** — embeds DejaVu Sans at compile time via `include_bytes!`
+- **`src/wasm.rs`** — optional `wasm` feature exports `convertTexToPdf` via `wasm-bindgen`
+- **`PdfBuilder::build_to_bytes`** — returns raw PDF bytes; `build()` writes them to disk on native targets
+
+Build: `cargo build --target wasm32-unknown-unknown --features wasm --release`
+
 
 ```
 rtex/
 ├── Cargo.toml              # Dependencies and metadata (crate name: rtex)
 ├── src/
 │   ├── lib.rs              # Core conversion logic & public API
+│   ├── wasm.rs             # wasm-bindgen exports (feature: wasm)
+│   ├── fonts.rs            # Embedded DejaVu Sans font data
 │   ├── main.rs             # CLI entry point (binary: rtex)
 │   ├── error.rs            # Structured error types with Position tracking
 │   ├── config.rs           # Configuration system with quality presets

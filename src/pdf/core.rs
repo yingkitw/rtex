@@ -121,14 +121,6 @@ impl PdfGenerator {
 
         pdf
     }
-
-    /// Write PDF to file
-    pub fn write_to_file(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let pdf_bytes = self.generate();
-        let mut file = std::fs::File::create(path)?;
-        file.write_all(&pdf_bytes)?;
-        Ok(())
-    }
 }
 
 impl Default for PdfGenerator {

@@ -28,6 +28,7 @@ mod math_processor;
 mod parallel;
 mod watch;
 mod common;
+mod fonts;
 pub(crate) mod utils;
 pub mod error;
 pub mod config;
@@ -81,6 +82,38 @@ impl NativeTexConverter {
         }
     }
 
+    /// Parse TeX source into structured elements, using the cache when enabled.
+    fn parse_content(&self, content: &str) -> Vec<parser::TexElement> {
+        if let Some(ref cache) = self.cache {
+            let mut c = cache.lock().unwrap();
+            if let Some(els) = c.get_parsed(content) {
+                return els;
+            }
+            drop(c);
+            let mut parser = TexParser::new(content.to_string());
+            let els = parser.parse();
+            cache.lock().unwrap().put_parsed(content, els.clone());
+            els
+        } else {
+            let mut parser = TexParser::new(content.to_string());
+            parser.parse()
+        }
+    }
+
+    /// Convert TeX source directly to PDF bytes without filesystem access.
+    ///
+    /// This is the primary API for WASM and other embedded environments.
+    pub fn convert_string(&self, tex: &str) -> Result<Vec<u8>, LatexError> {
+        let elements = self.parse_content(tex);
+        let mut builder = PdfBuilder::new();
+        builder
+            .build_to_bytes(elements)
+            .map_err(|msg| LatexError::PdfError {
+                message: msg,
+                context: None,
+            })
+    }
+
     /// Convenience constructor that creates a converter and runs the conversion.
     pub fn convert_file(input: &Path, output: &Path) -> Result<(), LatexError> {
         let converter = Self::new();
@@ -107,28 +140,22 @@ impl TexConverter for NativeTexConverter {
         }
 
         let content = fs::read_to_string(input)?;
-
-        let elements = if let Some(ref cache) = self.cache {
-            let mut c = cache.lock().unwrap();
-            if let Some(els) = c.get_parsed(&content) {
-                els
-            } else {
-                drop(c); // release lock before parsing
-                let mut parser = TexParser::new(content.clone());
-                let els = parser.parse();
-                cache.lock().unwrap().put_parsed(&content, els.clone());
-                els
-            }
-        } else {
-            let mut parser = TexParser::new(content);
-            parser.parse()
-        };
-
-        let mut builder = PdfBuilder::new();
-        builder.build(elements, output)?;
+        let pdf = self.convert_string(&content)?;
+        fs::write(output, pdf).map_err(|source| LatexError::IoError {
+            path: output.to_path_buf(),
+            source,
+        })?;
 
         Ok(())
     }
+}
+
+/// Convert a TeX source string directly to PDF bytes (no filesystem access).
+///
+/// Ideal for WASM targets and in-process embedding where reading/writing
+/// files is unavailable or undesirable.
+pub fn convert_tex_string_to_pdf_bytes(tex: &str) -> Result<Vec<u8>, LatexError> {
+    NativeTexConverter::new().convert_string(tex)
 }
 
 /// One-shot helper: convert a `.tex` file to a `.pdf`.
@@ -136,6 +163,9 @@ pub fn convert_tex_to_pdf(input: &Path, output: &Path) -> Result<(), LatexError>
     let converter = NativeTexConverter::new();
     converter.convert(input, output)
 }
+
+#[cfg(feature = "wasm")]
+mod wasm;
 
 #[cfg(test)]
 mod tests;

@@ -251,7 +251,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
   - TOML/JSON load and save
   - `PdfBuilder::with_template()` integration
 - [x] **Incremental / cached compilation** — `DocumentCache` (content-hash AST caching) + `IncrementalCompiler` (source-hash + dependency mtime tracking)
-- **WASM target** (Typst) — compile to `wasm32-unknown-unknown` for browser-side conversion; high value for zero-infrastructure preview UIs
+- [x] **WASM target** (Typst) — `convert_tex_string_to_pdf_bytes()` in-memory API + embedded fonts + `wasm` feature with `wasm-bindgen` bindings for browser-side conversion
 - **Multiple output formats** (Pandoc) — HTML, DOCX, EPUB from same parsed AST
 - **On-demand package fetching** (Tectonic) — download missing `.sty`/`.cls` packages automatically
 - [x] **PDF metadata (Info dictionary)** — Title, Author, Creator, Producer, CreationDate in `PdfBuilder`
@@ -260,7 +260,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 325 (100% passing)
+- Tests: 327 (100% passing)
 - Warnings: 0
 - Math symbols: 566
 - LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)

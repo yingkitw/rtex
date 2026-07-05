@@ -51,17 +51,16 @@ impl PdfBuilder {
         self
     }
 
-    /// Build a PDF from `elements` and write it to `output_path`.
-    pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
+    /// Build a PDF from `elements` and return the raw bytes.
+    pub fn build_to_bytes(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
         let mut elements = elements;
         if let Some(plugins) = self.plugins.as_mut() {
             elements = plugins.transform(elements);
         }
         let mut generator = PdfGenerator::new();
 
-        // Load font
-        let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/DejaVuSans.ttf");
-        let full_font_data = std::fs::read(&font_path).map_err(|e| format!("Failed to load font: {}", e))?;
+        // Load embedded font (works on native and WASM without filesystem access)
+        let full_font_data = crate::fonts::DEJAVU_SANS.to_vec();
 
         // Subset font to only characters used in the document
         let used_chars = crate::pdf::font_subset::collect_used_chars(&elements);
@@ -212,11 +211,14 @@ impl PdfBuilder {
         );
         let _catalog_id = generator.add_object(catalog_content);
 
-        // Write PDF to file
-        generator.write_to_file(output_path)
-            .map_err(|e| format!("Failed to write PDF: {}", e))?;
+        Ok(generator.generate())
+    }
 
-        Ok(())
+    /// Build a PDF from `elements` and write it to `output_path`.
+    pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
+        let pdf = self.build_to_bytes(elements)?;
+        std::fs::write(output_path, &pdf)
+            .map_err(|e| format!("Failed to write PDF: {}", e))
     }
     
     fn create_font_objects(

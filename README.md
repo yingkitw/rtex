@@ -121,8 +121,27 @@ The project follows KISS and DRY principles with a trait-based design:
 - `TexParser`: Parses LaTeX syntax into structured elements
 - `PdfBuilder`: Generates PDF documents from parsed elements
 - `convert_tex_to_pdf`: Convenience function for direct conversion
+- `convert_tex_string_to_pdf_bytes`: In-memory conversion (no filesystem; WASM-ready)
 
 See `ARCHITECTURE.md` for detailed design documentation.
+
+## WebAssembly
+
+rtex compiles to `wasm32-unknown-unknown` for browser-side preview UIs with no server-side LaTeX installation.
+
+```bash
+# Install the WASM target (once)
+rustup target add wasm32-unknown-unknown
+
+# Build the library for WASM with JS bindings
+cargo build --target wasm32-unknown-unknown --features wasm --release
+
+# Generate JavaScript glue (requires wasm-bindgen-cli)
+wasm-bindgen target/wasm32-unknown-unknown/release/rtex.wasm \
+  --out-dir pkg --target web
+```
+
+Use `convert_tex_string_to_pdf_bytes(tex)` from Rust, or the exported `convertTexToPdf(tex)` function from JavaScript when built with the `wasm` feature.
 
 ## Examples
 
