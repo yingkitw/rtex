@@ -111,6 +111,33 @@ Test document.
     }
 
     #[test]
+    fn test_convert_includegraphics_svg() {
+        use std::io::Write;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let svg_path = temp_dir.path().join("logo.svg");
+        let mut svg_file = std::fs::File::create(&svg_path).unwrap();
+        svg_file
+            .write_all(
+                br#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="blue"/></svg>"#,
+            )
+            .unwrap();
+
+        let tex = format!(
+            r#"\documentclass{{article}}
+\begin{{document}}
+\includegraphics[width=5cm]{{{}}}
+\end{{document}}
+"#,
+            svg_path.display()
+        );
+
+        let pdf = convert_tex_string_to_pdf_bytes(&tex).unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
+        assert!(pdf.len() > 500);
+    }
+
+    #[test]
     fn test_convert_tex_string_to_pdf_bytes() {
         let tex = r#"\documentclass{article}
 \begin{document}

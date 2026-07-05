@@ -129,7 +129,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - **thiserror**: Custom error types
 - **chrono**: Date handling for `\today` command
 - **tempfile**: Temporary directory management (for tests)
-- **image**: PNG/JPEG decoding for `\includegraphics`
+- **image**: PNG/JPEG/SVG decoding for `\includegraphics` (SVG rasterized via resvg)
 - **font-subset**: TrueType font subsetting for smaller PDFs
 - **flate2**: Compression support
 - **serde** + **serde_json** + **toml**: Template serialization

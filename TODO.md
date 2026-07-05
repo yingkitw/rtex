@@ -95,9 +95,9 @@
 ### Phase 3: Core Features (Week 4-6)
 
 #### Image Support
-- [x] **Add image handling** - `src/image.rs` with PNG/JPEG loading and PDF XObject embedding
+- [x] **Add image handling** - `src/image.rs` with PNG/JPEG/SVG loading and PDF XObject embedding
   - `\includegraphics{path}` and `\includegraphics[width=5cm]{path}` parsing
-  - `ImageInfo::from_path` decodes via `image` crate, converts to RGB8
+  - `ImageInfo::from_path` decodes PNG/JPEG via `image` crate; SVG rasterized via `resvg`/`usvg`
   - `PdfBuilder` creates XObjects, registers in page Resources, draws via `cm` + `Do`
   - `parse_dimension` supports cm, mm, in, pt, and raw units
   - Parser tests for basic and optional-width includegraphics
@@ -232,7 +232,7 @@
 - [x] Add batch conversion support — `src/parallel.rs`
 - [x] Add progress indicator for long compilations — `StreamingConverter` with `ConsoleReporter`
 - [ ] Add option to keep intermediate files
-- [ ] SVG image support
+- [x] **SVG image support** — rasterize SVG via `resvg`/`usvg` in `ImageInfo::from_path`
 - [ ] Advanced color management (ICC profiles)
 - [ ] PDF/A compliance
 - [ ] Accessibility features (tagged PDF)
@@ -260,7 +260,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 327 (100% passing)
+- Tests: 331 (100% passing)
 - Warnings: 0
 - Math symbols: 566
 - LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)

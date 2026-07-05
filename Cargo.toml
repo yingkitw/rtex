@@ -31,6 +31,8 @@ toml = "0.8"
 num_cpus = "1.16"
 font-subset = "0.1.0"
 wasm-bindgen = { version = "0.2", optional = true }
+resvg = "0.45.1"
+usvg = "0.45.1"
 
 [dev-dependencies]
 sha2 = "0.10"

@@ -19,7 +19,7 @@ A native TeX to PDF converter CLI written in Rust with **no external dependencie
   - Math accents (\vec, \hat, \tilde, \bar, \dot, \ddot)
   - Tables (tabular with alignment, booktabs rules)
   - Environments (center, quote, quotation, abstract, equation, lstlisting)
-  - Graphics (\includegraphics with PNG/JPEG)
+  - Graphics (\includegraphics with PNG/JPEG/SVG)
   - References (\cite, \label, \ref, \pageref, \index, \glossary)
   - Bibliography (\thebibliography, \bibliography, \bibliographystyle)
   - PDF transformations (\rotatebox, \scalebox, \raisebox, \phantom)
