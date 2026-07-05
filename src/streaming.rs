@@ -8,6 +8,8 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
+use crate::incremental::IncrementalCompiler;
+
 /// Callback trait for reporting conversion progress.
 pub trait ProgressReporter: Send {
     /// Called when a stage begins.  `pct` is an estimated overall
@@ -43,6 +45,8 @@ pub struct StreamingConverter<R: ProgressReporter> {
     reporter: R,
     chunk_size: usize,
     template: Option<crate::template::DocumentTemplate>,
+    incremental: IncrementalCompiler,
+    force_rebuild: bool,
 }
 
 impl StreamingConverter<NoOpReporter> {
@@ -51,6 +55,8 @@ impl StreamingConverter<NoOpReporter> {
             reporter: NoOpReporter,
             chunk_size: 1024 * 1024, // 1 MiB
             template: None,
+            incremental: IncrementalCompiler::new(),
+            force_rebuild: false,
         }
     }
 }
@@ -61,6 +67,8 @@ impl<R: ProgressReporter> StreamingConverter<R> {
             reporter,
             chunk_size: 1024 * 1024,
             template: None,
+            incremental: IncrementalCompiler::new(),
+            force_rebuild: false,
         }
     }
 
@@ -75,10 +83,45 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         self
     }
 
+    /// Enable or disable incremental compilation (enabled by default).
+    pub fn with_incremental(mut self, enabled: bool) -> Self {
+        self.incremental = if enabled {
+            IncrementalCompiler::new()
+        } else {
+            IncrementalCompiler::disabled()
+        };
+        self
+    }
+
+    /// Force a full rebuild even when the source and dependencies are unchanged.
+    pub fn with_force_rebuild(mut self, force: bool) -> Self {
+        self.force_rebuild = force;
+        self
+    }
+
+    /// Snapshot of incremental build statistics: `(skips, builds)`.
+    pub fn incremental_stats(&self) -> (u64, u64) {
+        self.incremental.stats()
+    }
+
     /// Convert `input` → `output`, calling back on each stage.
     pub fn convert(&mut self, input: &Path, output: &Path) -> Result<(), crate::error::LatexError> {
         if !input.exists() {
             return Err(crate::error::LatexError::InvalidPath);
+        }
+
+        if !self.force_rebuild && output.exists() {
+            let deps = crate::watch::discover_inputs(input);
+            if !self.incremental.needs_rebuild(input)
+                || IncrementalCompiler::outputs_up_to_date(input, output, &deps)
+            {
+                self.reporter
+                    .stage_started("skipped (up to date)", 100.0);
+                self.reporter.stage_finished("skipped (up to date)");
+                self.incremental
+                    .mark_built(input, vec![output.to_path_buf()], deps);
+                return Ok(());
+            }
         }
 
         // Stage 1: read source (0–30%)
@@ -103,6 +146,10 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         }
         builder.build(elements, output)?;
         self.reporter.stage_finished("building PDF");
+
+        let deps = crate::watch::discover_inputs(input);
+        self.incremental
+            .mark_built(input, vec![output.to_path_buf()], deps);
 
         Ok(())
     }
@@ -213,5 +260,46 @@ mod tests {
         let mut r = ConsoleReporter;
         r.stage_started("x", 50.0);
         r.stage_finished("x");
+    }
+
+    #[test]
+    fn incremental_skips_unchanged_conversion() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.pdf");
+        std::fs::write(&src, "\\documentclass{article}\\begin{document}Hi\\end{document}").unwrap();
+
+        let mut first = StreamingConverter::new();
+        first.convert(&src, &dst).expect("first conversion");
+        assert!(dst.exists());
+
+        let reporter = CollectingReporter::default();
+        let events = reporter.events.clone();
+        let mut second = StreamingConverter::with_reporter(reporter);
+        second.convert(&src, &dst).expect("second conversion should skip");
+
+        let log = events.lock().unwrap();
+        assert!(log.iter().any(|(name, _)| name == "skipped (up to date)"));
+    }
+
+    #[test]
+    fn force_rebuild_runs_even_when_unchanged() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.pdf");
+        std::fs::write(&src, "\\documentclass{article}\\begin{document}Hi\\end{document}").unwrap();
+
+        let mut converter = StreamingConverter::new();
+        converter.convert(&src, &dst).expect("first conversion");
+
+        let reporter = CollectingReporter::default();
+        let events = reporter.events.clone();
+        let mut converter = StreamingConverter::with_reporter(reporter)
+            .with_force_rebuild(true);
+        converter.convert(&src, &dst).expect("forced conversion");
+
+        let log = events.lock().unwrap();
+        assert!(!log.iter().any(|(name, _)| name == "skipped (up to date)"));
+        assert!(log.iter().any(|(name, _)| name == "reading source"));
     }
 }

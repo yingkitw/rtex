@@ -116,7 +116,7 @@
   - `Color::parse` accepts named colors, `#RRGGBB`/`RGB` hex, and `r,g,b` decimal triples
   - `\textcolor{color}{text}` parsed as `TexElement::ColoredText`; PDF builder applies `rg` operator
   - `ContentStream::set_color` added for non-stroking RGB color changes
-  - `\colorbox` deferred — requires rectangle fill primitive
+  - `\colorbox` / `\fcolorbox` parsed and rendered with colored rectangle backgrounds
 
 #### Layout Engine
 - [x] **Improve layout engine** - `src/layout.rs`
@@ -210,6 +210,7 @@
   - Skips rebuild when source and dependencies are unchanged
   - Dependency mtime tracking: rebuilds when `.tex` includes or `.bib` files change
   - Hit-rate statistics for build optimization
+  - Wired into `StreamingConverter` (enabled by default) with CLI `--force` and `--no-incremental`
 - [x] **Parallel processing** - `src/parallel.rs`
   - `ParallelConverter` with configurable worker-thread pool
   - `convert_batch` for independent `(input, output)` pairs
@@ -250,16 +251,16 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
   - TOML/JSON load and save
   - `PdfBuilder::with_template()` integration
 - [x] **Incremental / cached compilation** — `DocumentCache` (content-hash AST caching) + `IncrementalCompiler` (source-hash + dependency mtime tracking)
-- **WASM target** (Typst) — run in browser with zero infrastructure
-- **Multiple output formats** (Pandoc) — HTML, DOCX, EPUB from same source
-- **On-demand package fetching** (Tectonic) — download missing packages automatically
-- **PDF metadata (Info dictionary)** — Title, Author, Creator, Producer, CreationDate — IMPLEMENTED
+- **WASM target** (Typst) — compile to `wasm32-unknown-unknown` for browser-side conversion; high value for zero-infrastructure preview UIs
+- **Multiple output formats** (Pandoc) — HTML, DOCX, EPUB from same parsed AST
+- **On-demand package fetching** (Tectonic) — download missing `.sty`/`.cls` packages automatically
+- [x] **PDF metadata (Info dictionary)** — Title, Author, Creator, Producer, CreationDate in `PdfBuilder`
 - [x] **Real-time preview / watch mode** — `watch_single`/`watch_batch` poll for file changes; CLI `--watch` flag
 
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 321 (100% passing)
+- Tests: 325 (100% passing)
 - Warnings: 0
 - Math symbols: 566
 - LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)

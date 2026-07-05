@@ -110,6 +110,8 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
   - Optional: output file path (defaults to `output/<input_stem>.pdf`)
   - `--watch`: Poll for file changes and auto-rebuild (dependency-aware)
   - `--template <path>`: Apply a TOML template for styling
+  - `--force`: Force rebuild even when source and dependencies are unchanged
+  - `--no-incremental`: Disable incremental compilation and always rebuild
 - Minimal error handling delegation to library
 
 ### Tests

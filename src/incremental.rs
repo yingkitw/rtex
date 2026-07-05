@@ -133,6 +133,21 @@ impl IncrementalCompiler {
     pub fn stats(&self) -> (u64, u64) {
         (self.skips, self.builds)
     }
+
+    /// Return true when `output` is at least as new as `source` and all dependencies.
+    pub fn outputs_up_to_date(source: &Path, output: &Path, deps: &[PathBuf]) -> bool {
+        if !output.exists() {
+            return false;
+        }
+        let Some(out_mtime) = mtime(output) else {
+            return false;
+        };
+        if mtime(source).is_some_and(|src| src > out_mtime) {
+            return false;
+        }
+        deps.iter()
+            .all(|dep| mtime(dep).is_none_or(|dep_mtime| dep_mtime <= out_mtime))
+    }
 }
 
 impl Default for IncrementalCompiler {
@@ -236,6 +251,27 @@ mod tests {
         inc.skips = 3;
         inc.builds = 1;
         assert_eq!(inc.hit_rate(), 0.75);
+    }
+
+    #[test]
+    fn outputs_up_to_date_when_output_is_newer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let out = tmp.path().join("doc.pdf");
+        write_file(&src, "hello");
+        write_file(&out, "pdf");
+        assert!(IncrementalCompiler::outputs_up_to_date(&src, &out, &[]));
+    }
+
+    #[test]
+    fn outputs_not_up_to_date_when_source_is_newer() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let out = tmp.path().join("doc.pdf");
+        write_file(&out, "pdf");
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        write_file(&src, "changed");
+        assert!(!IncrementalCompiler::outputs_up_to_date(&src, &out, &[]));
     }
 
     #[test]

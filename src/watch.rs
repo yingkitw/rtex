@@ -50,8 +50,7 @@ where
 }
 
 /// Discover `\input{...}` dependencies in a `.tex` file.
-/// Returns absolute or relative paths as they appear in the source.
-fn discover_inputs(path: &Path) -> Vec<PathBuf> {
+pub(crate) fn discover_inputs(path: &Path) -> Vec<PathBuf> {
     let content = fs::read_to_string(path).unwrap_or_default();
     let mut deps = Vec::new();
     let base_dir = path.parent().unwrap_or_else(|| Path::new("."));

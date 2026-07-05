@@ -1,6 +1,6 @@
 [package]
 name = "rtex"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Native TeX to PDF converter written in Rust with zero external LaTeX dependencies"
 authors = ["Ying Kit WONG"]

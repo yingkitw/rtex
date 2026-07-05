@@ -18,10 +18,18 @@ struct Cli {
 
     #[arg(short, long, help = "Path to a TOML template file for styling")]
     template: Option<PathBuf>,
+
+    #[arg(long, help = "Force rebuild even when source and dependencies are unchanged")]
+    force: bool,
+
+    #[arg(long, help = "Disable incremental compilation and always rebuild")]
+    no_incremental: bool,
 }
 
 fn build_converter(cli: &Cli) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
-    let mut converter = StreamingConverter::with_reporter(ConsoleReporter);
+    let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+        .with_incremental(!cli.no_incremental)
+        .with_force_rebuild(cli.force);
     if let Some(path) = &cli.template {
         let template = DocumentTemplate::from_toml(path)?;
         converter = converter.with_template(template);
@@ -52,8 +60,12 @@ fn main() -> anyhow::Result<()> {
     let input_path = cli.input.clone();
     if cli.watch {
         let template_path = cli.template.clone();
+        let force = cli.force;
+        let incremental = !cli.no_incremental;
         let result: Result<(), anyhow::Error> = watch_single(&input_path, &output, move |inp, out| {
-            let mut converter = StreamingConverter::with_reporter(ConsoleReporter);
+            let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+                .with_incremental(incremental)
+                .with_force_rebuild(force);
             if let Some(path) = &template_path {
                 let template = DocumentTemplate::from_toml(path)?;
                 converter = converter.with_template(template);

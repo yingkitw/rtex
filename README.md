@@ -88,6 +88,19 @@ Specify custom output path:
 cargo run -- input.tex -o custom_output.pdf
 ```
 
+Incremental compilation skips unchanged sources (enabled by default). Force a rebuild or disable incremental mode:
+
+```bash
+cargo run -- input.tex --force
+cargo run -- input.tex --no-incremental
+```
+
+Watch mode recompiles when the source or `\input` dependencies change:
+
+```bash
+cargo run -- input.tex --watch
+```
+
 Or after building:
 
 ```bash
