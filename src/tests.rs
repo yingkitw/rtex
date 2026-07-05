@@ -138,6 +138,20 @@ Test document.
     }
 
     #[test]
+    fn test_convert_tex_string_html() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+\section{Hello}
+HTML output test.
+\end{document}
+"#;
+        let html = convert_tex_string(tex, OutputFormat::Html).unwrap();
+        let text = String::from_utf8(html).unwrap();
+        assert!(text.contains("<!DOCTYPE html>"));
+        assert!(text.contains("HTML output test."));
+    }
+
+    #[test]
     fn test_convert_tex_string_to_pdf_bytes() {
         let tex = r#"\documentclass{article}
 \begin{document}

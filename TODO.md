@@ -252,15 +252,15 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
   - `PdfBuilder::with_template()` integration
 - [x] **Incremental / cached compilation** — `DocumentCache` (content-hash AST caching) + `IncrementalCompiler` (source-hash + dependency mtime tracking)
 - [x] **WASM target** (Typst) — `convert_tex_string_to_pdf_bytes()` in-memory API + embedded fonts + `wasm` feature with `wasm-bindgen` bindings for browser-side conversion
-- **Multiple output formats** (Pandoc) — HTML, DOCX, EPUB from same parsed AST
-- **On-demand package fetching** (Tectonic) — download missing `.sty`/`.cls` packages automatically
+- [x] **Multiple output formats** (Pandoc) — `src/output/` renders parsed AST to HTML, DOCX, and EPUB; CLI `--format` flag
+- [x] **On-demand package fetching** (Tectonic) — `src/packages/` scans preamble and downloads missing `.sty`/`.cls` from CTAN; CLI `--fetch-packages`
 - [x] **PDF metadata (Info dictionary)** — Title, Author, Creator, Producer, CreationDate in `PdfBuilder`
 - [x] **Real-time preview / watch mode** — `watch_single`/`watch_batch` poll for file changes; CLI `--watch` flag
 
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 331 (100% passing)
+- Tests: 339 (100% passing)
 - Warnings: 0
 - Math symbols: 566
 - LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)

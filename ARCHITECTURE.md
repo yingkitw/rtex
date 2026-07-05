@@ -172,6 +172,28 @@ rtex targets `wasm32-unknown-unknown` for zero-infrastructure browser preview:
 
 Build: `cargo build --target wasm32-unknown-unknown --features wasm --release`
 
+## Multi-Format Output
+
+The `src/output/` module renders the same parsed `TexElement` AST to multiple formats:
+
+| Format | Module | Notes |
+|--------|--------|-------|
+| PDF | `pdf/builder.rs` | Default; full layout engine |
+| HTML | `output/html.rs` | Semantic HTML with embedded CSS |
+| DOCX | `output/docx.rs` | Minimal OOXML packaged as ZIP |
+| EPUB | `output/epub.rs` | EPUB 3 package with XHTML chapter |
+
+Public API: `render_elements(elements, OutputFormat)` and `convert_tex_file(path, output, &ConversionOptions)`.
+
+## Package Fetching
+
+The `src/packages/` module provides Tectonic-style on-demand fetching:
+
+- `PackageFetcher::scan_dependencies(tex)` — finds `\documentclass`, `\usepackage`, `\RequirePackage`
+- `PackageFetcher::ensure_packages(...)` — downloads missing `.cls`/`.sty` from CTAN mirrors into `.rtex/cache`
+- Downloaded paths are added to `TexParser` search paths for `\input` resolution
+
+## File Organization
 
 ```
 rtex/
@@ -180,6 +202,8 @@ rtex/
 │   ├── lib.rs              # Core conversion logic & public API
 │   ├── wasm.rs             # wasm-bindgen exports (feature: wasm)
 │   ├── fonts.rs            # Embedded DejaVu Sans font data
+│   ├── output/             # HTML, DOCX, EPUB renderers
+│   ├── packages/           # CTAN package scanning and fetching
 │   ├── main.rs             # CLI entry point (binary: rtex)
 │   ├── error.rs            # Structured error types with Position tracking
 │   ├── config.rs           # Configuration system with quality presets

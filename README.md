@@ -4,7 +4,8 @@ A native TeX to PDF converter CLI written in Rust with **no external dependencie
 
 ## Features
 
-- **Native TeX to PDF conversion** - No pdflatex or LaTeX installation required!
+- **Multiple output formats** — PDF (default), HTML, DOCX, EPUB from the same parsed AST
+- **On-demand package fetching** — download missing `.sty`/`.cls` files from CTAN mirrors
 - Pure Rust implementation with built-in TeX parser
 - Simple CLI interface
 - Trait-based architecture for extensibility
@@ -101,6 +102,21 @@ Watch mode recompiles when the source or `\input` dependencies change:
 cargo run -- input.tex --watch
 ```
 
+Convert to HTML, DOCX, or EPUB from the same parsed AST:
+
+```bash
+cargo run -- input.tex --format html
+cargo run -- input.tex --format docx -o report.docx
+cargo run -- input.tex --format epub
+```
+
+Fetch missing LaTeX packages from CTAN before conversion:
+
+```bash
+cargo run -- input.tex --fetch-packages
+cargo run -- input.tex --fetch-packages --package-cache ~/.cache/rtex/texmf
+```
+
 Or after building:
 
 ```bash
@@ -121,7 +137,9 @@ The project follows KISS and DRY principles with a trait-based design:
 - `TexParser`: Parses LaTeX syntax into structured elements
 - `PdfBuilder`: Generates PDF documents from parsed elements
 - `convert_tex_to_pdf`: Convenience function for direct conversion
-- `convert_tex_string_to_pdf_bytes`: In-memory conversion (no filesystem; WASM-ready)
+- `convert_tex_string_to_pdf_bytes`: In-memory PDF conversion (WASM-ready)
+- `convert_tex_string` / `convert_tex_file`: Multi-format conversion (PDF, HTML, DOCX, EPUB)
+- `OutputFormat`, `PackageFetcher`: Format selection and CTAN package cache
 
 See `ARCHITECTURE.md` for detailed design documentation.
 

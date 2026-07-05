@@ -161,23 +161,26 @@ impl TexParser {
         let filename = self.read_until('}');
         self.position += 1; // skip closing brace
 
-        let mut path = if let Some(ref base) = self.base_dir {
-            base.join(&filename)
-        } else {
-            PathBuf::from(&filename)
-        };
-        // Ensure .tex extension if missing
-        if path.extension().is_none() {
-            path.set_extension("tex");
+        let mut candidates = Vec::new();
+        if let Some(ref base) = self.base_dir {
+            candidates.push(base.join(&filename));
         }
+        for dir in &self.search_paths {
+            candidates.push(dir.join(&filename));
+        }
+        candidates.push(PathBuf::from(&filename));
 
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            // Splice included content into current source at current position
-            let before = &self.content[..self.position];
-            let after = &self.content[self.position..];
-            self.content = format!("{}{}\n{}", before, content, after);
+        for mut path in candidates {
+            if path.extension().is_none() {
+                path.set_extension("tex");
+            }
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let before = &self.content[..self.position];
+                let after = &self.content[self.position..];
+                self.content = format!("{}{}\n{}", before, content, after);
+                break;
+            }
         }
-        // Return None so the loop re-parses the spliced content
         None
     }
 

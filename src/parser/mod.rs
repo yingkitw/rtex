@@ -78,6 +78,7 @@ pub struct TexParser {
     position: usize,
     plugins: Option<crate::plugins::PluginRegistry>,
     base_dir: Option<PathBuf>,
+    search_paths: Vec<PathBuf>,
 }
 
 impl TexParser {
@@ -88,7 +89,7 @@ impl TexParser {
         let mut store = crate::macros::MacroStore::new();
         let stripped = store.extract_definitions(&content);
         let expanded = store.expand_all(&stripped);
-        Self { content: expanded, position: 0, plugins: None, base_dir: None }
+        Self { content: expanded, position: 0, plugins: None, base_dir: None, search_paths: Vec::new() }
     }
 
     /// Create a parser with a plugin registry for custom command and
@@ -102,6 +103,12 @@ impl TexParser {
     /// Set the base directory for resolving relative paths in `\input`.
     pub fn with_base_dir(mut self, base_dir: &Path) -> Self {
         self.base_dir = Some(base_dir.to_path_buf());
+        self
+    }
+
+    /// Add directories searched after `base_dir` when resolving `\input{...}`.
+    pub fn with_search_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.search_paths = paths;
         self
     }
 

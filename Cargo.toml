@@ -33,6 +33,8 @@ font-subset = "0.1.0"
 wasm-bindgen = { version = "0.2", optional = true }
 resvg = "0.45.1"
 usvg = "0.45.1"
+zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
 
 [dev-dependencies]
 sha2 = "0.10"
