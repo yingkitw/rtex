@@ -2,6 +2,9 @@
 //!
 //! Handles all text rendering operations for PDF generation.
 
+use crate::tex::dimensions::PT_TO_SP;
+use crate::tex::{Dimension, LineBreaker};
+
 /// Utilities for normalizing and wrapping text before PDF rendering.
 pub struct PdfTextRenderer;
 
@@ -119,11 +122,36 @@ impl PdfTextRenderer {
 
         lines
     }
+
+    /// Word-wrap `text` using Knuth–Plass line breaking at `line_width_pt`.
+    ///
+    /// Character widths are estimated as `font_size_pt * 0.55` per scalar.
+    pub fn wrap_text_by_width(text: &str, line_width_pt: f32, font_size_pt: f32) -> Vec<String> {
+        if line_width_pt <= 0.0 || font_size_pt <= 0.0 {
+            return Self::wrap_text(text, 80);
+        }
+
+        let char_width_sp = ((font_size_pt * 0.55) * PT_TO_SP as f32).round() as i64;
+        let line_width_sp = (line_width_pt * PT_TO_SP as f32).round() as i64;
+        let breaker = LineBreaker::new(Dimension::from_sp(line_width_sp))
+            .with_char_width(Dimension::from_sp(char_width_sp.max(1)));
+        breaker.break_text(text)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_wrap_text_by_width() {
+        let text = "This is a long line that needs wrapping at a fixed width";
+        let lines = PdfTextRenderer::wrap_text_by_width(text, 120.0, 11.0);
+        assert!(lines.len() > 1);
+        for line in &lines {
+            assert!(!line.is_empty());
+        }
+    }
 
     #[test]
     fn test_normalize_text() {

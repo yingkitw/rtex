@@ -183,13 +183,24 @@ impl Default for DictBuilder {
 /// Content stream builder for PDF pages
 pub struct ContentStream {
     operations: Vec<u8>,
+    /// When `false`, text is emitted as WinAnsi literal strings for standard fonts.
+    embedded_unicode: bool,
 }
 
 impl ContentStream {
     pub fn new() -> Self {
+        Self::with_encoding(true)
+    }
+
+    pub fn with_encoding(embedded_unicode: bool) -> Self {
         ContentStream {
             operations: Vec::new(),
+            embedded_unicode,
         }
+    }
+
+    pub fn embedded_unicode(&self) -> bool {
+        self.embedded_unicode
     }
 
     /// Begin text block
@@ -239,8 +250,16 @@ impl ContentStream {
         let _ = writeln!(&mut self.operations, "{} {} {} {} {} {} cm", a, b, c, d, e, f);
     }
 
-    /// Show text using UTF-16BE hex encoding for Unicode support
+    /// Show text — UTF-16BE for embedded fonts, WinAnsi literals for standard fonts.
     pub fn show_text(&mut self, text: &str) {
+        if self.embedded_unicode {
+            self.show_text_utf16(text);
+        } else {
+            self.show_text_winansi(text);
+        }
+    }
+
+    fn show_text_utf16(&mut self, text: &str) {
         // Encode text as UTF-16BE
         let mut utf16_bytes = Vec::new();
         for ch in text.chars() {
@@ -269,10 +288,31 @@ impl ContentStream {
         self.operations.extend_from_slice(b"> Tj\n");
     }
 
+    fn show_text_winansi(&mut self, text: &str) {
+        self.operations.push(b'(');
+        for ch in text.chars() {
+            match ch {
+                '\\' => self.operations.extend_from_slice(b"\\\\"),
+                '(' => self.operations.extend_from_slice(b"\\("),
+                ')' => self.operations.extend_from_slice(b"\\)"),
+                '\n' | '\r' => self.operations.push(b' '),
+                '\t' => self.operations.push(b' '),
+                c if (c as u32) <= 0x7E => self.operations.push(c as u8),
+                _ => self.operations.push(b'?'),
+            }
+        }
+        self.operations.extend_from_slice(b") Tj\n");
+    }
+
     /// Show text with per-segment kerning adjustments using the PDF `TJ`
     /// operator.  `segments` is a slice of `(text, adjustment)` pairs where
     /// `adjustment` is in thousandths of an em (negative = tighter).
     pub fn show_text_with_kerning(&mut self, segments: &[(String, i16)]) {
+        if !self.embedded_unicode {
+            let text: String = segments.iter().map(|(t, _)| t.as_str()).collect();
+            self.show_text_winansi(&text);
+            return;
+        }
         self.operations.push(b'[');
         for (text, adj) in segments {
             let mut utf16_bytes = Vec::new();

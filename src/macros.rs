@@ -312,6 +312,15 @@ fn extract_braced(text: &str, start: usize) -> Option<(String, usize)> {
     None
 }
 
+/// Expand user-defined macros in `text` without structured parsing.
+///
+/// Used for intermediate artifact output and inspection.
+pub fn expand_document(text: &str) -> String {
+    let mut store = MacroStore::new();
+    let stripped = store.extract_definitions(text);
+    store.expand_all(&stripped)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

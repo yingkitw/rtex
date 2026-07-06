@@ -556,9 +556,13 @@ Test file size
 
     let pdf = convert_latex_to_bytes(latex).unwrap();
 
-    // PDF should be reasonable size
+    // ASCII-only documents use standard Helvetica (no embedded font)
     assert!(pdf.len() > 500, "PDF too small: {} bytes", pdf.len());
-    assert!(pdf.len() < 2_000_000, "PDF too large: {} bytes", pdf.len());
+    assert!(
+        pdf.len() < 100_000,
+        "Simple ASCII PDF should be <100KB, got {} bytes",
+        pdf.len()
+    );
 }
 
 #[test]

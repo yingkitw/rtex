@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::fs;
 use rtex::{
     ConversionOptions, OutputFormat, StreamingConverter, ConsoleReporter,
-    watch_single, DocumentTemplate, convert_tex_file,
+    watch_single, DocumentTemplate,
 };
 
 #[derive(Parser)]
@@ -36,6 +36,9 @@ struct Cli {
 
     #[arg(long, help = "Disable incremental compilation and always rebuild")]
     no_incremental: bool,
+
+    #[arg(long, help = "Keep intermediate files (.expanded.tex, .ast.json, .meta.json)")]
+    keep_intermediate: bool,
 }
 
 fn parse_format(raw: &str) -> anyhow::Result<OutputFormat> {
@@ -58,18 +61,37 @@ fn conversion_options(cli: &Cli, format: OutputFormat) -> ConversionOptions {
         format,
         fetch_packages: cli.fetch_packages,
         package_cache: cli.package_cache.clone(),
+        keep_intermediate: cli.keep_intermediate,
     }
 }
 
-fn build_converter(cli: &Cli) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
+fn build_converter(cli: &Cli, options: ConversionOptions) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
     let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+        .with_options(options)
         .with_incremental(!cli.no_incremental)
-        .with_force_rebuild(cli.force);
+        .with_force_rebuild(cli.force)
+        .with_keep_intermediate(cli.keep_intermediate);
     if let Some(path) = &cli.template {
         let template = DocumentTemplate::from_toml(path)?;
         converter = converter.with_template(template);
     }
     Ok(converter)
+}
+
+fn run_conversion(
+    cli: &Cli,
+    input: &PathBuf,
+    output: &PathBuf,
+    options: ConversionOptions,
+) -> anyhow::Result<()> {
+    let mut converter = build_converter(cli, options)?;
+    converter.convert(input, output)?;
+    println!(
+        "Successfully converted {} to {}",
+        input.display(),
+        output.display()
+    );
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -88,16 +110,24 @@ fn main() -> anyhow::Result<()> {
 
     let input_path = cli.input.clone();
     if cli.watch {
-        if format != OutputFormat::Pdf {
-            anyhow::bail!("Watch mode currently supports PDF output only");
-        }
         let template_path = cli.template.clone();
         let force = cli.force;
         let incremental = !cli.no_incremental;
+        let keep_intermediate = cli.keep_intermediate;
+        let fetch_packages = cli.fetch_packages;
+        let package_cache = cli.package_cache.clone();
         let result: Result<(), anyhow::Error> = watch_single(&input_path, &output, move |inp, out| {
+            let options = ConversionOptions {
+                format,
+                fetch_packages,
+                package_cache: package_cache.clone(),
+                keep_intermediate,
+            };
             let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+                .with_options(options)
                 .with_incremental(incremental)
-                .with_force_rebuild(force);
+                .with_force_rebuild(force)
+                .with_keep_intermediate(keep_intermediate);
             if let Some(path) = &template_path {
                 let template = DocumentTemplate::from_toml(path)?;
                 converter = converter.with_template(template);
@@ -110,18 +140,9 @@ fn main() -> anyhow::Result<()> {
             eprintln!("Watch mode error: {}", e);
             std::process::exit(1);
         }
-    } else if format == OutputFormat::Pdf && !cli.fetch_packages {
-        let mut converter = build_converter(&cli)?;
-        converter.convert(&input_path, &output)?;
     } else {
-        convert_tex_file(&input_path, &output, &options)?;
+        run_conversion(&cli, &input_path, &output, options)?;
     }
-
-    println!(
-        "Successfully converted {} to {}",
-        input_path.display(),
-        output.display()
-    );
 
     Ok(())
 }

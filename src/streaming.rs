@@ -5,10 +5,14 @@
 //! RAM when loaded as a single `String`.
 
 use std::fs::File;
+use std::fs;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
 use crate::incremental::IncrementalCompiler;
+use crate::output::{render_elements, OutputFormat};
+use crate::packages::PackageFetcher;
+use crate::ConversionOptions;
 
 /// Callback trait for reporting conversion progress.
 pub trait ProgressReporter: Send {
@@ -39,7 +43,7 @@ impl ProgressReporter for ConsoleReporter {
     }
 }
 
-/// Converts a LaTeX file to PDF with progress reporting and
+/// Converts a LaTeX file to the configured output format with progress reporting and
 /// memory-conscious chunked reading.
 pub struct StreamingConverter<R: ProgressReporter> {
     reporter: R,
@@ -47,6 +51,8 @@ pub struct StreamingConverter<R: ProgressReporter> {
     template: Option<crate::template::DocumentTemplate>,
     incremental: IncrementalCompiler,
     force_rebuild: bool,
+    keep_intermediate: bool,
+    options: ConversionOptions,
 }
 
 impl StreamingConverter<NoOpReporter> {
@@ -57,8 +63,17 @@ impl StreamingConverter<NoOpReporter> {
             template: None,
             incremental: IncrementalCompiler::new(),
             force_rebuild: false,
+            keep_intermediate: false,
+            options: ConversionOptions::default(),
         }
     }
+}
+
+fn package_cache_dir(options: &ConversionOptions) -> std::path::PathBuf {
+    options
+        .package_cache
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from(".rtex/cache"))
 }
 
 impl<R: ProgressReporter> StreamingConverter<R> {
@@ -69,7 +84,15 @@ impl<R: ProgressReporter> StreamingConverter<R> {
             template: None,
             incremental: IncrementalCompiler::new(),
             force_rebuild: false,
+            keep_intermediate: false,
+            options: ConversionOptions::default(),
         }
+    }
+
+    /// Configure output format, package fetching, and intermediate artifacts.
+    pub fn with_options(mut self, options: ConversionOptions) -> Self {
+        self.options = options;
+        self
     }
 
     pub fn with_chunk_size(mut self, size: usize) -> Self {
@@ -96,6 +119,12 @@ impl<R: ProgressReporter> StreamingConverter<R> {
     /// Force a full rebuild even when the source and dependencies are unchanged.
     pub fn with_force_rebuild(mut self, force: bool) -> Self {
         self.force_rebuild = force;
+        self
+    }
+
+    /// Keep intermediate artifacts (`.expanded.tex`, `.ast.json`, `.meta.json`).
+    pub fn with_keep_intermediate(mut self, keep: bool) -> Self {
+        self.keep_intermediate = keep;
         self
     }
 
@@ -129,23 +158,61 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         let content = self.read_file(input)?;
         self.reporter.stage_finished("reading source");
 
+        let expanded = crate::macros::expand_document(&content);
+
+        let mut search_paths = Vec::new();
+        if self.options.fetch_packages {
+            let fetcher = PackageFetcher::new(package_cache_dir(&self.options));
+            let _ = fetcher.prepare_source(&content);
+            search_paths = fetcher.search_paths();
+        }
+
         // Stage 2: parse (30–60%)
         self.reporter.stage_started("parsing", 30.0);
         let mut parser = crate::parser::TexParser::new(content);
         if let Some(parent) = input.parent() {
             parser = parser.with_base_dir(parent);
         }
+        if !search_paths.is_empty() {
+            parser = parser.with_search_paths(search_paths);
+        }
         let elements = parser.parse();
         self.reporter.stage_finished("parsing");
 
-        // Stage 3: build PDF (60–100%)
-        self.reporter.stage_started("building PDF", 60.0);
-        let mut builder = crate::pdf::builder::PdfBuilder::new();
-        if let Some(template) = self.template.take() {
-            builder = builder.with_template(template);
+        // Stage 3: build output (60–100%)
+        let build_stage = match self.options.format {
+            OutputFormat::Pdf => "building PDF",
+            OutputFormat::Html => "building HTML",
+            OutputFormat::Docx => "building DOCX",
+            OutputFormat::Epub => "building EPUB",
+        };
+        self.reporter.stage_started(build_stage, 60.0);
+        match self.options.format {
+            OutputFormat::Pdf => {
+                let mut builder = crate::pdf::builder::PdfBuilder::new();
+                if let Some(template) = self.template.take() {
+                    builder = builder.with_template(template);
+                }
+                builder.build(elements.clone(), output)?;
+            }
+            format => {
+                let bytes = render_elements(elements.clone(), format)?;
+                fs::write(output, bytes).map_err(|source| crate::error::LatexError::IoError {
+                    path: output.to_path_buf(),
+                    source,
+                })?;
+            }
         }
-        builder.build(elements, output)?;
-        self.reporter.stage_finished("building PDF");
+        self.reporter.stage_finished(build_stage);
+
+        if self.keep_intermediate {
+            crate::intermediate::write_intermediates(
+                output,
+                &expanded,
+                &elements,
+                self.options.format,
+            )?;
+        }
 
         let deps = crate::watch::discover_inputs(input);
         self.incremental
@@ -301,5 +368,46 @@ mod tests {
         let log = events.lock().unwrap();
         assert!(!log.iter().any(|(name, _)| name == "skipped (up to date)"));
         assert!(log.iter().any(|(name, _)| name == "reading source"));
+    }
+
+    #[test]
+    fn streaming_converts_html() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.html");
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}Hello\\end{document}",
+        )
+        .unwrap();
+
+        let mut converter = StreamingConverter::new().with_options(
+            ConversionOptions::default().with_format(OutputFormat::Html),
+        );
+        converter.convert(&src, &dst).expect("html conversion");
+
+        let html = std::fs::read_to_string(&dst).unwrap();
+        assert!(html.contains("Hello"));
+        assert!(html.contains("<html"));
+    }
+
+    #[test]
+    fn streaming_writes_intermediate_artifacts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.pdf");
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\title{T}\\begin{document}Hi\\end{document}",
+        )
+        .unwrap();
+
+        let mut converter = StreamingConverter::new().with_keep_intermediate(true);
+        converter.convert(&src, &dst).expect("conversion");
+
+        assert!(dst.exists());
+        assert!(tmp.path().join("doc.expanded.tex").exists());
+        assert!(tmp.path().join("doc.ast.json").exists());
+        assert!(tmp.path().join("doc.meta.json").exists());
     }
 }

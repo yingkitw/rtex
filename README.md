@@ -5,6 +5,7 @@ A native TeX to PDF converter CLI written in Rust with **no external dependencie
 ## Features
 
 - **Multiple output formats** — PDF (default), HTML, DOCX, EPUB from the same parsed AST
+- **Language Server (LSP)** — diagnostics, completions, outline, and hover for `.tex` editors (`rtex-lsp` binary)
 - **On-demand package fetching** — download missing `.sty`/`.cls` files from CTAN mirrors
 - Pure Rust implementation with built-in TeX parser
 - Simple CLI interface
@@ -27,7 +28,7 @@ A native TeX to PDF converter CLI written in Rust with **no external dependencie
   - Title, author, and date metadata
   - Table of contents, list of figures, list of tables
   - Font size commands, colors, alignment, page breaks, horizontal/vertical rules
-  - **201+ LaTeX commands supported**
+  - **228+ LaTeX commands supported**
 
 ## Text Output Quality Validation
 
@@ -41,7 +42,7 @@ This improves final PDF text stability for noisy or mixed TeX input.
 
 ## Mathematical Symbol Support
 
-✅ **Unicode Math Symbols**: Successfully implemented using `lopdf` with UTF-16BE encoding and DejaVu Sans font embedding.
+✅ **Unicode Math Symbols**: Native PDF generator with DejaVu Sans TrueType embedding and Identity-H encoding.
 
 **Supported Features**:
 - 566 mathematical symbols (Greek letters, operators, relations, arrows, integrals, summation)
@@ -53,11 +54,11 @@ This improves final PDF text stability for noisy or mixed TeX input.
 - Fractions with Unicode fraction characters and parenthesized form
 - Proper Unicode text encoding
 
-**Status**: 
+**Status**:
 - ✅ Math formatter: 566 LaTeX commands → Unicode symbols
-- ✅ Font embedding: DejaVu Sans TrueType with full Unicode support
-- ✅ PDF generation: lopdf with UTF-16BE encoding
-- ⚠️ File size: ~750KB per PDF (due to embedded font)
+- ✅ Font strategy: standard Helvetica for ASCII-only docs (~750 bytes); embedded DejaVu subset for Unicode/math
+- ✅ PDF generation: custom `src/pdf/` core
+- Unicode/math documents: ~385 KB (DejaVu subset)
 
 **For production documents**, this native converter now provides good math support. For complex documents with advanced features (TikZ, complex tables, etc.), use pdflatex.
 
@@ -117,6 +118,24 @@ cargo run -- input.tex --fetch-packages
 cargo run -- input.tex --fetch-packages --package-cache ~/.cache/rtex/texmf
 ```
 
+Keep intermediate build artifacts for debugging:
+
+```bash
+cargo run -- input.tex --keep-intermediate
+# Also writes: output/input.expanded.tex, output/input.ast.json, output/input.meta.json
+```
+
+### Language Server (editor integration)
+
+Build and run the LSP server for VS Code, Cursor, or Neovim:
+
+```bash
+cargo build --release --features lsp
+./target/release/rtex-lsp
+```
+
+See [docs/LSP.md](docs/LSP.md) for editor configuration.
+
 Or after building:
 
 ```bash
@@ -141,7 +160,7 @@ The project follows KISS and DRY principles with a trait-based design:
 - `convert_tex_string` / `convert_tex_file`: Multi-format conversion (PDF, HTML, DOCX, EPUB)
 - `OutputFormat`, `PackageFetcher`: Format selection and CTAN package cache
 
-See `ARCHITECTURE.md` for detailed design documentation.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for design documentation and [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for full usage. Documentation index: [docs/README.md](docs/README.md).
 
 ## WebAssembly
 
@@ -194,7 +213,7 @@ cargo test
 ```
 
 The test suite includes:
-- 317 comprehensive tests
+- 343 comprehensive tests
 - Native PDF generation verification
 - File size validation
 - PDF header verification
@@ -203,7 +222,7 @@ The test suite includes:
 - Output directory creation tests
 - Round-trip tests for deterministic conversion
 - Math formatter tests (fractions, roots, symbols, accents, alphabets)
-- Parser tests for 201+ LaTeX commands
+- Parser tests for 228+ LaTeX commands
 
 All tests run without any external dependencies!
 

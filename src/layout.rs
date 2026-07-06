@@ -30,10 +30,15 @@ pub struct LayoutState {
 impl LayoutState {
     /// Initialise a layout using the given page dimensions.
     pub fn new(layout: PageLayout) -> Self {
+        Self::with_encoding(layout, true)
+    }
+
+    /// Initialise layout with the given text encoding mode.
+    pub fn with_encoding(layout: PageLayout, embedded_unicode: bool) -> Self {
         Self {
             layout,
             current_y: layout.content_top(),
-            pages: vec![ContentStream::new()],
+            pages: vec![ContentStream::with_encoding(embedded_unicode)],
             current_font_size: 11.0,
             centering: false,
             raggedleft: false,
@@ -90,8 +95,9 @@ impl LayoutState {
 
     /// Finish the current page and start a fresh one.
     pub fn new_page(&mut self) {
+        let embedded = self.pages.last().map(|p| p.embedded_unicode()).unwrap_or(true);
         self.all_footnotes.push(std::mem::take(&mut self.current_page_footnotes));
-        self.pages.push(ContentStream::new());
+        self.pages.push(ContentStream::with_encoding(embedded));
         self.current_y = self.content_top();
     }
 

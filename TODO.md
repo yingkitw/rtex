@@ -72,6 +72,7 @@
 - [x] **Add module documentation** - Documented lib.rs, parser.rs, error.rs, math_formatter.rs, pdf_builder.rs
 - [x] **Create user guide** - `docs/USER_GUIDE.md` with examples and quick start
 - [x] **Add API documentation** - rustdoc added to all major public APIs (lib.rs, parser.rs, error.rs, pdf_builder.rs, pdf_core.rs, pdf_text_renderer.rs, math_formatter.rs, utils.rs)
+- [x] **Documentation alignment pass** — `SPEC.md`, updated `USER_GUIDE.md`, `KNOWN_LIMITATIONS.md`, expanded crate docs
 
 #### Code Quality
 - [x] **DRY refactoring** - Extracted `src/utils.rs` with `extract_braced`/`extract_braced_inner`
@@ -194,10 +195,10 @@
   - `Token` enum (`Char`, `ControlSequence`, `EndOfFile`)
   - `TexLexer` that tokenizes raw text respecting catcodes, comments, and space/EOL collapse
   - `Dimension` parsed from strings (`pt`, `mm`, `cm`, `in`, `bp`, `em`, `ex`, etc.) into scaled points (sp)
-- [ ] **Advanced TeX features** (future work)
-  - Glue system (stretch / shrink)
-  - Box model (hbox, vbox)
-  - Line breaking (Knuth-Plass algorithm)
+- [x] **Advanced TeX features** — foundational primitives in `src/tex/`
+  - [x] Glue system (`glue.rs`) — `Glue::parse`, `fil`/`fill`/`filll`, `hfill` preset, finite resolve
+  - [x] Box model (`boxes.rs`) — `TeXBox` with width/height/depth, horizontal and vertical
+  - [x] Line breaking (`linebreak.rs`) — Knuth–Plass DP with boxes, glue, penalties; wired into PDF `wrap_text_by_width`
 
 #### Performance
 - [x] **Document cache** - `src/cache.rs`
@@ -224,14 +225,14 @@
   - [x] Image compression — already applied for embedded images
   - [x] Content stream compression — `flate2` FlateDecode on all page streams
   - [x] Remove unused objects — builder creates only referenced objects; no orphans in object graph
-  - Target: <100KB for simple documents
+  - Target: <100KB for simple documents — ACHIEVED via standard Helvetica for ASCII-only docs (~750 bytes); Unicode/math still embeds subsetted DejaVu
 
 ### Low Priority / Future
 
 - [ ] Add support for other LaTeX engines (xelatex, lualatex)
 - [x] Add batch conversion support — `src/parallel.rs`
 - [x] Add progress indicator for long compilations — `StreamingConverter` with `ConsoleReporter`
-- [ ] Add option to keep intermediate files
+- [x] **Add option to keep intermediate files** — `--keep-intermediate` writes `.expanded.tex`, `.ast.json`, `.meta.json` via `src/intermediate.rs`
 - [x] **SVG image support** — rasterize SVG via `resvg`/`usvg` in `ImageInfo::from_path`
 - [ ] Advanced color management (ICC profiles)
 - [ ] PDF/A compliance
@@ -255,17 +256,24 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 - [x] **Multiple output formats** (Pandoc) — `src/output/` renders parsed AST to HTML, DOCX, and EPUB; CLI `--format` flag
 - [x] **On-demand package fetching** (Tectonic) — `src/packages/` scans preamble and downloads missing `.sty`/`.cls` from CTAN; CLI `--fetch-packages`
 - [x] **PDF metadata (Info dictionary)** — Title, Author, Creator, Producer, CreationDate in `PdfBuilder`
-- [x] **Real-time preview / watch mode** — `watch_single`/`watch_batch` poll for file changes; CLI `--watch` flag
+- [x] **Real-time preview / watch mode** — `watch_single`/`watch_batch` poll for file changes; CLI `--watch` supports all output formats via `StreamingConverter`
+
+### Brainstorming (future competitive features)
+
+- [x] **Language Server Protocol (LSP)** — `src/lsp/` diagnostics, completion, symbols, hover; `rtex-lsp` binary (`--features lsp`)
+- **Collaborative editing** — CRDT or OT layer on parsed AST (Overleaf)
+- **Formula OCR input** — photo/screenshot → LaTeX (Mathpix competitor)
+- **Docker/OCI image** — single-container deploy for CI conversion farms
 
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 339 (100% passing)
+- Tests: 383 (100% passing)
 - Warnings: 0
 - Math symbols: 566
 - LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)
-- Documentation: ~45%
-- File size: ~750KB per PDF (content streams compressed, font subsetting active; ~380KB is the embedded DejaVuSans subset — switching to a smaller base font would be needed for <100KB target)
+- Documentation: ~80%
+- File size: ~750 bytes for ASCII-only PDFs; ~385 KB when Unicode/math requires embedded DejaVu subset
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)
@@ -273,4 +281,4 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 - Math symbols: 300+
 - LaTeX commands: 200+
 - Documentation: 80%
-- File size: <100KB (optimized)
+- File size: <100KB (optimized for ASCII; Unicode docs embed subsetted font)

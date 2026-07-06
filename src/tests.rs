@@ -138,6 +138,29 @@ Test document.
     }
 
     #[test]
+    fn test_keep_intermediate_writes_artifacts() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let input_path = temp_dir.path().join("keep.tex");
+        let output_path = temp_dir.path().join("keep.pdf");
+
+        let tex = r#"\documentclass{article}
+\title{Keep Test}
+\begin{document}
+Intermediate artifacts.
+\end{document}
+"#;
+        std::fs::write(&input_path, tex).unwrap();
+
+        let options = ConversionOptions::default().with_keep_intermediate(true);
+        convert_tex_file(&input_path, &output_path, &options).unwrap();
+
+        assert!(output_path.exists());
+        assert!(temp_dir.path().join("keep.expanded.tex").exists());
+        assert!(temp_dir.path().join("keep.ast.json").exists());
+        assert!(temp_dir.path().join("keep.meta.json").exists());
+    }
+
+    #[test]
     fn test_convert_tex_string_html() {
         let tex = r#"\documentclass{article}
 \begin{document}
@@ -598,7 +621,11 @@ This is a test for PDF file size verification.
         if result.is_ok() {
             let metadata = fs::metadata(&output_path).unwrap();
             assert!(metadata.len() >= 500, "PDF should be at least 500 bytes");
-            assert!(metadata.len() <= 1_000_000, "PDF should be less than 1MB for simple doc");
+            assert!(
+                metadata.len() <= 100_000,
+                "ASCII simple doc should be <100KB, got {} bytes",
+                metadata.len()
+            );
         }
     }
 

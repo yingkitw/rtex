@@ -1,7 +1,33 @@
-//! latex-rs - Native TeX to PDF converter
+//! # rtex — Native TeX to multi-format converter
 //!
-//! A self-contained Rust library for converting LaTeX documents to PDF
-//! without requiring an external LaTeX installation.
+//! A self-contained Rust library for converting LaTeX documents to PDF, HTML,
+//! DOCX, or EPUB without an external TeX installation.
+//!
+//! ## Quick example
+//!
+//! ```no_run
+//! use rtex::{convert_tex_to_pdf, convert_tex_string, OutputFormat};
+//! use std::path::Path;
+//!
+//! // File → PDF
+//! convert_tex_to_pdf(Path::new("doc.tex"), Path::new("doc.pdf")).unwrap();
+//!
+//! // String → HTML
+//! let html = convert_tex_string("\\documentclass{article}\\begin{document}Hi\\end{document}", OutputFormat::Html).unwrap();
+//! ```
+//!
+//! ## Modules
+//!
+//! - [`NativeTexConverter`] — main conversion entry point
+//! - [`OutputFormat`] — PDF, HTML, DOCX, EPUB selection
+//! - [`PackageFetcher`] — on-demand CTAN package download
+//! - [`TexParser`] / [`TexElement`] — LaTeX parsing AST
+//! - [`PdfBuilder`] — native PDF generation
+//!
+//! ## Feature flags
+//!
+//! - `wasm` — enables `wasm-bindgen` exports for browser use
+//! - `lsp` — builds the `rtex-lsp` language server binary
 
 use std::path::Path;
 use std::fs;
@@ -29,8 +55,10 @@ mod parallel;
 mod watch;
 mod common;
 mod fonts;
+mod intermediate;
 mod output;
 mod packages;
+pub mod lsp;
 pub(crate) mod utils;
 pub mod error;
 pub mod config;
@@ -43,17 +71,33 @@ pub use parser::{TexElement, TexParser};
 pub use pdf::builder::PdfBuilder;
 pub use output::{OutputFormat, DocumentMeta, render_elements};
 pub use packages::{PackageFetcher, PackageRequest};
+pub use intermediate::{write_intermediates, sibling_artifact, IntermediateMeta};
+pub use macros::expand_document;
 pub use math_formatter::MathFormatter;
 pub use streaming::{StreamingConverter, ProgressReporter, NoOpReporter, ConsoleReporter};
 pub use plugins::{Plugin, PluginRegistry, TodayPlugin, UrlPlugin, PluginError, FormatType, CustomFormatPlugin};
 pub use typography::{TypographyEngine, TypographyOptions, KerningTable, TextSegment};
-pub use tex::{CatCode, Token, TexLexer, Dimension};
+pub use tex::{
+    CatCode, Token, TexLexer, Dimension, Glue, Stretch, InfiniteUnit, TeXBox, BoxDirection,
+    LineItem, BrokenLine, TokenizedParagraph, LineBreaker, line_badness,
+};
 pub use cache::{DocumentCache, CacheConfig, CacheStats};
 pub use template::{DocumentTemplate, PaperSize, Margins, HeadingScale, ColorScheme, TitlePageConfig};
 pub use incremental::IncrementalCompiler;
 pub use math_processor::{MathProcessor, MathCommandType, MathCommandInfo};
 pub use parallel::{ParallelConverter, convert_dir};
 pub use watch::{watch_single, watch_batch};
+pub use lsp::{
+    analyze_diagnostics, command_completions, completions_at, document_symbols, hover_at,
+    TexCompletion, TexDiagnostic, TexPosition, TexRange, TexSymbol, Severity, CompletionKind,
+    SymbolKind,
+};
+
+/// Run the rtex language server over stdio (requires `lsp` feature).
+#[cfg(feature = "lsp")]
+pub fn run_lsp_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    lsp::run_stdio_server()
+}
 pub use common::{Clear, Stats};
 pub use bibliography::{BibEntry, BibEntryType, BibliographyManager};
 
@@ -63,6 +107,7 @@ pub struct ConversionOptions {
     pub format: OutputFormat,
     pub fetch_packages: bool,
     pub package_cache: Option<std::path::PathBuf>,
+    pub keep_intermediate: bool,
 }
 
 impl Default for ConversionOptions {
@@ -71,6 +116,7 @@ impl Default for ConversionOptions {
             format: OutputFormat::Pdf,
             fetch_packages: false,
             package_cache: None,
+            keep_intermediate: false,
         }
     }
 }
@@ -83,6 +129,11 @@ impl ConversionOptions {
 
     pub fn with_fetch_packages(mut self, fetch: bool) -> Self {
         self.fetch_packages = fetch;
+        self
+    }
+
+    pub fn with_keep_intermediate(mut self, keep: bool) -> Self {
+        self.keep_intermediate = keep;
         self
     }
 }
@@ -174,13 +225,27 @@ impl NativeTexConverter {
 
     /// Convert TeX source to output bytes in the configured format.
     pub fn convert_string(&self, tex: &str) -> Result<Vec<u8>, LatexError> {
-        self.convert_string_in_dir(tex, None)
+        self.convert_string_in_dir(tex, None, None)
     }
 
     /// Convert TeX source with an optional base directory for `\input` and graphics.
-    pub fn convert_string_in_dir(&self, tex: &str, base_dir: Option<&Path>) -> Result<Vec<u8>, LatexError> {
+    pub fn convert_string_in_dir(
+        &self,
+        tex: &str,
+        base_dir: Option<&Path>,
+        output: Option<&Path>,
+    ) -> Result<Vec<u8>, LatexError> {
         let elements = self.parse_content(tex, base_dir);
-        render_elements(elements, self.options.format)
+        let bytes = render_elements(elements.clone(), self.options.format)?;
+
+        if self.options.keep_intermediate {
+            if let Some(out) = output {
+                let expanded = expand_document(tex);
+                write_intermediates(out, &expanded, &elements, self.options.format)?;
+            }
+        }
+
+        Ok(bytes)
     }
 
     /// Convenience constructor that creates a converter and runs the conversion.
@@ -210,7 +275,7 @@ impl TexConverter for NativeTexConverter {
 
         let content = fs::read_to_string(input)?;
         let base_dir = input.parent();
-        let bytes = self.convert_string_in_dir(&content, base_dir)?;
+        let bytes = self.convert_string_in_dir(&content, base_dir, Some(output))?;
         fs::write(output, bytes).map_err(|source| LatexError::IoError {
             path: output.to_path_buf(),
             source,

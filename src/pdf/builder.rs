@@ -59,17 +59,17 @@ impl PdfBuilder {
         }
         let mut generator = PdfGenerator::new();
 
-        // Load embedded font (works on native and WASM without filesystem access)
-        let full_font_data = crate::fonts::DEJAVU_SANS.to_vec();
-
-        // Subset font to only characters used in the document
+        // Subset and embed DejaVu only when Unicode/math characters are present
         let used_chars = crate::pdf::font_subset::collect_used_chars(&elements);
-        let font_data = crate::pdf::font_subset::subset_font(&full_font_data, &used_chars)
-            .unwrap_or(full_font_data);
-
-        // Create font objects
-        let (font_id, _font_descriptor_id, _cid_font_id, _to_unicode_id) =
-            self.create_font_objects(&mut generator, &font_data)?;
+        let embedded_unicode = crate::pdf::font_subset::requires_embedded_font(&used_chars);
+        let font_id = if embedded_unicode {
+            let full_font_data = crate::fonts::DEJAVU_SANS.to_vec();
+            let font_data = crate::pdf::font_subset::subset_font(&full_font_data, &used_chars)
+                .unwrap_or(full_font_data);
+            self.create_embedded_font_objects(&mut generator, &font_data)?.0
+        } else {
+            self.create_standard_font_objects(&mut generator)?
+        };
 
         // Extract metadata from elements
         for elem in &elements {
@@ -105,7 +105,8 @@ impl PdfBuilder {
         let media_box = format!("[0 0 {} {}]", page_layout.width, page_layout.height);
 
         // Build content streams (one per page)
-        let mut layout_state = self.build_content_stream(&elements, font_id, &image_xobjects, &page_layout)?;
+        let mut layout_state =
+            self.build_content_stream(&elements, font_id, &image_xobjects, &page_layout, embedded_unicode)?;
 
         // Render footnotes at the bottom of each page
         let footnotes_per_page = std::mem::take(&mut layout_state.all_footnotes);
@@ -221,7 +222,12 @@ impl PdfBuilder {
             .map_err(|e| format!("Failed to write PDF: {}", e))
     }
     
-    fn create_font_objects(
+    fn create_standard_font_objects(&self, generator: &mut PdfGenerator) -> Result<u32, String> {
+        let font = "<<\n/Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n/Encoding /WinAnsiEncoding\n>>\n";
+        Ok(generator.add_object(font.to_string()))
+    }
+
+    fn create_embedded_font_objects(
         &self,
         generator: &mut PdfGenerator,
         font_data: &[u8],
@@ -435,15 +441,15 @@ impl PdfBuilder {
         _font_id: u32,
         image_xobjects: &std::collections::HashMap<usize, (String, u32)>,
         page_layout: &crate::page_layout::PageLayout,
+        embedded_unicode: bool,
     ) -> Result<crate::layout::LayoutState, String> {
         use crate::layout::LayoutState;
 
-        let mut state = LayoutState::new(*page_layout);
+        let mut state = LayoutState::with_encoding(*page_layout, embedded_unicode);
         // Resolve style values from template or use defaults
         let tp = self.template.as_ref().map(|t| &t.title_page);
         let base_font_size = self.template.as_ref().map(|t| t.base_font_size).unwrap_or(11.0);
         let mut line_height = state.line_height(base_font_size);
-        let chars_per_line = ((state.content_width() / (base_font_size * 0.55)) as usize).clamp(60, 120);
 
         let title_font_size = tp.map(|tp| tp.title_font_size).unwrap_or(24.0);
         let title_spacing = tp.map(|tp| tp.spacing_after_title).unwrap_or(30.0);
@@ -524,7 +530,7 @@ impl PdfBuilder {
             match elem {
                 TexElement::Section { level, title } => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     sections_seen.push((*level, title.clone(), state.pages.len()));
@@ -552,7 +558,7 @@ impl PdfBuilder {
                 }
                 TexElement::TableOfContents => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(30.0);
@@ -589,7 +595,7 @@ impl PdfBuilder {
                 }
                 TexElement::Table(table) => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(50.0);
@@ -611,7 +617,7 @@ impl PdfBuilder {
                 }
                 TexElement::ColoredText { color, text } => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(20.0);
@@ -631,14 +637,14 @@ impl PdfBuilder {
                 }
                 TexElement::Paragraph => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.advance(line_height);
                 }
                 TexElement::MathDisplay(math) => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(40.0);
@@ -656,7 +662,7 @@ impl PdfBuilder {
                 }
                 TexElement::ItemList { ordered, labels, items } => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(items.len() as f32 * line_height);
@@ -697,7 +703,7 @@ impl PdfBuilder {
                 }
                 TexElement::CodeBlock(code) => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     let code_height = line_height * (code.lines().count() as f32) + 10.0;
@@ -715,7 +721,7 @@ impl PdfBuilder {
                 }
                 TexElement::Image { path: _, width, height } => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     if let Some((img_name, _)) = image_xobjects.get(&elem_idx) {
@@ -743,7 +749,7 @@ impl PdfBuilder {
                 }
                 TexElement::Bibliography { entries } => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(30.0);
@@ -760,7 +766,7 @@ impl PdfBuilder {
                     for (idx, entry) in entries.iter().enumerate() {
                         let label = format!("[{}] ", idx + 1);
                         let full_text = format!("{}{}", label, entry.text);
-                        self.render_text_block(&mut state, &full_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &full_text, line_height);
                     }
                 }
                 TexElement::Label { key } => {
@@ -780,16 +786,16 @@ impl PdfBuilder {
                     accumulated_text.push_str(&text);
                     accumulated_text.push(' ');
                 }
-                TexElement::Command { name, args } if matches!(name.as_str(), "newpage" | "clearpage" | "pagebreak") => {
+                TexElement::Command { name, args: _ } if matches!(name.as_str(), "newpage" | "clearpage" | "pagebreak") => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.new_page();
                 }
                 TexElement::Command { name, args } if name == "vspace" && !args.is_empty() => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     let space = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
@@ -797,7 +803,7 @@ impl PdfBuilder {
                 }
                 TexElement::Command { name, args } if name == "underline" && !args.is_empty() => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     let text = &args[0];
@@ -880,7 +886,7 @@ impl PdfBuilder {
                             && !text.is_empty() {
                                 // Flush accumulated text first
                                 if !accumulated_text.is_empty() {
-                                    self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                                    self.render_text_block(&mut state, &accumulated_text, line_height);
                                     accumulated_text.clear();
                                 }
                                 let font_size = state.current_font_size;
@@ -903,7 +909,7 @@ impl PdfBuilder {
                     }
                     if name == "raisebox" && args.len() >= 2 {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let distance = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
@@ -925,7 +931,7 @@ impl PdfBuilder {
                     }
                     if name == "rotatebox" && args.len() >= 2 {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let angle_deg: f32 = args[0].parse().unwrap_or(0.0);
@@ -953,7 +959,7 @@ impl PdfBuilder {
                     }
                     if name == "scalebox" && args.len() >= 2 {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let scale: f32 = args[0].parse().unwrap_or(1.0);
@@ -978,7 +984,7 @@ impl PdfBuilder {
                     }
                     if name == "fbox" && !args.is_empty() {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let text = &args[0];
@@ -1009,7 +1015,7 @@ impl PdfBuilder {
                     }
                     if name == "colorbox" && args.len() >= 2 {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let color = crate::color::Color::parse(&args[0]);
@@ -1043,7 +1049,7 @@ impl PdfBuilder {
                     }
                     if name == "fcolorbox" && args.len() >= 3 {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let frame_color = crate::color::Color::parse(&args[0]);
@@ -1084,7 +1090,7 @@ impl PdfBuilder {
                     }
                     if name == "rule" && args.len() >= 2 {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let width = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
@@ -1104,7 +1110,7 @@ impl PdfBuilder {
                     // Spacing commands
                     if matches!(name.as_str(), "medskip" | "bigskip" | "smallskip") {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         let advance = match name.as_str() {
@@ -1121,7 +1127,7 @@ impl PdfBuilder {
                     }
                     if name == "hrulefill" {
                         if !accumulated_text.is_empty() {
-                            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                            self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
                         state.ensure_space(1.0);
@@ -1174,7 +1180,7 @@ impl PdfBuilder {
                 }
                 TexElement::Center(inner) => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                         state.centering = false;
                     }
@@ -1187,7 +1193,7 @@ impl PdfBuilder {
                     }
                     if !center_text.is_empty() {
                         state.centering = true;
-                        self.render_text_block(&mut state, &center_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &center_text, line_height);
                         state.centering = false;
                     }
                 }
@@ -1198,7 +1204,7 @@ impl PdfBuilder {
                 }
                 TexElement::Caption { text } => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     let caption_font_size = state.current_font_size * 0.9;
@@ -1216,7 +1222,7 @@ impl PdfBuilder {
                 }
                 TexElement::ListOfFigures => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(30.0);
@@ -1232,7 +1238,7 @@ impl PdfBuilder {
                 }
                 TexElement::ListOfTables => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(30.0);
@@ -1248,7 +1254,7 @@ impl PdfBuilder {
                 }
                 TexElement::Quote(inner) => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     let indent = 20.0;
@@ -1261,7 +1267,7 @@ impl PdfBuilder {
                         }
                     }
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.layout.margin_left = saved_left;
@@ -1269,7 +1275,7 @@ impl PdfBuilder {
                 }
                 TexElement::Abstract(inner) => {
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.ensure_space(30.0);
@@ -1293,7 +1299,7 @@ impl PdfBuilder {
                         }
                     }
                     if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     state.layout.margin_left = saved_left;
@@ -1305,7 +1311,7 @@ impl PdfBuilder {
 
         // Flush remaining text
         if !accumulated_text.is_empty() {
-            self.render_text_block(&mut state, &accumulated_text, line_height, chars_per_line);
+            self.render_text_block(&mut state, &accumulated_text, line_height);
         }
 
         // Archive footnotes for the final page (empty vec if none)
@@ -1319,15 +1325,15 @@ impl PdfBuilder {
         state: &mut crate::layout::LayoutState,
         text: &str,
         line_height: f32,
-        chars_per_line: usize,
     ) {
         let formatted_text = self.format_inline_math(text);
         let Some(validated_text) = PdfTextRenderer::normalize_text(&formatted_text) else {
             return;
         };
-        let lines = PdfTextRenderer::wrap_text(&validated_text, chars_per_line);
-        let left_margin = state.left_margin();
         let content_width = state.content_width();
+        let font_size = state.current_font_size;
+        let lines = PdfTextRenderer::wrap_text_by_width(&validated_text, content_width, font_size);
+        let left_margin = state.left_margin();
         let centering = state.centering;
         let raggedleft = state.raggedleft;
 
@@ -1336,7 +1342,6 @@ impl PdfBuilder {
                 state.new_page();
             }
             let y = state.current_y;
-            let font_size = state.current_font_size;
             let text_width = line.len() as f32 * font_size * 0.55;
             let x = if centering {
                 left_margin + (content_width - text_width).max(0.0) / 2.0

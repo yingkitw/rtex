@@ -67,9 +67,10 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
   - `ContentStream`: PDF content stream operations
 - `text_renderer.rs`: Text rendering utilities
   - Text normalization, character counting, word wrapping
-- `font_subset.rs`: Font subsetting to reduce file sizes
-  - Collects used Unicode characters from parsed document
-  - Subsets TrueType fonts via the `font-subset` crate
+- `font_subset.rs`: Font subsetting and dual-font selection
+  - `requires_embedded_font` chooses standard Helvetica vs embedded DejaVu
+  - Collects used Unicode characters from parsed document (formatted math)
+  - Subsets TrueType fonts via the `font-subset` crate when Unicode is needed
 
 ### Configuration (`src/config.rs`)
 
@@ -130,7 +131,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - **chrono**: Date handling for `\today` command
 - **tempfile**: Temporary directory management (for tests)
 - **image**: PNG/JPEG/SVG decoding for `\includegraphics` (SVG rasterized via resvg)
-- **font-subset**: TrueType font subsetting for smaller PDFs
+- **font_subset**: Character collection, subsetting, and `requires_embedded_font` heuristic for dual-font strategy (Helvetica vs DejaVu)
 - **flate2**: Compression support
 - **serde** + **serde_json** + **toml**: Template serialization
 - **num_cpus**: Parallel worker pool sizing
@@ -193,6 +194,31 @@ The `src/packages/` module provides Tectonic-style on-demand fetching:
 - `PackageFetcher::ensure_packages(...)` — downloads missing `.cls`/`.sty` from CTAN mirrors into `.rtex/cache`
 - Downloaded paths are added to `TexParser` search paths for `\input` resolution
 
+## Intermediate Artifacts
+
+When `--keep-intermediate` is set (or `ConversionOptions::keep_intermediate`), sibling files are written next to the output:
+
+| File | Contents |
+|------|----------|
+| `{stem}.expanded.tex` | Source after `\newcommand`/`\def` expansion |
+| `{stem}.ast.json` | Serialized `Vec<TexElement>` parse tree |
+| `{stem}.meta.json` | Format, element count, title, author |
+
+### TeX Primitives (`src/tex/`)
+
+- `catcodes.rs`, `tokens.rs`, `dimensions.rs` — lexical foundation
+- `glue.rs` — `Glue::parse`, infinite `fil`/`fill`/`filll`, `hfill` preset
+- `boxes.rs` — `TeXBox` width/height/depth for hbox/vbox layout
+- `linebreak.rs` — Knuth–Plass DP line breaking; used by PDF `wrap_text_by_width`
+
+### Language Server (`src/lsp/`, feature `lsp`)
+
+- `diagnostics.rs` — brace, environment, math, and document-structure checks
+- `completion.rs` — command and environment completion candidates
+- `symbols.rs` — section/label outline from parsed AST
+- `hover.rs` — command documentation on hover
+- `server.rs` — stdio LSP loop (`rtex-lsp` binary)
+
 ## File Organization
 
 ```
@@ -205,6 +231,8 @@ rtex/
 │   ├── output/             # HTML, DOCX, EPUB renderers
 │   ├── packages/           # CTAN package scanning and fetching
 │   ├── main.rs             # CLI entry point (binary: rtex)
+│   ├── bin/rtex-lsp.rs     # LSP server entry (feature: lsp)
+│   ├── lsp/                # LSP analysis + server (feature: lsp for server)
 │   ├── error.rs            # Structured error types with Position tracking
 │   ├── config.rs           # Configuration system with quality presets
 │   ├── common.rs           # Shared traits (Clear, Stats)

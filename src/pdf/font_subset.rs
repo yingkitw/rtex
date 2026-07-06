@@ -15,7 +15,8 @@ pub fn collect_used_chars(elements: &[crate::parser::TexElement]) -> BTreeSet<ch
             }
             crate::parser::TexElement::MathInline(t)
             | crate::parser::TexElement::MathDisplay(t) => {
-                for c in t.chars() {
+                let formatted = crate::math_formatter::MathFormatter::format(t);
+                for c in formatted.chars() {
                     chars.insert(c);
                 }
             }
@@ -65,6 +66,17 @@ pub fn collect_used_chars(elements: &[crate::parser::TexElement]) -> BTreeSet<ch
     chars
 }
 
+/// Returns `true` when the document contains characters outside ASCII printable
+/// that require an embedded Unicode font (Helvetica + WinAnsi is insufficient).
+pub fn requires_embedded_font(chars: &BTreeSet<char>) -> bool {
+    chars.iter().any(|&c| !is_ascii_document_char(c))
+}
+
+/// Characters safe for PDF standard Helvetica with WinAnsiEncoding.
+pub fn is_ascii_document_char(c: char) -> bool {
+    matches!(c, '\t' | '\n' | '\r' | ' '..='~')
+}
+
 /// Subset a TrueType font to only the characters used in the document.
 ///
 /// Returns `Some(subset_bytes)` on success, or `None` if subsetting fails
@@ -97,6 +109,22 @@ mod tests {
         assert!(chars.contains(&'W'));
         // 'Œ' is not in the text, so it should not be in the set
         assert!(!chars.contains(&'Œ'));
+    }
+
+    #[test]
+    fn requires_embedded_font_for_unicode() {
+        let mut chars = BTreeSet::new();
+        chars.insert('α');
+        assert!(requires_embedded_font(&chars));
+    }
+
+    #[test]
+    fn requires_embedded_font_false_for_ascii() {
+        let mut chars = BTreeSet::new();
+        for c in "Hello World 123".chars() {
+            chars.insert(c);
+        }
+        assert!(!requires_embedded_font(&chars));
     }
 
     #[test]

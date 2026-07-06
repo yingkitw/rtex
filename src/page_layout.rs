@@ -1,5 +1,10 @@
+//! Page layout configuration for PDF generation.
+//!
+//! Defines paper sizes, margins, orientation, and heading scale helpers
+//! used by [`PdfBuilder`](crate::pdf::builder::PdfBuilder) and
+//! [`DocumentTemplate`](crate::template::DocumentTemplate).
+
 /// Page layout configuration for PDF generation
-/// Inspired by pdfrs architecture for better maintainability
 
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PageOrientation {

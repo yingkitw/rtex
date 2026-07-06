@@ -162,6 +162,12 @@ impl Config {
         self
     }
 
+    /// Keep intermediate build artifacts alongside the output.
+    pub fn keep_intermediate(mut self, keep: bool) -> Self {
+        self.keep_intermediate = keep;
+        self
+    }
+
     /// Serialize to TOML string.
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         toml::to_string_pretty(self)

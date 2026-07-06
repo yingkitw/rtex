@@ -3,9 +3,10 @@
 //! Handles `tabular` environments, including cell alignment and horizontal rules.
 
 use crate::pdf::core::ContentStream;
+use serde::Serialize;
 
 /// Horizontal alignment for a table column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Align {
     Left,
     Center,
@@ -13,14 +14,14 @@ pub enum Align {
 }
 
 /// A single row in a table.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Row {
     pub cells: Vec<String>,
     pub is_separator: bool,
 }
 
 /// A parsed `tabular` environment.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Table {
     pub columns: Vec<Align>,
     pub rows: Vec<Row>,

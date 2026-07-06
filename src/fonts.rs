@@ -1,7 +1,8 @@
 //! Embedded font data for PDF generation.
 //!
-//! Fonts are compiled into the binary so conversion works in WASM and other
-//! environments without filesystem access to `fonts/`.
+//! DejaVu Sans is compiled into the binary via [`include_bytes!`] so conversion
+//! works on native targets, WASM, and other environments without runtime
+//! filesystem access to `fonts/DejaVuSans.ttf`.
 
 /// DejaVu Sans TrueType font used for Unicode math and text rendering.
 pub static DEJAVU_SANS: &[u8] = include_bytes!(concat!(

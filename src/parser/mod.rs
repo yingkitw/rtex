@@ -5,6 +5,7 @@
 
 use crate::table::Table;
 use crate::utils::extract_braced;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 mod text;
@@ -13,7 +14,7 @@ mod commands;
 
 
 /// A structured element parsed from a LaTeX document.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum TexElement {
     /// Plain text content.
     Text(String),
@@ -66,7 +67,7 @@ pub enum TexElement {
 }
 
 /// A single bibliography entry for `thebibliography`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BibEntry {
     pub key: String,
     pub text: String,
