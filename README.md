@@ -1,6 +1,48 @@
 # rtex
 
-A native TeX to PDF converter CLI written in Rust with **no external dependencies**.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+[![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
+[![Tests](https://img.shields.io/badge/tests-383%20passing-brightgreen.svg)](TODO.md)
+[![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-228%2B-informational.svg)](TODO.md)
+[![Math symbols](https://img.shields.io/badge/math%20symbols-566%2B-informational.svg)](TODO.md)
+[![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
+[![LSP](https://img.shields.io/badge/LSP-rtex--lsp-blueviolet.svg)](docs/LSP.md)
+[![No TeX Live](https://img.shields.io/badge/TeX%20Live-not%20required-critical.svg)](#why-rtex)
+[![Repository](https://img.shields.io/badge/github-yingkitw%2Frtex-181717?logo=github)](https://github.com/yingkitw/rtex)
+
+A native TeX-to-document converter written in Rust. **No LaTeX installation required.**
+
+Convert `.tex` to PDF, HTML, DOCX, or EPUB from a single parser. Ship as a CLI, library, WASM module, or language server.
+
+## Why rtex?
+
+Most LaTeX workflows assume a full TeX distribution — gigabytes of packages, slow cold starts, and fragile CI setups. rtex takes a different path: a self-contained Rust toolchain that understands common LaTeX and produces documents without `pdflatex`, `xelatex`, or TeX Live.
+
+| | **rtex** | **TeX Live / pdflatex** | **Tectonic** | **Pandoc** | **Typst** |
+|---|:---:|:---:|:---:|:---:|:---:|
+| No TeX install | ✅ | ❌ | ✅ | ✅* | ✅ |
+| Native PDF from LaTeX | ✅ | ✅ | ✅ | ⚠️ via LaTeX | ❌ (own syntax) |
+| HTML / DOCX / EPUB | ✅ | ❌ | ❌ | ✅ | ⚠️ export |
+| LSP editor support | ✅ | ⚠️ third-party | ❌ | ❌ | ✅ |
+| WASM / embeddable | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Incremental + watch | ✅ | ❌ | ✅ | ❌ | ✅ |
+| CTAN package fetch | ✅ | manual | ✅ | ❌ | bundled |
+
+\*Pandoc often delegates PDF to an external LaTeX engine.
+
+**Choose rtex when you want:**
+
+- **CI and servers without TeX Live** — one `cargo build`, no 4 GB install step
+- **Multi-format output from one source** — same AST → PDF, HTML, DOCX, or EPUB
+- **Editor integration** — `rtex-lsp` gives diagnostics, completions, outline, and hover
+- **Fast iteration** — incremental compilation, `--watch`, and parallel batch conversion
+- **Small, predictable artifacts** — ASCII-only PDFs can be under 1 KB; tests run with zero external tools
+- **Embedding** — use as a Rust library, compile to WASM for browser preview, or run headless in pipelines
+
+**Know the trade-off:** rtex is not a full TeX engine. Complex documents (TikZ, exotic packages, fine math spacing) may still need TeX Live. rtex targets everyday LaTeX — articles, reports, homework, notes — where speed, portability, and multi-format output matter more than 100% LaTeX compatibility.
+
+See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for the full honesty list.
 
 ## Features
 
@@ -213,7 +255,7 @@ cargo test
 ```
 
 The test suite includes:
-- 343 comprehensive tests
+- 383 comprehensive tests
 - Native PDF generation verification
 - File size validation
 - PDF header verification
@@ -237,4 +279,4 @@ The codebase follows these principles:
 
 ## License
 
-MIT
+Apache-2.0 — see [Cargo.toml](Cargo.toml).
