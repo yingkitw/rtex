@@ -85,6 +85,16 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
             out.push_str(&escape_html(&format_math_display(math)));
             out.push_str("</div>\n");
         }
+        TexElement::MathLines { lines, .. } => {
+            out.push_str("<div class=\"math display multi\">");
+            for (idx, line) in lines.iter().enumerate() {
+                if idx > 0 {
+                    out.push_str("<br />");
+                }
+                out.push_str(&escape_html(&format_math_display(line)));
+            }
+            out.push_str("</div>\n");
+        }
         TexElement::ItemList {
             ordered,
             labels,
@@ -101,6 +111,30 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
                 out.push_str("</li>\n");
             }
             out.push_str(&format!("</{tag}>\n"));
+        }
+        TexElement::DescriptionList { items } => {
+            out.push_str("<dl>\n");
+            for item in items {
+                if !item.term.is_empty() {
+                    out.push_str(&format!("<dt>{}</dt>\n", escape_html(&item.term)));
+                }
+                out.push_str("<dd>");
+                render_elements_html(&item.body, out);
+                out.push_str("</dd>\n");
+            }
+            out.push_str("</dl>\n");
+        }
+        TexElement::Theorem { kind, title, body } => {
+            let mut heading = kind[..1].to_uppercase() + &kind[1..];
+            if let Some(t) = title {
+                heading.push_str(&format!(" ({})", t));
+            }
+            out.push_str(&format!(
+                "<section class=\"theorem\"><h3 class=\"theorem-heading\">{}</h3>",
+                escape_html(&heading)
+            ));
+            render_elements_html(body, out);
+            out.push_str("</section>\n");
         }
         TexElement::CodeBlock(code) => {
             out.push_str("<pre><code>");
@@ -169,6 +203,10 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
 
 fn render_command_html(name: &str, args: &[String], out: &mut String) {
     match name {
+        // Document metadata commands are surfaced via the <header> block
+        // emitted by `render_elements_html`. Skip them in body output so
+        // they don't appear twice.
+        "title" | "author" | "date" => (),
         "textbf" | "bf" if !args.is_empty() => {
             out.push_str("<strong>");
             out.push_str(&escape_html(&args[0]));
@@ -195,6 +233,15 @@ fn render_command_html(name: &str, args: &[String], out: &mut String) {
                 "<a href=\"{}\">{}</a>",
                 escape_html(url),
                 escape_html(url)
+            ));
+        }
+        "href" if args.len() >= 2 => {
+            let url = &args[0];
+            let text = &args[1];
+            out.push_str(&format!(
+                "<a href=\"{}\">{}</a>",
+                escape_html(url),
+                escape_html(text)
             ));
         }
         "newline" | "linebreak" => out.push_str("<br />\n"),
@@ -256,10 +303,28 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
             TexElement::MathInline(math) | TexElement::MathDisplay(math) => {
                 out.push_str(&format_math_inline(math));
             }
+            TexElement::MathLines { lines, .. } => {
+                for (idx, line) in lines.iter().enumerate() {
+                    if idx > 0 {
+                        out.push('\n');
+                    }
+                    out.push_str(&format_math_inline(line));
+                }
+            }
             TexElement::ItemList { items, .. } => {
                 for item in items {
                     out.push_str("• ");
                     collect_plain_text(item, out);
+                    out.push('\n');
+                }
+            }
+            TexElement::DescriptionList { items } => {
+                for item in items {
+                    if !item.term.is_empty() {
+                        out.push_str(&item.term);
+                        out.push_str(": ");
+                    }
+                    collect_plain_text(&item.body, out);
                     out.push('\n');
                 }
             }
@@ -295,6 +360,15 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
             TexElement::Center(content)
             | TexElement::Quote(content)
             | TexElement::Abstract(content) => collect_plain_text(content, out),
+            TexElement::Theorem { kind, title, body } => {
+                out.push_str(&kind.to_uppercase());
+                if let Some(t) = title {
+                    out.push_str(&format!(" ({t})"));
+                }
+                out.push_str(": ");
+                collect_plain_text(body, out);
+                out.push('\n');
+            }
             TexElement::Footnote { text } | TexElement::Caption { text } => out.push_str(text),
             TexElement::Label { .. }
             | TexElement::TableOfContents

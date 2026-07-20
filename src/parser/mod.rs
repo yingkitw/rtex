@@ -28,8 +28,19 @@ pub enum TexElement {
     MathInline(String),
     /// Display math from `\begin{equation}` or `$$...$$`.
     MathDisplay(String),
+    /// Multi-line display math (`align`, `gather`, `multline`, `cases`).
+    /// `lines` contains the formatted per-line content; `kind` records the
+    /// source environment for downstream formatting choices.
+    MathLines { lines: Vec<String>, kind: MathLineKind },
     /// A list (`itemize` or `enumerate`).
     ItemList { ordered: bool, labels: Vec<Option<String>>, items: Vec<Vec<TexElement>> },
+    /// A `description` list — each item is a (term, body) pair.
+    DescriptionList { items: Vec<DescItem> },
+    /// A theorem-like block (`theorem`, `lemma`, `proof`, `definition`,
+    /// `corollary`, `proposition`, `remark`, `example`). `kind` is the
+    /// environment name; `title` is set when `\begin{theorem}[name]` is used;
+    /// `body` holds the inner parsed elements.
+    Theorem { kind: String, title: Option<String>, body: Vec<TexElement> },
     /// A code block from `lstlisting`.
     CodeBlock(String),
     /// An image inclusion (`\includegraphics`).
@@ -71,6 +82,26 @@ pub enum TexElement {
 pub struct BibEntry {
     pub key: String,
     pub text: String,
+}
+
+/// One entry in a `description` list: a `term` and its body content.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DescItem {
+    pub term: String,
+    pub body: Vec<TexElement>,
+}
+
+/// Multi-line math environment flavour — affects per-line rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum MathLineKind {
+    /// `align` / `align*` — lines aligned at `&` (rendered with `&` stripped for now).
+    Align,
+    /// `gather` / `gather*` — centered, each line independent.
+    Gather,
+    /// `multline` / `multline*` — first line flush left, last line flush right.
+    Multline,
+    /// `cases` — piecewise definition with a leading brace and 2-column body.
+    Cases,
 }
 
 /// Stateful parser for a single LaTeX document.
@@ -294,6 +325,29 @@ impl TexParser {
             return self.parse_math();
         }
 
+        // TeX-style math delimiters: \(...\) for inline, \[...\] for display.
+        if remaining.starts_with("\\[") {
+            self.position += "\\[".len();
+            let content = self.read_until_str("\\]");
+            self.position += "\\]".len();
+            // If the content contains a `\begin{cases}` block, recurse on it
+            // so the cases become a `MathLines` element rather than literal text.
+            if content.contains("\\begin{cases}") {
+                return self.split_display_math_with_cases(&content);
+            }
+            return Some(TexElement::MathDisplay(content));
+        }
+        if remaining.starts_with("\\(") {
+            self.position += "\\(".len();
+            let content = self.read_until_str("\\)");
+            self.position += "\\)".len();
+            // Same recursive handling for inline math.
+            if content.contains("\\begin{cases}") {
+                return self.split_inline_math_with_cases(&content);
+            }
+            return Some(TexElement::MathInline(content));
+        }
+
         // Page breaks
         if remaining.starts_with("\\newpage") || remaining.starts_with("\\clearpage") || remaining.starts_with("\\pagebreak") {
             return self.parse_pagebreak();
@@ -349,6 +403,9 @@ impl TexParser {
         // URL
         if remaining.starts_with("\\url{") {
             return self.parse_url();
+        }
+        if remaining.starts_with("\\href{") {
+            return self.parse_href();
         }
 
         // Additional text formatting commands
@@ -758,8 +815,19 @@ impl TexParser {
 
         match env_name.as_str() {
             "itemize" => self.parse_itemize(false),
+            "description" => self.parse_description(),
             "enumerate" => self.parse_itemize(true),
+            "theorem" | "lemma" | "proof" | "definition" | "corollary"
+            | "proposition" | "remark" | "example" => self.parse_theorem(&env_name),
             "equation" => self.parse_equation(),
+            "equation*" => self.parse_equation(),
+            "align" => self.parse_math_lines(MathLineKind::Align),
+            "align*" => self.parse_math_lines(MathLineKind::Align),
+            "gather" => self.parse_math_lines(MathLineKind::Gather),
+            "gather*" => self.parse_math_lines(MathLineKind::Gather),
+            "multline" => self.parse_math_lines(MathLineKind::Multline),
+            "multline*" => self.parse_math_lines(MathLineKind::Multline),
+            "cases" => self.parse_math_lines(MathLineKind::Cases),
             "lstlisting" => self.parse_lstlisting(),
             "verbatim" => self.parse_lstlisting(),
             "tabular" => self.parse_tabular(),
@@ -835,6 +903,62 @@ impl TexParser {
         Some(TexElement::ItemList { ordered, labels, items })
     }
 
+    /// Parse `\begin{description} … \end{description}`.
+    ///
+    /// Each `\item[term]` produces a (term, body) pair. `\item` without
+    /// a label is permitted and gets an empty term.
+    fn parse_description(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{description}";
+        let mut items: Vec<DescItem> = Vec::new();
+
+        while self.position < self.content.len() {
+            self.skip_whitespace_and_comments();
+
+            let remaining = &self.content[self.position..];
+
+            if remaining.starts_with(end_marker) {
+                self.position += end_marker.len();
+                break;
+            }
+
+            if remaining.starts_with("\\item") {
+                self.position += "\\item".len();
+                self.skip_whitespace_and_comments();
+
+                let term = if self.content[self.position..].starts_with('[') {
+                    self.position += 1;
+                    let label_text = self.read_until(']');
+                    self.position += 1;
+                    self.skip_whitespace_and_comments();
+                    label_text
+                } else {
+                    String::new()
+                };
+
+                let mut body: Vec<TexElement> = Vec::new();
+                while self.position < self.content.len() {
+                    let remaining = &self.content[self.position..];
+
+                    if remaining.starts_with("\\item") || remaining.starts_with(end_marker) {
+                        break;
+                    }
+
+                    if let Some(elem) = self.parse_next() {
+                        body.push(elem);
+                    } else {
+                        break;
+                    }
+                }
+
+                items.push(DescItem { term, body });
+            } else {
+                self.position += 1;
+            }
+        }
+
+        Some(TexElement::DescriptionList { items })
+    }
+
     /// Parse `\begin{equation} … \end{equation}`.
     fn parse_equation(&mut self) -> Option<TexElement> {
         let content = self.read_until_str("\\end{equation}");
@@ -843,8 +967,194 @@ impl TexParser {
         Some(TexElement::MathDisplay(content.trim().to_string()))
     }
 
+    /// Parse a theorem-like environment (`theorem`, `lemma`, `proof`,
+    /// `definition`, `corollary`, `proposition`, `remark`, `example`).
+    ///
+    /// The optional `[title]` argument on the begin line is captured as
+    /// `title`; otherwise the body is rendered with just the kind name.
+    fn parse_theorem(&mut self, kind: &str) -> Option<TexElement> {
+        // Optional `[title]` argument.
+        self.skip_whitespace_and_comments();
+        let mut title: Option<String> = None;
+        if self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let t = self.read_until(']');
+            self.position += 1;
+            self.skip_whitespace_and_comments();
+            if !t.is_empty() {
+                title = Some(t);
+            }
+        }
+
+        let end_marker = format!("\\end{{{kind}}}");
+        let body = self.read_until_str(&end_marker);
+        self.position += end_marker.len();
+
+        let mut inner = TexParser::new(body);
+        let body_elements = inner.parse();
+        Some(TexElement::Theorem {
+            kind: kind.to_string(),
+            title,
+            body: body_elements,
+        })
+    }
+
+    /// Parse a multi-line math environment (`align`, `gather`, `multline`,
+    /// `cases`, and their starred variants).
+    ///
+    /// The body is split on `\\`. For each non-empty line:
+    /// - `align`/`gather`/`multline`: `&` alignment markers are stripped.
+    /// - `cases`: the `&` separator splits the value from the condition;
+    ///   each line is rendered as `{ value  if  condition`.
+    fn parse_math_lines(&mut self, kind: MathLineKind) -> Option<TexElement> {
+        let env_name = match kind {
+            MathLineKind::Align => "align",
+            MathLineKind::Gather => "gather",
+            MathLineKind::Multline => "multline",
+            MathLineKind::Cases => "cases",
+        };
+        // Try the explicit name first, then its starred variant.
+        let end_marker = format!("\\end{{{env_name}}}");
+        let body = if self.content[self.position..].contains(&end_marker) {
+            let body = self.read_until_str(&end_marker);
+            self.position += end_marker.len();
+            body
+        } else {
+            let starred = format!("\\end{{{env_name}*}}");
+            if self.content[self.position..].contains(&starred) {
+                let body = self.read_until_str(&starred);
+                self.position += starred.len();
+                body
+            } else {
+                return None;
+            }
+        };
+
+        Some(Self::build_math_lines(&body, kind))
+    }
+
+    /// Build a `MathLines` element from a math environment body, splitting
+    /// on `\\` and formatting each line for its environment kind. Pure
+    /// function — does not touch `self`.
+    fn build_math_lines(body: &str, kind: MathLineKind) -> TexElement {
+        let mut lines: Vec<String> = Vec::new();
+        for raw_line in body.split("\\\\") {
+            let line = raw_line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let formatted = match kind {
+                MathLineKind::Cases => Self::format_cases_line(line),
+                _ => line.replace('&', "  "),
+            };
+            lines.push(formatted);
+        }
+
+        if lines.is_empty() {
+            return TexElement::MathDisplay(String::new());
+        }
+        if lines.len() == 1 {
+            return TexElement::MathDisplay(lines.into_iter().next().unwrap());
+        }
+        TexElement::MathLines { lines, kind }
+    }
+
+    /// Format a single `\begin{cases}` line: `{ value  if  condition`.
+    /// If `rhs` already starts with `if`, the connector is omitted.
+    fn format_cases_line(line: &str) -> String {
+        let parts: Vec<&str> = line.split('&').collect();
+        let lhs = parts.first().copied().unwrap_or("").trim();
+        let rhs = parts.get(1).copied().unwrap_or("").trim();
+        if rhs.is_empty() {
+            format!("{{ {lhs}")
+        } else if rhs.starts_with("\\text{if") || rhs.to_ascii_lowercase().starts_with("if ") {
+            format!("{{ {lhs}  {rhs}")
+        } else {
+            format!("{{ {lhs}  if  {rhs}")
+        }
+    }
+
+    /// Handle display-math content (`\[...\]`) that contains a `\begin{cases}`
+    /// block by splitting it into: prefix text + MathLines(cases) + suffix text.
+    /// Since `parse_next` returns a single element, we fold the prefix onto
+    /// the first case line so the cases environment renders with leading
+    /// context.
+    fn split_display_math_with_cases(&mut self, content: &str) -> Option<TexElement> {
+        self.split_math_with_cases(content, true)
+    }
+
+    /// Same as `split_display_math_with_cases`, for inline math `\(`...`\)`.
+    fn split_inline_math_with_cases(&mut self, content: &str) -> Option<TexElement> {
+        self.split_math_with_cases(content, false)
+    }
+
+    fn split_math_with_cases(&mut self, content: &str, _is_display: bool) -> Option<TexElement> {
+        let begin = "\\begin{cases}";
+        let end = "\\end{cases}";
+        let begin_idx = content.find(begin)?;
+        let after_begin = begin_idx + begin.len();
+        let end_rel = content[after_begin..].find(end)?;
+        let cases_body = &content[after_begin..after_begin + end_rel];
+
+        let prefix = content[..begin_idx].trim();
+        let suffix = content[after_begin + end_rel + end.len()..].trim();
+
+        // Format the cases block as if encountered at top level.
+        let cases_elem = Self::build_math_lines(cases_body, MathLineKind::Cases);
+
+        // Merge prefix (and suffix) into the cases element so the renderer
+        // sees a single element rather than a sequence.
+        match cases_elem {
+            TexElement::MathDisplay(text) => {
+                let mut merged = String::new();
+                if !prefix.is_empty() {
+                    merged.push_str(prefix);
+                    merged.push(' ');
+                }
+                merged.push_str(&text);
+                if !suffix.is_empty() {
+                    merged.push(' ');
+                    merged.push_str(suffix);
+                }
+                Some(TexElement::MathDisplay(merged))
+            }
+            TexElement::MathLines { mut lines, kind } => {
+                if !prefix.is_empty() {
+                    if let Some(first) = lines.first_mut() {
+                        let mut combined = String::with_capacity(prefix.len() + first.len() + 1);
+                        combined.push_str(prefix);
+                        combined.push(' ');
+                        combined.push_str(first);
+                        *first = combined;
+                    } else {
+                        lines.push(prefix.to_string());
+                    }
+                }
+                if !suffix.is_empty() {
+                    if let Some(last) = lines.last_mut() {
+                        last.push(' ');
+                        last.push_str(suffix);
+                    } else {
+                        lines.push(suffix.to_string());
+                    }
+                }
+                Some(TexElement::MathLines { lines, kind })
+            }
+            other => Some(other),
+        }
+    }
+
     /// Parse `\begin{lstlisting}` or `\begin{verbatim}`.
     fn parse_lstlisting(&mut self) -> Option<TexElement> {
+        // Strip the optional `[language=...]` argument on the begin line.
+        self.skip_whitespace_and_comments();
+        if self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let _ = self.read_until(']');
+            self.position += 1;
+            self.skip_whitespace_and_comments();
+        }
+        // `verbatim` uses the same closing marker as `lstlisting`.
         let content = self.read_until_str("\\end{lstlisting}");
         self.position += "\\end{lstlisting}".len();
 
@@ -2083,5 +2393,314 @@ Visit \url{https://example.com}.
             assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == expected_name && args.is_empty())),
                 "Command {} should produce Command {{ name: {}, args: [] }}", cmd, expected_name);
         }
+    }
+
+    #[test]
+    fn parser_parses_description_environment() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{description}
+    \item[Apple] A red fruit.
+    \item[Bear] A large mammal.
+\end{description}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let desc = elements.iter().find_map(|e| match e {
+            TexElement::DescriptionList { items } => Some(items),
+            _ => None,
+        });
+        let items = desc.expect("should produce a DescriptionList");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].term, "Apple");
+        assert_eq!(items[1].term, "Bear");
+        assert!(items[0].body.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("red fruit"))));
+    }
+
+    #[test]
+    fn parser_parses_description_with_unlabeled_items() {
+        let content = r#"\begin{document}
+\begin{description}
+    \item plain body text
+    \item[Labeled] second body
+\end{description}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let items = elements
+            .iter()
+            .find_map(|e| match e {
+                TexElement::DescriptionList { items } => Some(items),
+                _ => None,
+            })
+            .expect("DescriptionList present");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].term, "");
+        assert_eq!(items[1].term, "Labeled");
+    }
+
+    #[test]
+    fn parser_parses_align_environment() {
+        let content = r#"\begin{document}
+\begin{align}
+    a &= b + c \\
+    d &= e + f
+\end{align}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let ml = elements.iter().find_map(|e| match e {
+            TexElement::MathLines { lines, kind } => Some((lines, kind)),
+            _ => None,
+        });
+        let (lines, kind) = ml.expect("should produce a MathLines element");
+        assert_eq!(lines.len(), 2);
+        assert!(matches!(kind, super::MathLineKind::Align));
+        assert!(!lines[0].contains('&'), "& should be stripped from align lines");
+    }
+
+    #[test]
+    fn parser_parses_align_starred_environment() {
+        let content = r#"\begin{document}
+\begin{align*}
+    x &= 1 \\
+    y &= 2
+\end{align*}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        assert!(elements
+            .iter()
+            .any(|e| matches!(e, TexElement::MathLines { lines, .. } if lines.len() == 2)));
+    }
+
+    #[test]
+    fn parser_parses_gather_environment() {
+        let content = r#"\begin{document}
+\begin{gather}
+    x = 1 \\
+    y = 2 \\
+    z = 3
+\end{gather}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let lines = elements
+            .iter()
+            .find_map(|e| match e {
+                TexElement::MathLines { lines, .. } => Some(lines),
+                _ => None,
+            })
+            .expect("gather should produce MathLines");
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn parser_parses_multline_environment() {
+        let content = r#"\begin{document}
+\begin{multline}
+    a + b + c + d + e + f \\
+    + g + h
+\end{multline}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let ml = elements.iter().find_map(|e| match e {
+            TexElement::MathLines { lines, kind } => Some((lines, kind)),
+            _ => None,
+        });
+        let (lines, kind) = ml.expect("multline should produce MathLines");
+        assert_eq!(lines.len(), 2);
+        assert!(matches!(kind, super::MathLineKind::Multline));
+    }
+
+    #[test]
+    fn parser_parses_cases_environment() {
+        let content = r#"\begin{document}
+\begin{cases}
+    x & \text{if } x \geq 0 \\
+    -x & \text{if } x < 0
+\end{cases}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let ml = elements.iter().find_map(|e| match e {
+            TexElement::MathLines { lines, kind } => Some((lines, kind)),
+            _ => None,
+        });
+        let (lines, kind) = ml.expect("cases should produce MathLines");
+        assert_eq!(lines.len(), 2);
+        assert!(matches!(kind, super::MathLineKind::Cases));
+        assert!(lines[0].contains("if"), "cases should include 'if' between value and condition");
+    }
+
+    #[test]
+    fn parser_parses_href_command() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Visit \href{https://example.com}{Example Site} for more.
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let href = elements.iter().find_map(|e| match e {
+            TexElement::Command { name, args } if name == "href" => Some(args),
+            _ => None,
+        });
+        let args = href.expect("\\href should produce a Command");
+        assert_eq!(args[0], "https://example.com");
+        assert_eq!(args[1], "Example Site");
+    }
+
+    #[test]
+    fn parser_parses_bracket_math_delimiters() {
+        // TeX-style \(...\) inline and \[...\] display math.
+        let inline = r#"\documentclass{article}
+\begin{document}
+Inline \(E = mc^2\) math.
+\end{document}"#;
+        let mut p = TexParser::new(inline.to_string());
+        let els = p.parse();
+        assert!(els
+            .iter()
+            .any(|e| matches!(e, TexElement::MathInline(s) if s.contains("E = mc^2"))));
+
+        let display = r#"\documentclass{article}
+\begin{document}
+Display \[ \int_0^\infty e^{-x} dx = 1 \] math.
+\end{document}"#;
+        let mut p = TexParser::new(display.to_string());
+        let els = p.parse();
+        assert!(els
+            .iter()
+            .any(|e| matches!(e, TexElement::MathDisplay(s) if s.contains("infty"))));
+    }
+
+    #[test]
+    fn parser_parses_theorem_environment() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{theorem}[Pythagoras]
+For a right triangle with legs $a, b$ and hypotenuse $c$, $a^2 + b^2 = c^2$.
+\end{theorem}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let thm = elements.iter().find_map(|e| match e {
+            TexElement::Theorem { kind, title, body } => Some((kind, title, body)),
+            _ => None,
+        });
+        let (kind, title, body) = thm.expect("should produce a Theorem element");
+        assert_eq!(kind, "theorem");
+        assert_eq!(title.as_deref(), Some("Pythagoras"));
+        assert!(body.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("right triangle"))));
+    }
+
+    #[test]
+    fn parser_parses_proof_environment_without_title() {
+        let content = r#"\begin{document}
+\begin{proof}
+By induction. QED.
+\end{proof}
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let thm = elements.iter().find_map(|e| match e {
+            TexElement::Theorem { kind, title, .. } => Some((kind, title)),
+            _ => None,
+        });
+        let (kind, title) = thm.expect("proof should produce a Theorem element");
+        assert_eq!(kind, "proof");
+        assert!(title.is_none());
+    }
+
+    #[test]
+    fn parser_parses_starred_sections() {
+        // `\section*`, `\subsection*`, `\subsubsection*` should be accepted.
+        let content = r#"\documentclass{article}
+\begin{document}
+\section*{Acknowledgement}
+Thanks.
+\subsection*{Preface}
+Lead-in text.
+\subsubsection*{Notes}
+Body.
+\end{document}
+"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let titles: Vec<(&usize, &String)> = elements
+            .iter()
+            .filter_map(|e| match e {
+                TexElement::Section { level, title } => Some((level, title)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(titles.len(), 3, "expected 3 starred sections, got {titles:?}");
+        assert_eq!(titles[0], (&1, &"Acknowledgement".to_string()));
+        assert_eq!(titles[1], (&2, &"Preface".to_string()));
+        assert_eq!(titles[2], (&3, &"Notes".to_string()));
+    }
+
+    #[test]
+    fn parser_splits_cases_inside_display_math() {
+        // \[ f(x) = \begin{cases} … \end{cases} \] should produce a
+        // MathLines element (cases) with the prefix "f(x) = " merged
+        // into the first line.
+        let content = r#"\documentclass{article}
+\begin{document}
+\[
+f(x) = \begin{cases}
+    x^2  & \text{if } x \geq 0 \\
+    -x   & \text{if } x < 0
+\end{cases}
+\]
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        // The key invariant: the prefix "f(x) = " is preserved (either as
+        // the start of the first MathLines line, or inside a MathDisplay).
+        let mut found_prefix = false;
+        for elem in &elements {
+            match elem {
+                TexElement::MathLines { lines, .. } => {
+                    if lines
+                        .first()
+                        .map(|s| s.contains("f(x) ="))
+                        .unwrap_or(false)
+                    {
+                        found_prefix = true;
+                    }
+                }
+                TexElement::MathDisplay(text) => {
+                    if text.contains("f(x) =") {
+                        found_prefix = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(found_prefix, "expected 'f(x) =' prefix to be preserved");
     }
 }

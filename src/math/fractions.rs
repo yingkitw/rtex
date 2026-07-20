@@ -1,11 +1,14 @@
 //! Fraction formatting for LaTeX math.
 //!
-//! Scans a math expression for `\frac{numerator}{denominator}` and
-//! converts simple numeric fractions to Unicode fraction characters
-//! (e.g. `\frac{1}{2}` → `½`).  Complex fractions are rendered as
-//! `[num] ÷ [denom]`.
+//! Scans a math expression for `\frac{numerator}{denominator}` (and the
+//! `\dfrac` / `\tfrac` variants) and converts simple numeric fractions to
+//! Unicode fraction characters (e.g. `\frac{1}{2}` → `½`). Complex
+//! fractions are rendered as `[num] ÷ [denom]`.
+//!
+//! Also handles `\binom{n}{k}` (and `\dbinom`, `\tbinom`) by emitting a
+//! bracketed "C(n, k)" approximation.
 
-/// Replace every `\frac{num}{denom}` in `text` with a formatted fraction.
+/// Replace every `\frac{num}{denom}`-style construct in `text`.
 ///
 /// `format_fn` is called recursively on the extracted numerator and
 /// denominator so that nested math constructs are processed in the
@@ -19,10 +22,18 @@ where
 
     while index < text.len() {
         let remaining = &text[index..];
-        if remaining.starts_with("\\frac") {
-            let frac_end = index + "\\frac".len();
 
-            if let Some((numerator, num_end)) = crate::utils::extract_braced(text, frac_end)
+        // Match `\frac`, `\dfrac`, `\tfrac` — all take {num}{denom}.
+        if let Some(cmd_len) = [
+            "\\frac", "\\dfrac", "\\tfrac",
+        ]
+        .iter()
+        .find(|cmd| remaining.starts_with(*cmd))
+        .map(|cmd| cmd.len())
+        {
+            let after = index + cmd_len;
+
+            if let Some((numerator, num_end)) = crate::utils::extract_braced(text, after)
                 && let Some((denominator, denom_end)) = crate::utils::extract_braced(text, num_end)
             {
                 let formatted_num = format_fn(&numerator);
@@ -42,8 +53,34 @@ where
                 continue;
             }
 
-            result.push_str("frac");
-            index = frac_end;
+            // Could not parse two braced args — fall through character-by-character.
+            result.push_str(&text[index..after]);
+            index = after;
+            continue;
+        }
+
+        // Match `\binom`, `\dbinom`, `\tbinom` — binomial coefficients.
+        if let Some(cmd_len) = ["\\binom", "\\dbinom", "\\tbinom"]
+            .iter()
+            .find(|cmd| remaining.starts_with(*cmd))
+            .map(|cmd| cmd.len())
+        {
+            let after = index + cmd_len;
+            if let Some((numerator, num_end)) = crate::utils::extract_braced(text, after)
+                && let Some((denominator, _denom_end)) = crate::utils::extract_braced(text, num_end)
+            {
+                let formatted_num = format_fn(&numerator);
+                let formatted_denom = format_fn(&denominator);
+                result.push_str("C(");
+                result.push_str(&formatted_num);
+                result.push_str(", ");
+                result.push_str(&formatted_denom);
+                result.push(')');
+                index = _denom_end;
+                continue;
+            }
+            result.push_str(&text[index..after]);
+            index = after;
             continue;
         }
 
@@ -109,5 +146,25 @@ mod tests {
     fn to_unicode_fraction_table() {
         assert_eq!(to_unicode_fraction("1", "2"), Some("½".to_string()));
         assert_eq!(to_unicode_fraction("2", "2"), None);
+    }
+
+    #[test]
+    fn tfrac_and_dfrac_share_unicode_fraction_lookup() {
+        assert_eq!(format_fractions("\\tfrac{1}{2}", identity), "½");
+        assert_eq!(format_fractions("\\dfrac{3}{4}", identity), "¾");
+        // Complex expressions fall back to the bracketed division form.
+        assert_eq!(
+            format_fractions("\\tfrac{a+b}{c-d}", identity),
+            "[a+b] ÷ [c-d]"
+        );
+    }
+
+    #[test]
+    fn binom_emits_cnk_notation() {
+        assert_eq!(format_fractions("\\binom{n}{k}", identity), "C(n, k)");
+        assert_eq!(
+            format_fractions("\\dbinom{2n}{n}", identity),
+            "C(2n, n)"
+        );
     }
 }

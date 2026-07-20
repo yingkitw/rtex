@@ -167,11 +167,7 @@ fn parse_infinite_unit(s: &str) -> Option<(i32, InfiniteUnit)> {
     None
 }
 
-/// Convert infinite glue priority to a numeric order for comparison.
-#[inline]
-pub fn infinite_order(unit: InfiniteUnit) -> u8 {
-    unit as u8
-}
+
 
 #[cfg(test)]
 mod tests {
@@ -236,9 +232,9 @@ mod tests {
     }
 
     #[test]
-    fn infinite_order_ranking() {
-        assert!(infinite_order(InfiniteUnit::Fil) < infinite_order(InfiniteUnit::Fill));
-        assert!(infinite_order(InfiniteUnit::Fill) < infinite_order(InfiniteUnit::Filll));
+    fn infinite_unit_ranking() {
+        assert!(InfiniteUnit::Fil < InfiniteUnit::Fill);
+        assert!(InfiniteUnit::Fill < InfiniteUnit::Filll);
     }
 
     #[test]

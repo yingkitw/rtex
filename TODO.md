@@ -261,6 +261,15 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ### Brainstorming (future competitive features)
 
 - [x] **Language Server Protocol (LSP)** — `src/lsp/` diagnostics, completion, symbols, hover; `rtex-lsp` binary (`--features lsp`)
+- [x] **`description` environment** — `(term, body)` pairs in `TexElement::DescriptionList`; PDF renders term then body; HTML uses `<dl>/<dt>/<dd>`
+- [x] **Multi-line math environments** — `align`, `align*`, `gather`, `gather*`, `multline`, `multline*`, `cases` parsed into `TexElement::MathLines { lines, kind }` and rendered as centered line blocks (alignment markers stripped)
+- [x] **`\href{url}{text}`** — hyperref-style link command parsed; HTML emits `<a href>`; PDF renders the visible text (PDF link annotations not yet emitted)
+- [x] **Rich inline rendering** — `flatten_inline` helper now preserves math, formatting commands, nested lists, and `\href` text inside `Center`/`Quote`/`Abstract`/`ItemList` instead of dropping non-Text children
+- [x] **Theorem-like environments** — `theorem`, `lemma`, `proof`, `definition`, `corollary`, `proposition`, `remark`, `example` parsed into `TexElement::Theorem { kind, title, body }` and rendered with bold heading + indented body
+- [x] **Unnumbered section commands** — `\section*`, `\subsection*`, `\subsubsection*`, `\paragraph*`, `\subparagraph*` consume the trailing `*` so they don't break parsing
+- [x] **Sized fractions** — `\tfrac` and `\dfrac` now share the `\frac` Unicode-fraction lookup in `format_fractions`
+- [x] **Binomial coefficients** — `\binom`, `\dbinom`, `\tbinom` emit `C(n, k)` notation via `format_fractions`
+- [x] **Nested `\begin{cases}` inside `\[…\]`** — display/inline math delimiter parser detects an embedded cases block, parses it as `MathLines`, and merges any prefix/suffix text onto the first/last lines
 - **Collaborative editing** — CRDT or OT layer on parsed AST (Overleaf)
 - **Formula OCR input** — photo/screenshot → LaTeX (Mathpix competitor)
 - **Docker/OCI image** — single-container deploy for CI conversion farms
@@ -268,10 +277,10 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 383 (100% passing)
+- Tests: 445 (100% passing)
 - Warnings: 0
 - Math symbols: 566
-- LaTeX commands: ~228 (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands)
+- LaTeX commands: ~250+ (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands + `description` + `align*`/`gather*`/`multline*`/`cases` + theorem-like + `\href` + `\section*` + `\binom`/`\tfrac` + nested `\[cases\]`)
 - Documentation: ~80%
 - File size: ~750 bytes for ASCII-only PDFs; ~385 KB when Unicode/math requires embedded DejaVu subset
 

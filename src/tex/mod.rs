@@ -13,6 +13,6 @@ pub mod linebreak;
 pub use catcodes::CatCode;
 pub use tokens::{Token, TexLexer};
 pub use dimensions::Dimension;
-pub use glue::{Glue, Stretch, InfiniteUnit, infinite_order};
+pub use glue::{Glue, Stretch, InfiniteUnit};
 pub use boxes::{TeXBox, BoxDirection};
 pub use linebreak::{LineItem, BrokenLine, TokenizedParagraph, LineBreaker, line_badness};

@@ -223,10 +223,8 @@ impl MathFormatter {
                 if crate::math::scripts::to_superscript(ch).is_none() {
                     return format!("^{}", normalized);
                 }
-            } else {
-                if crate::math::scripts::to_subscript(ch).is_none() {
-                    return format!("_{}", normalized);
-                }
+            } else if crate::math::scripts::to_subscript(ch).is_none() {
+                return format!("_{}", normalized);
             }
         }
 

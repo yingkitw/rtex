@@ -71,6 +71,14 @@ See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for the full honesty 
   - Table of contents, list of figures, list of tables
   - Font size commands, colors, alignment, page breaks, horizontal/vertical rules
   - **228+ LaTeX commands supported**
+- Multi-line math (`align`, `align*`, `gather`, `gather*`, `multline`, `cases`) including cases nested inside `\[…\]`
+- `description` environment for definition lists
+- Theorem-like blocks (`theorem`, `lemma`, `proof`, `definition`, `corollary`, `proposition`, `remark`, `example`)
+- `\href{url}{text}` hyperref-style links
+- `\section*` / `\subsection*` / `\subsubsection*` unnumbered headings
+- `\binom` / `\dbinom` / `\tbinom` binomial coefficients
+- `\tfrac` / `\dfrac` sized fractions
+- Ellipsis: `\ldots`, `\cdots`, `\vdots`, `\ddots`
 
 ## Text Output Quality Validation
 
@@ -89,11 +97,13 @@ This improves final PDF text stability for noisy or mixed TeX input.
 **Supported Features**:
 - 566 mathematical symbols (Greek letters, operators, relations, arrows, integrals, summation)
 - Inline and display math equations
+- Multi-line math (`align`, `gather`, `multline`, `cases`)
 - Special roots (∛ cube root, ∜ fourth root)
 - Full alphabet super/subscripts
 - Math alphabets: \mathbb, \mathcal, \mathfrak, \mathbf, \mathit, \mathsf, \mathtt
 - Math accents: \vec, \hat, \tilde, \bar, \dot, \ddot
 - Fractions with Unicode fraction characters and parenthesized form
+- Piecewise definitions via `\begin{cases}`
 - Proper Unicode text encoding
 
 **Status**:

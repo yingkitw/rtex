@@ -70,7 +70,7 @@ pub fn document_symbols(text: &str) -> Vec<TexSymbol> {
 
 fn attach_symbol(
     symbol: TexSymbol,
-    stack: &mut Vec<(usize, TexSymbol)>,
+    stack: &mut [(usize, TexSymbol)],
     root: &mut Vec<TexSymbol>,
 ) {
     if let Some((_, parent)) = stack.last_mut() {

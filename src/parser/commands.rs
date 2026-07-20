@@ -5,6 +5,11 @@ use std::path::PathBuf;
 
 impl TexParser {
     /// Parse a sectioning command (\part, \chapter, \section, \subsection, …, \subparagraph).
+    ///
+    /// A trailing `*` (e.g. `\section*{Title}`) is consumed and ignored,
+    /// producing the same `TexElement::Section` as the numbered variant.
+    /// Our renderer doesn't emit section numbers, so the star is a no-op
+    /// but must not break parsing.
     pub(super) fn parse_section(&mut self, level: u8) -> Option<TexElement> {
         let cmd = match level {
             0 => "\\part",
@@ -17,6 +22,11 @@ impl TexParser {
             _ => "\\section",
         };
         self.position += cmd.len();
+
+        // Optional starred variant.
+        if self.content[self.position..].starts_with('*') {
+            self.position += 1;
+        }
 
         self.skip_whitespace_and_comments();
 
@@ -222,6 +232,26 @@ impl TexParser {
         let text = self.read_until('}');
         self.position += 1; // skip closing brace
         Some(TexElement::Command { name: "url".to_string(), args: vec![text] })
+    }
+
+    /// Parse `\href{url}{text}` (hyperref).
+    pub(super) fn parse_href(&mut self) -> Option<TexElement> {
+        self.position += "\\href{".len();
+        let url = self.read_until('}');
+        self.position += 1; // skip closing brace
+        self.skip_whitespace_and_comments();
+        let text = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let t = self.read_until('}');
+            self.position += 1;
+            t
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command {
+            name: "href".to_string(),
+            args: vec![url, text],
+        })
     }
 
     /// Parse `\raisebox{distance}{text}`.

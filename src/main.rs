@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fs;
 use rtex::{
     ConversionOptions, OutputFormat, StreamingConverter, ConsoleReporter,
@@ -45,7 +45,7 @@ fn parse_format(raw: &str) -> anyhow::Result<OutputFormat> {
     raw.parse().map_err(|e: rtex::LatexError| anyhow::anyhow!(e.to_string()))
 }
 
-fn default_output(input: &PathBuf, format: OutputFormat) -> PathBuf {
+fn default_output(input: &Path, format: OutputFormat) -> PathBuf {
     let output_dir = PathBuf::from("output");
     fs::create_dir_all(&output_dir).ok();
     let filename = input
@@ -80,8 +80,8 @@ fn build_converter(cli: &Cli, options: ConversionOptions) -> anyhow::Result<Stre
 
 fn run_conversion(
     cli: &Cli,
-    input: &PathBuf,
-    output: &PathBuf,
+    input: &Path,
+    output: &Path,
     options: ConversionOptions,
 ) -> anyhow::Result<()> {
     let mut converter = build_converter(cli, options)?;

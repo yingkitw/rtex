@@ -28,11 +28,6 @@ pub struct LayoutState {
 }
 
 impl LayoutState {
-    /// Initialise a layout using the given page dimensions.
-    pub fn new(layout: PageLayout) -> Self {
-        Self::with_encoding(layout, true)
-    }
-
     /// Initialise layout with the given text encoding mode.
     pub fn with_encoding(layout: PageLayout, embedded_unicode: bool) -> Self {
         Self {
@@ -116,7 +111,7 @@ mod tests {
     #[test]
     fn test_layout_state_initial() {
         let layout = PageLayout::a4_portrait();
-        let state = LayoutState::new(layout);
+        let state = LayoutState::with_encoding(layout, true);
         assert_eq!(state.pages.len(), 1);
         assert_eq!(state.current_y, layout.content_top());
         assert!(state.would_fit(layout.content_height()));
@@ -125,7 +120,7 @@ mod tests {
     #[test]
     fn test_new_page() {
         let layout = PageLayout::a4_portrait();
-        let mut state = LayoutState::new(layout);
+        let mut state = LayoutState::with_encoding(layout, true);
         state.new_page();
         assert_eq!(state.pages.len(), 2);
         assert_eq!(state.current_y, layout.content_top());
@@ -134,7 +129,7 @@ mod tests {
     #[test]
     fn test_ensure_space() {
         let layout = PageLayout::a4_portrait();
-        let mut state = LayoutState::new(layout);
+        let mut state = LayoutState::with_encoding(layout, true);
         // consume almost all space
         state.current_y = state.content_bottom() + 10.0;
         state.ensure_space(20.0); // 20 > 10, so new page

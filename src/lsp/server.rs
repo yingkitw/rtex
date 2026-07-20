@@ -1,4 +1,9 @@
 //! LSP stdio server wiring analysis results to the protocol.
+//!
+//! Uses `lsp_types::Uri` as a `HashMap` key. `Uri` contains interior
+//! mutability for thread-safe cheap cloning, but we never mutate it
+//! after inserting it into the map, so the standard clippy warning
+//! is suppressed at module level.
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -16,6 +21,8 @@ use super::{
     analyze_diagnostics, command_completions, completions_at, document_symbols, hover_at,
     range_to_positions, CompletionKind, TexCompletion, TexDiagnostic, TexRange, TexSymbol,
 };
+
+#[allow(clippy::mutable_key_type)]
 
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (connection, io_threads) = Connection::stdio();

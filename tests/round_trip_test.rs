@@ -581,3 +581,270 @@ Size consistency test
         assert_eq!(sizes[0], sizes[i], "File size varies across conversions");
     }
 }
+
+// ==================== LaTeX Feature Coverage Tests ====================
+//
+// These tests exercise specific LaTeX commands/environments end-to-end so the
+// conversion must not only parse them but also emit a valid PDF.
+
+#[test]
+fn test_description_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{description}
+    \item[Apple] A red fruit.
+    \item[Bear] A large mammal.
+    \item[Cat] A small feline.
+\end{description}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("description must convert");
+    validate_pdf_structure(&pdf).expect("description PDF structure invalid");
+    assert!(pdf.len() > 800, "description PDF suspiciously small");
+}
+
+#[test]
+fn test_align_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+\begin{align}
+    a &= b + c \\
+    d &= e + f + g \\
+    h &= i
+\end{align}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("align must convert");
+    validate_pdf_structure(&pdf).expect("align PDF structure invalid");
+}
+
+#[test]
+fn test_align_starred_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{align*}
+    x &= 1 \\
+    y &= 2
+\end{align*}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("align* must convert");
+    validate_pdf_structure(&pdf).expect("align* PDF structure invalid");
+}
+
+#[test]
+fn test_gather_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{gather}
+    x = 1 \\
+    y = 2 \\
+    z = 3
+\end{gather}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("gather must convert");
+    validate_pdf_structure(&pdf).expect("gather PDF structure invalid");
+}
+
+#[test]
+fn test_multline_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{multline}
+    a + b + c + d + e + f + g + h \\
+    + i + j + k
+\end{multline}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("multline must convert");
+    validate_pdf_structure(&pdf).expect("multline PDF structure invalid");
+}
+
+#[test]
+fn test_cases_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+$f(x) = \begin{cases}
+    x & \text{if } x \geq 0 \\
+    -x & \text{if } x < 0
+\end{cases}$
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("cases must convert");
+    validate_pdf_structure(&pdf).expect("cases PDF structure invalid");
+}
+
+#[test]
+fn test_href_command_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Visit \href{https://example.com}{Example Site} for more information.
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("\\href must convert");
+    validate_pdf_structure(&pdf).expect("\\href PDF structure invalid");
+}
+
+#[test]
+fn test_nested_lists_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{itemize}
+    \item Source
+    \begin{itemize}
+        \item main.rs
+        \item lib.rs
+    \end{itemize}
+    \item Docs
+\end{itemize}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("nested lists must convert");
+    validate_pdf_structure(&pdf).expect("nested list PDF structure invalid");
+}
+
+#[test]
+fn test_itemize_with_math_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{itemize}
+    \item Inline $E = mc^2$ reference
+    \item \textbf{Bold} item
+\end{itemize}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("list with math must convert");
+    validate_pdf_structure(&pdf).expect("list with math PDF structure invalid");
+}
+
+#[test]
+fn test_equation_star_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{equation*}
+    E = mc^2
+\end{equation*}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("equation* must convert");
+    validate_pdf_structure(&pdf).expect("equation* PDF structure invalid");
+}
+
+#[test]
+fn test_multi_feature_document_renders_pdf() {
+    // Combines several newly-supported features in one document so a
+    // regression in any of them will surface here.
+    let latex = r#"\documentclass{article}
+\usepackage{amsmath}
+\title{Features}
+\author{rtex}
+\begin{document}
+\maketitle
+
+\section{Description}
+\begin{description}
+    \item[Foo] Definition of foo.
+    \item[Bar] Definition of bar.
+\end{description}
+
+\section{Align}
+\begin{align}
+    a &= b + c \\
+    d &= e + f
+\end{align}
+
+\section{Cases}
+\begin{equation*}
+    |x| = \begin{cases}
+        x & \text{if } x \geq 0 \\
+        -x & \text{otherwise}
+    \end{cases}
+\end{equation*}
+
+\section{Links}
+Read more at \href{https://example.com}{Example}.
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("multi-feature must convert");
+    validate_pdf_structure(&pdf).expect("multi-feature PDF structure invalid");
+}
+
+#[test]
+fn test_theorem_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{theorem}[Pythagoras]
+For a right triangle with legs $a, b$ and hypotenuse $c$, $a^2 + b^2 = c^2$.
+\end{theorem}
+\begin{proof}
+By induction on the side lengths. QED.
+\end{proof}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("theorem must convert");
+    validate_pdf_structure(&pdf).expect("theorem PDF structure invalid");
+}
+
+#[test]
+fn test_definition_and_lemma_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{definition}
+A \emph{group} is a set $G$ with an associative binary operation.
+\end{definition}
+\begin{lemma}
+Every finite group has a well-defined order.
+\end{lemma}
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("definition+lemma must convert");
+    validate_pdf_structure(&pdf).expect("definition+lemma PDF structure invalid");
+}
+
+#[test]
+fn test_math_ellipsis_and_binom_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Ellipsis: $\ldots$ and $\cdots$ and $\vdots$ and $\ddots$.
+
+Binomial: $\binom{n}{k} = \tfrac{n!}{k!(n-k)!}$.
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("ellipsis+binom must convert");
+    validate_pdf_structure(&pdf).expect("ellipsis+binom PDF structure invalid");
+}
+
+#[test]
+fn test_starred_section_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\section*{Acknowledgement}
+Thanks to reviewers.
+
+\subsection*{Preface}
+A short lead-in.
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("starred section must convert");
+    validate_pdf_structure(&pdf).expect("starred section PDF structure invalid");
+}
+
+#[test]
+fn test_cases_inside_display_math_renders_pdf() {
+    // The display-math parser should detect the nested `\begin{cases}`
+    // block and render it as cases (MathLines) rather than raw text.
+    let latex = r#"\documentclass{article}
+\begin{document}
+\[
+f(x) = \begin{cases}
+    x^2  & \text{if } x \geq 0 \\
+    -x   & \text{if } x < 0
+\end{cases}
+\]
+\end{document}"#;
+
+    let pdf = convert_latex_to_bytes(latex).expect("nested cases must convert");
+    validate_pdf_structure(&pdf).expect("nested cases PDF structure invalid");
+}

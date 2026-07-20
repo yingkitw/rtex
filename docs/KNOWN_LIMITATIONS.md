@@ -24,7 +24,16 @@ A **native subset LaTeX converter** — not a replacement for pdflatex/xelatex/l
 ## Math
 
 - 566 LaTeX math commands map to Unicode via `MathFormatter`
-- Complex AMS environments (`align`, `gather` with numbering) have limited support
+- Multi-line math environments (`align`, `align*`, `gather`, `gather*`, `multline`,
+  `multline*`, `cases`) are parsed and rendered as centered line blocks;
+  the `&` alignment marker is stripped rather than used for true column
+  alignment, so the visual fidelity is approximate. Numbering is not yet
+  emitted.
+- `\begin{cases}` nested inside `\[…\]` or `\(…\)` is recognised and
+  rendered as cases; the surrounding text (e.g. `f(x) =`) is merged onto
+  the first case line.
+- `\binom`, `\dbinom`, `\tbinom` render as `C(n, k)` (TeX-style binomials
+  require AMS extensions we do not implement).
 - Some constructs fall back to Unicode approximations rather than TeX-quality spacing
 
 ## Package Fetching

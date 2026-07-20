@@ -4,11 +4,111 @@
 //! DejaVu Sans for Unicode math support, and handles page layout,
 //! text wrapping, and automatic page breaks.
 
-use crate::parser::TexElement;
+use crate::parser::{MathLineKind, TexElement};
 use crate::math_formatter::MathFormatter;
 use crate::pdf::text_renderer::PdfTextRenderer;
 use crate::pdf::core::{PdfGenerator, DictBuilder};
 use std::path::Path;
+
+/// Flatten a slice of inline elements into a single string suitable for the
+/// PDF text accumulator. Math delimiters (`$…$`) are inserted around inline
+/// math so the downstream `format_inline_math` pass can format them, and
+/// nested list / quote / center / abstract blocks are flattened recursively
+/// so their text reaches the page instead of being dropped.
+fn flatten_inline(elements: &[TexElement]) -> String {
+    let mut out = String::new();
+    for elem in elements {
+        match elem {
+            TexElement::Text(t) => {
+                out.push_str(t);
+                out.push(' ');
+            }
+            TexElement::MathInline(math) => {
+                out.push('$');
+                out.push_str(math);
+                out.push('$');
+                out.push(' ');
+            }
+            TexElement::MathDisplay(math) => {
+                out.push_str(math);
+                out.push(' ');
+            }
+            TexElement::ColoredText { text, .. } => {
+                out.push_str(text);
+                out.push(' ');
+            }
+            TexElement::Command { name, args } => {
+                let inline_cmds = [
+                    "textbf", "textit", "texttt", "emph", "textsuperscript",
+                    "textsubscript", "text", "ensuremath", "textsc", "textrm",
+                    "textsf", "textsl", "textup", "textmd", "underline",
+                    "url",
+                ];
+                if inline_cmds.contains(&name.as_str()) {
+                    if let Some(text) = args.first() {
+                        out.push_str(text);
+                        out.push(' ');
+                    }
+                } else if name == "href" && args.len() >= 2 {
+                    out.push_str(&args[1]);
+                    out.push(' ');
+                }
+            }
+            TexElement::ItemList { items, .. } => {
+                out.push_str("• ");
+                for (idx, item) in items.iter().enumerate() {
+                    if idx > 0 {
+                        out.push_str("; ");
+                    }
+                    out.push_str(&flatten_inline(item));
+                }
+            }
+            TexElement::DescriptionList { items } => {
+                for item in items {
+                    if !item.term.is_empty() {
+                        out.push_str(&item.term);
+                        out.push_str(": ");
+                    }
+                    out.push_str(&flatten_inline(&item.body));
+                }
+            }
+            TexElement::Theorem { kind, title, body } => {
+                let mut heading = kind[..1].to_uppercase() + &kind[1..];
+                if let Some(t) = title {
+                    heading.push_str(&format!(" ({t})"));
+                }
+                heading.push_str(". ");
+                out.push_str(&heading);
+                out.push_str(&flatten_inline(body));
+            }
+            TexElement::Center(inner)
+            | TexElement::Quote(inner)
+            | TexElement::Abstract(inner) => {
+                out.push_str(&flatten_inline(inner));
+            }
+            TexElement::Footnote { text } | TexElement::Caption { text } => {
+                out.push_str(text);
+                out.push(' ');
+            }
+            TexElement::Ref { key } | TexElement::PageRef { key } => {
+                out.push_str(key);
+                out.push(' ');
+            }
+            TexElement::Citation { keys } => {
+                out.push('[');
+                out.push_str(&keys.join(", "));
+                out.push(']');
+                out.push(' ');
+            }
+            TexElement::CodeBlock(code) => {
+                out.push_str(code);
+                out.push(' ');
+            }
+            _ => {}
+        }
+    }
+    out
+}
 
 /// Converts a sequence of `TexElement`s into a PDF file.
 pub struct PdfBuilder {
@@ -660,6 +760,36 @@ impl PdfBuilder {
                     stream.end_text();
                     state.advance(line_height + 10.0);
                 }
+                TexElement::MathLines { lines, kind } => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
+                        accumulated_text.clear();
+                    }
+                    let math_line_height = state.line_height(14.0);
+                    state.ensure_space(lines.len() as f32 * (math_line_height + 4.0) + 10.0);
+                    let total = lines.len();
+                    let content_width = state.content_width();
+                    for (idx, line) in lines.iter().enumerate() {
+                        let formatted = MathFormatter::format(line);
+                        let formatted = self.add_math_spacing(&formatted);
+                        let text_width = formatted.len() as f32 * 14.0 * 0.55;
+                        let x = match kind {
+                            MathLineKind::Multline if idx == 0 => state.left_margin(),
+                            MathLineKind::Multline if idx + 1 == total => {
+                                (state.left_margin() + content_width - text_width).max(state.left_margin())
+                            }
+                            _ => state.left_margin() + (content_width - text_width).max(0.0) / 2.0,
+                        };
+                        let y = state.current_y;
+                        let stream = state.current_stream();
+                        stream.begin_text();
+                        stream.set_font("F1", 14.0);
+                        stream.set_position(x, y);
+                        stream.show_text(&formatted);
+                        stream.end_text();
+                        state.advance(math_line_height + 4.0);
+                    }
+                }
                 TexElement::ItemList { ordered, labels, items } => {
                     if !accumulated_text.is_empty() {
                         self.render_text_block(&mut state, &accumulated_text, line_height);
@@ -683,13 +813,7 @@ impl PdfBuilder {
                         stream.show_text(&bullet);
                         stream.end_text();
 
-                        let mut item_text = String::new();
-                        for elem in item {
-                            if let TexElement::Text(t) = elem {
-                                item_text.push_str(t);
-                                item_text.push(' ');
-                            }
-                        }
+                        let item_text = flatten_inline(item);
                         let x2 = state.left_margin() + 25.0;
                         let y = state.current_y;
                         let stream = state.current_stream();
@@ -700,6 +824,78 @@ impl PdfBuilder {
                         stream.end_text();
                         state.advance(line_height);
                     }
+                }
+                TexElement::DescriptionList { items } => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
+                        accumulated_text.clear();
+                    }
+                    state.ensure_space(items.len() as f32 * line_height);
+                    for item in items {
+                        if !item.term.is_empty() {
+                            let x1 = state.left_margin();
+                            let y = state.current_y;
+                            let stream = state.current_stream();
+                            stream.begin_text();
+                            stream.set_font("F1", 11.0);
+                            stream.set_position(x1, y);
+                            stream.show_text(&item.term);
+                            stream.end_text();
+
+                            let body_text = flatten_inline(&item.body);
+                            let x2 = state.left_margin() + 80.0;
+                            let stream = state.current_stream();
+                            stream.begin_text();
+                            stream.set_font("F1", 11.0);
+                            stream.set_position(x2, y);
+                            stream.show_text(&body_text);
+                            stream.end_text();
+                        } else {
+                            let body_text = flatten_inline(&item.body);
+                            let x = state.left_margin() + 20.0;
+                            let y = state.current_y;
+                            let stream = state.current_stream();
+                            stream.begin_text();
+                            stream.set_font("F1", 11.0);
+                            stream.set_position(x, y);
+                            stream.show_text(&body_text);
+                            stream.end_text();
+                        }
+                        state.advance(line_height);
+                    }
+                }
+                TexElement::Theorem { kind, title, body } => {
+                    if !accumulated_text.is_empty() {
+                        self.render_text_block(&mut state, &accumulated_text, line_height);
+                        accumulated_text.clear();
+                    }
+                    let mut heading = kind[..1].to_uppercase() + &kind[1..];
+                    if let Some(t) = title {
+                        heading.push_str(&format!(" ({t})"));
+                    }
+                    heading.push('.');
+                    let indent = 16.0;
+                    let saved_left = state.layout.margin_left;
+                    let saved_right = state.layout.margin_right;
+                    state.layout.margin_left += indent;
+                    state.layout.margin_right += indent;
+                    state.ensure_space(line_height * 2.0);
+                    let x = state.left_margin();
+                    let y = state.current_y;
+                    let stream = state.current_stream();
+                    stream.begin_text();
+                    stream.set_font("F1", 11.0);
+                    stream.set_position(x, y);
+                    stream.show_text(&heading);
+                    stream.end_text();
+                    state.advance(line_height);
+                    let body_text = flatten_inline(body);
+                    if !body_text.trim().is_empty() {
+                        self.render_text_block(&mut state, &body_text, line_height);
+                    }
+                    state.layout.margin_left = saved_left;
+                    state.layout.margin_right = saved_right;
+                    state.advance(line_height * 0.5);
                 }
                 TexElement::CodeBlock(code) => {
                     if !accumulated_text.is_empty() {
@@ -1184,14 +1380,8 @@ impl PdfBuilder {
                         accumulated_text.clear();
                         state.centering = false;
                     }
-                    let mut center_text = String::new();
-                    for inner_elem in inner {
-                        if let TexElement::Text(t) = inner_elem {
-                            center_text.push_str(t);
-                            center_text.push(' ');
-                        }
-                    }
-                    if !center_text.is_empty() {
+                    let center_text = flatten_inline(inner);
+                    if !center_text.trim().is_empty() {
                         state.centering = true;
                         self.render_text_block(&mut state, &center_text, line_height);
                         state.centering = false;
@@ -1260,15 +1450,9 @@ impl PdfBuilder {
                     let indent = 20.0;
                     let saved_left = state.layout.margin_left;
                     state.layout.margin_left += indent;
-                    for inner_elem in inner {
-                        if let TexElement::Text(t) = inner_elem {
-                            accumulated_text.push_str(t);
-                            accumulated_text.push(' ');
-                        }
-                    }
-                    if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height);
-                        accumulated_text.clear();
+                    let body_text = flatten_inline(inner);
+                    if !body_text.trim().is_empty() {
+                        self.render_text_block(&mut state, &body_text, line_height);
                     }
                     state.layout.margin_left = saved_left;
                     state.advance(line_height);
@@ -1292,15 +1476,9 @@ impl PdfBuilder {
                     let saved_right = state.layout.margin_right;
                     state.layout.margin_left += 20.0;
                     state.layout.margin_right += 20.0;
-                    for inner_elem in inner {
-                        if let TexElement::Text(t) = inner_elem {
-                            accumulated_text.push_str(t);
-                            accumulated_text.push(' ');
-                        }
-                    }
-                    if !accumulated_text.is_empty() {
-                        self.render_text_block(&mut state, &accumulated_text, line_height);
-                        accumulated_text.clear();
+                    let body_text = flatten_inline(inner);
+                    if !body_text.trim().is_empty() {
+                        self.render_text_block(&mut state, &body_text, line_height);
                     }
                     state.layout.margin_left = saved_left;
                     state.layout.margin_right = saved_right;

@@ -12,6 +12,13 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 - Bibliography, cross-references, tables, graphics, macros, templates
 - Incremental compilation, watch mode, parallel batch conversion, LSP editor support
 - On-demand CTAN package fetching for missing `.sty`/`.cls` files
+- Multi-line math environments (`align`, `gather`, `multline`, `cases`)
+- `description` lists for term/definition pairs
+- Theorem-like environments (`theorem`, `lemma`, `proof`, etc.)
+- `\href{url}{text}` for hyperlinks
+- Unnumbered sections (`\section*`, `\subsection*`)
+- `\binom`, `\tfrac`, `\dfrac` binomial and sized fractions
+- Ellipsis symbols `\ldots`, `\cdots`, `\vdots`, `\ddots`
 
 ### Out of scope (current)
 
