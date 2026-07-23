@@ -1,6 +1,6 @@
 [package]
 name = "rtex"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "Native TeX to PDF converter written in Rust with zero external LaTeX dependencies"
 authors = ["Ying Kit WONG"]
@@ -36,6 +36,7 @@ resvg = "0.45.1"
 usvg = "0.45.1"
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
+pdfrs = { version = "0.1.5", default-features = false }
 lsp-server = { version = "0.7", optional = true }
 lsp-types = { version = "0.97", optional = true }
 

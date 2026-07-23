@@ -6,10 +6,12 @@ pub mod common;
 mod html;
 mod docx;
 mod epub;
+pub mod pdfrs_pdf;
 
 use crate::error::LatexError;
 use crate::parser::TexElement;
 use crate::pdf::builder::PdfBuilder;
+use pdfrs_pdf::{PDFRS_MAX_BYTES, PdfRenderOptions, render_pdf_bytes};
 
 pub use common::DocumentMeta;
 
@@ -65,20 +67,44 @@ impl std::str::FromStr for OutputFormat {
 
 /// Render parsed elements to bytes in the requested format.
 pub fn render_elements(elements: Vec<TexElement>, format: OutputFormat) -> Result<Vec<u8>, LatexError> {
+    render_elements_in_dir(elements, format, None)
+}
+
+/// Like [`render_elements`] with an optional base directory for relative images (PDF).
+pub fn render_elements_in_dir(
+    elements: Vec<TexElement>,
+    format: OutputFormat,
+    image_base: Option<&std::path::Path>,
+) -> Result<Vec<u8>, LatexError> {
     match format {
-        OutputFormat::Pdf => {
-            let mut builder = PdfBuilder::new();
-            builder
-                .build_to_bytes(elements)
-                .map_err(|msg| LatexError::PdfError {
-                    message: msg,
-                    context: None,
-                })
-        }
+        OutputFormat::Pdf => render_pdf_with_fallback(elements, image_base),
         OutputFormat::Html => html::render(&elements),
         OutputFormat::Docx => docx::render(&elements),
         OutputFormat::Epub => epub::render(&elements),
     }
+}
+
+/// Render PDF via pdfrs; fall back to the native engine only on failure or oversize output.
+fn render_pdf_with_fallback(
+    elements: Vec<TexElement>,
+    image_base: Option<&std::path::Path>,
+) -> Result<Vec<u8>, LatexError> {
+    let mut options = PdfRenderOptions::default();
+    options.image_base_dir = image_base.map(std::path::Path::to_path_buf);
+
+    if let Ok(bytes) = render_pdf_bytes(&elements, options) {
+        if bytes.len() <= PDFRS_MAX_BYTES {
+            return Ok(bytes);
+        }
+    }
+
+    let mut builder = PdfBuilder::new();
+    builder
+        .build_to_bytes_native(elements)
+        .map_err(|message| LatexError::PdfError {
+            message,
+            context: None,
+        })
 }
 
 #[cfg(test)]

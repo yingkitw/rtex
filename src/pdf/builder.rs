@@ -152,11 +152,22 @@ impl PdfBuilder {
     }
 
     /// Build a PDF from `elements` and return the raw bytes.
+    ///
+    /// Uses [pdfrs](https://crates.io/crates/pdfrs) when the mapped document is small
+    /// enough; falls back to the native PDF engine for large or complex documents.
     pub fn build_to_bytes(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
-        let mut elements = elements;
-        if let Some(plugins) = self.plugins.as_mut() {
-            elements = plugins.transform(elements);
+        let elements = self.prepare_elements(elements);
+        if let Ok(bytes) = self.try_build_to_bytes_pdfrs(&elements) {
+            if bytes.len() <= crate::output::pdfrs_pdf::PDFRS_MAX_BYTES {
+                return Ok(bytes);
+            }
         }
+        self.build_to_bytes_native(elements)
+    }
+
+    /// Native rtex PDF engine (font subsetting, layout, math formatting).
+    pub fn build_to_bytes_native(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
+        let elements = self.prepare_elements(elements);
         let mut generator = PdfGenerator::new();
 
         // Subset and embed DejaVu only when Unicode/math characters are present
@@ -171,18 +182,6 @@ impl PdfBuilder {
             self.create_standard_font_objects(&mut generator)?
         };
 
-        // Extract metadata from elements
-        for elem in &elements {
-            if let TexElement::Command { name, args } = elem {
-                match name.as_str() {
-                    "title" if !args.is_empty() => self.title = Some(args[0].clone()),
-                    "author" if !args.is_empty() => self.author = Some(args[0].clone()),
-                    "date" if !args.is_empty() => self.date = Some(args[0].clone()),
-                    _ => {}
-                }
-            }
-        }
-
         // Collect and embed images
         use std::collections::HashMap;
         let mut image_xobjects: HashMap<usize, (String, u32)> = HashMap::new();
@@ -193,20 +192,29 @@ impl PdfBuilder {
                     Ok(info) => {
                         let dict = info.xobject_dict(info.data.len());
                         let img_id = generator.add_stream_object(dict, info.data);
-                        image_xobjects.insert(idx, (format!("Im{}", idx), img_id));
+                        image_xobjects.insert(idx, (format!("Im{idx}"), img_id));
                     }
-                    Err(e) => eprintln!("Warning: could not load image '{}': {}", path, e),
+                    Err(e) => eprintln!("Warning: could not load image '{path}': {e}"),
                 }
             }
         }
 
         // Resolve page layout from template or default to A4 portrait
-        let page_layout = self.template.as_ref().map(|t| t.page_layout()).unwrap_or_else(crate::page_layout::PageLayout::a4_portrait);
+        let page_layout = self
+            .template
+            .as_ref()
+            .map(|t| t.page_layout())
+            .unwrap_or_else(crate::page_layout::PageLayout::a4_portrait);
         let media_box = format!("[0 0 {} {}]", page_layout.width, page_layout.height);
 
         // Build content streams (one per page)
-        let mut layout_state =
-            self.build_content_stream(&elements, font_id, &image_xobjects, &page_layout, embedded_unicode)?;
+        let mut layout_state = self.build_content_stream(
+            &elements,
+            font_id,
+            &image_xobjects,
+            &page_layout,
+            embedded_unicode,
+        )?;
 
         // Render footnotes at the bottom of each page
         let footnotes_per_page = std::mem::take(&mut layout_state.all_footnotes);
@@ -223,19 +231,15 @@ impl PdfBuilder {
         // Build XObject resource entries
         let mut xobj_entries = String::new();
         for (name, id) in image_xobjects.values() {
-            xobj_entries.push_str(&format!("/{} {} 0 R ", name, id));
+            xobj_entries.push_str(&format!("/{name} {id} 0 R "));
         }
 
         // Create resources dictionary (shared across all pages)
         let resources = if xobj_entries.is_empty() {
-            format!(
-                "<<\n/Font << /F1 {} 0 R >>\n>>\n",
-                font_id
-            )
+            format!("<<\n/Font << /F1 {font_id} 0 R >>\n>>\n")
         } else {
             format!(
-                "<<\n/Font << /F1 {} 0 R >>\n/XObject << {}>>\n>>\n",
-                font_id, xobj_entries
+                "<<\n/Font << /F1 {font_id} 0 R >>\n/XObject << {xobj_entries}>>\n>>\n"
             )
         };
 
@@ -250,29 +254,28 @@ impl PdfBuilder {
             let content_id = generator.add_stream_object(content_dict.build(), compressed);
 
             let page_content = format!(
-                "<<\n/Type /Page\n/MediaBox {}\n/Contents {} 0 R\n/Resources {}\n>>\n",
-                media_box, content_id, resources
+                "<<\n/Type /Page\n/MediaBox {media_box}\n/Contents {content_id} 0 R\n/Resources {resources}\n>>\n"
             );
             let page_id = generator.add_object(page_content);
             page_ids.push((page_id, content_id));
         }
 
         // Create pages object
-        let kids = page_ids.iter()
-            .map(|(pid, _)| format!("{} 0 R", pid))
+        let kids = page_ids
+            .iter()
+            .map(|(pid, _)| format!("{pid} 0 R"))
             .collect::<Vec<_>>()
             .join(" ");
         let pages_content = format!(
-            "<<\n/Type /Pages\n/Kids [{}]\n/Count {}\n>>\n",
-            kids, page_ids.len()
+            "<<\n/Type /Pages\n/Kids [{kids}]\n/Count {}\n>>\n",
+            page_ids.len()
         );
         let pages_id = generator.add_object(pages_content);
 
         // Update each page to reference parent
         for (page_id, content_id) in &page_ids {
             let page_with_parent = format!(
-                "<<\n/Type /Page\n/Parent {} 0 R\n/MediaBox [0 0 595 842]\n/Contents {} 0 R\n/Resources {}\n>>\n",
-                pages_id, content_id, resources
+                "<<\n/Type /Page\n/Parent {pages_id} 0 R\n/MediaBox [0 0 595 842]\n/Contents {content_id} 0 R\n/Resources {resources}\n>>\n"
             );
             generator.objects[*page_id as usize - 1].content = page_with_parent;
         }
@@ -291,28 +294,70 @@ impl PdfBuilder {
             } else {
                 date.clone()
             };
-            info_entries.push(format!("/CreationDate {}", Self::pdf_string_literal(&date_text)));
+            info_entries.push(format!(
+                "/CreationDate {}",
+                Self::pdf_string_literal(&date_text)
+            ));
         }
         info_entries.push(format!(
             "/Producer {} /Creator {}",
-            Self::pdf_string_literal("latex-rs"),
-            Self::pdf_string_literal("latex-rs")
+            Self::pdf_string_literal("rtex"),
+            Self::pdf_string_literal("rtex")
         ));
-        let info_content = format!(
-            "<<\n{}\n>>\n",
-            info_entries.join("\n")
-        );
+        let info_content = format!("<<\n{}\n>>\n", info_entries.join("\n"));
         let info_id = generator.add_object(info_content);
         generator.set_info(info_id);
 
         // Create catalog
-        let catalog_content = format!(
-            "<<\n/Type /Catalog\n/Pages {} 0 R\n>>\n",
-            pages_id
-        );
+        let catalog_content = format!("<<\n/Type /Catalog\n/Pages {pages_id} 0 R\n>>\n");
         let _catalog_id = generator.add_object(catalog_content);
 
         Ok(generator.generate())
+    }
+
+    fn prepare_elements(&mut self, elements: Vec<TexElement>) -> Vec<TexElement> {
+        let mut elements = elements;
+        if let Some(plugins) = self.plugins.as_mut() {
+            elements = plugins.transform(elements);
+        }
+
+        for elem in &elements {
+            if let TexElement::Command { name, args } = elem {
+                match name.as_str() {
+                    "title" if !args.is_empty() => self.title = Some(args[0].clone()),
+                    "author" if !args.is_empty() => self.author = Some(args[0].clone()),
+                    "date" if !args.is_empty() => self.date = Some(args[0].clone()),
+                    _ => {}
+                }
+            }
+        }
+
+        elements
+    }
+
+    fn try_build_to_bytes_pdfrs(&self, elements: &[TexElement]) -> Result<Vec<u8>, String> {
+        let page_layout = self
+            .template
+            .as_ref()
+            .map(|t| t.page_layout())
+            .unwrap_or_else(crate::page_layout::PageLayout::a4_portrait);
+        let base_font_size = self
+            .template
+            .as_ref()
+            .map(|t| t.base_font_size)
+            .unwrap_or(11.0);
+
+        let options = crate::output::pdfrs_pdf::PdfRenderOptions {
+            layout: crate::output::pdfrs_pdf::rtex_layout_to_pdfrs(page_layout),
+            font: "Helvetica".to_string(),
+            base_font_size,
+            image_base_dir: None,
+        };
+
+        crate::output::pdfrs_pdf::render_pdf_bytes(elements, options).map_err(|e| match e {
+            crate::error::LatexError::PdfError { message, .. } => message,
+            other => other.to_string(),
+        })
     }
 
     /// Build a PDF from `elements` and write it to `output_path`.

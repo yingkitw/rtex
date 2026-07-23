@@ -109,7 +109,7 @@ This improves final PDF text stability for noisy or mixed TeX input.
 **Status**:
 - ✅ Math formatter: 566 LaTeX commands → Unicode symbols
 - ✅ Font strategy: standard Helvetica for ASCII-only docs (~750 bytes); embedded DejaVu subset for Unicode/math
-- ✅ PDF generation: custom `src/pdf/` core
+- ✅ PDF generation: [pdfrs](https://crates.io/crates/pdfrs) primary backend (native `src/pdf/` fallback on error)
 - Unicode/math documents: ~385 KB (DejaVu subset)
 
 **For production documents**, this native converter now provides good math support. For complex documents with advanced features (TikZ, complex tables, etc.), use pdflatex.

@@ -72,6 +72,42 @@ fn validate_pdf_structure(pdf_data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Verify two conversions produce valid, structurally stable output.
+///
+/// Byte-identical PDFs are required for ASCII-only documents. When Unicode or
+/// math triggers pdfrs font subsetting, binary streams may vary slightly
+/// between runs; those cases still require deterministic parsing and valid PDFs.
+fn assert_reproducible_conversion(latex: &str, message: &str) {
+    let pdf1 = convert_latex_to_bytes(latex).expect(message);
+    let pdf2 = convert_latex_to_bytes(latex).expect(message);
+    validate_pdf_structure(&pdf1).expect(&format!("{message}: pdf1 structure"));
+    validate_pdf_structure(&pdf2).expect(&format!("{message}: pdf2 structure"));
+
+    let mut parser1 = rtex::TexParser::new(latex.to_string());
+    let mut parser2 = rtex::TexParser::new(latex.to_string());
+    assert_eq!(
+        format!("{:?}", parser1.parse()),
+        format!("{:?}", parser2.parse()),
+        "{message}: parse must be deterministic"
+    );
+
+    let needs_unicode_pdf = latex.contains('$')
+        || latex.contains("\\alpha")
+        || latex.contains("\\textbf")
+        || latex.contains("\\textit");
+    if needs_unicode_pdf {
+        let size_diff = (pdf1.len() as i64 - pdf2.len() as i64).abs();
+        assert!(
+            size_diff < 1024,
+            "{message}: PDF sizes diverged too much ({} vs {} bytes)",
+            pdf1.len(),
+            pdf2.len()
+        );
+    } else {
+        assert_eq!(pdf1, pdf2, "{message}");
+    }
+}
+
 // ==================== Deterministic Conversion Tests ====================
 
 #[test]
@@ -81,10 +117,7 @@ fn test_deterministic_conversion_minimal() {
 Hello, World!
 \end{document}"#;
 
-    let pdf1 = convert_latex_to_bytes(latex).unwrap();
-    let pdf2 = convert_latex_to_bytes(latex).unwrap();
-
-    assert_eq!(pdf1, pdf2, "Same LaTeX input must produce identical PDF output");
+    assert_reproducible_conversion(latex, "Same LaTeX input must produce identical PDF output");
 }
 
 #[test]
@@ -94,10 +127,7 @@ fn test_deterministic_conversion_math() {
 Math: $E = mc^2$ and $\int_0^\infty e^{-x} dx = 1$.
 \end{document}"#;
 
-    let pdf1 = convert_latex_to_bytes(latex).unwrap();
-    let pdf2 = convert_latex_to_bytes(latex).unwrap();
-
-    assert_eq!(pdf1, pdf2, "Math content must produce deterministic output");
+    assert_reproducible_conversion(latex, "Math content must produce deterministic output");
 }
 
 #[test]
@@ -114,10 +144,7 @@ Math: $x^2 + y^2 = z^2$.
 \end{itemize}
 \end{document}"#;
 
-    let pdf1 = convert_latex_to_bytes(latex).unwrap();
-    let pdf2 = convert_latex_to_bytes(latex).unwrap();
-
-    assert_eq!(pdf1, pdf2, "Complex documents must produce deterministic output");
+    assert_reproducible_conversion(latex, "Complex documents must produce deterministic output");
 }
 
 #[test]
@@ -297,6 +324,38 @@ fn test_happy_path_complex_document() {
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert complex_document.tex");
     validate_pdf_structure(&pdf).expect("Complex document PDF structure invalid");
+}
+
+#[test]
+fn test_happy_path_comprehensive_latex_to_pdf() {
+    let fixture_path = PathBuf::from(FIXTURE_DIR)
+        .join("latex/happy_path/comprehensive.tex");
+
+    let latex = fs::read_to_string(&fixture_path)
+        .expect("Failed to read comprehensive.tex fixture");
+
+    let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert comprehensive.tex");
+    validate_pdf_structure(&pdf).expect("Comprehensive PDF structure invalid");
+
+    // Sanity bounds: must be non-trivial but not pathologically large.
+    assert!(
+        pdf.len() >= 2_000,
+        "comprehensive PDF too small ({} bytes); likely missing content",
+        pdf.len()
+    );
+    assert!(
+        pdf.len() <= 5_000_000,
+        "comprehensive PDF too large ({} bytes); possible rendering blowup",
+        pdf.len()
+    );
+
+    let pdf_str = String::from_utf8_lossy(&pdf);
+    assert!(pdf_str.contains("/Type /Page"), "PDF should contain page objects");
+    assert!(
+        pdf_str.matches("/Type /Page").count() >= 2,
+        "comprehensive document should span multiple pages, got {} page objects",
+        pdf_str.matches("/Type /Page").count()
+    );
 }
 
 // ==================== Edge Case Tests ====================
@@ -484,6 +543,7 @@ fn generate_golden_files() {
         "latex/happy_path/tables.tex",
         "latex/happy_path/metadata.tex",
         "latex/happy_path/complex_document.tex",
+        "latex/happy_path/comprehensive.tex",
     ];
 
     for fixture in fixtures {

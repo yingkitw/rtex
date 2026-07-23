@@ -1,0 +1,166 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Comprehensive rtex PDF Test}
+\author{rtex Test Suite}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document exercises the major LaTeX features supported by rtex in a single
+conversion pass: metadata, sections, text formatting, mathematics, lists, tables,
+theorem environments, links, colors, footnotes, and code blocks.
+\end{abstract}
+
+\section{Document Structure}
+\subsection{Headings and Text}
+Plain paragraphs with \textbf{bold}, \textit{italic}, \emph{emphasis},
+\texttt{monospace}, \textsc{Small Caps}, and \underline{underlined} text.
+Superscripts like $x\textsuperscript{2}$ and subscripts like $H\textsubscript{2}O$
+appear inline.
+
+\section*{Unnumbered Section}
+Starred sections omit numbers but still render body text.
+
+\section{Mathematics}
+
+\subsection{Inline and Display}
+Inline: $E = mc^2$, $\alpha + \beta = \gamma$, and $\int_0^1 x^2\,dx = \tfrac{1}{3}$.
+Display:
+\begin{equation}
+    x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+\end{equation}
+
+\subsection{Aligned and Gathered Equations}
+\begin{align}
+    a &= b + c \\
+    d + e &= f + g + h \\
+    i &= j
+\end{align}
+
+\begin{gather}
+    x = 1 \\
+    y = 2 \\
+    z = 3
+\end{gather}
+
+\begin{multline}
+    a + b + c + d + e + f + g + h + i + j \\
+    + k + l + m
+\end{multline}
+
+\subsection{Piecewise Functions and Cases}
+\[
+    f(x) = \begin{cases}
+        x^2  & \text{if } x \geq 0 \\
+        -x   & \text{if } x < 0
+    \end{cases}
+\]
+
+Binomial coefficients: $\binom{n}{k}$ and ellipses $\ldots$, $\cdots$, $\vdots$, $\ddots$.
+
+\section{Lists}
+
+\subsection{Unordered and Ordered}
+\begin{itemize}
+    \item First item with math $\pi \approx 3.14$
+    \item Second item
+    \item Third item
+\end{itemize}
+
+\begin{enumerate}
+    \item Step one
+    \item Step two
+    \item Step three
+\end{enumerate}
+
+\subsection{Nested Lists}
+\begin{itemize}
+    \item Outer alpha
+    \begin{itemize}
+        \item Inner one
+        \item Inner two
+    \end{itemize}
+    \item Outer beta
+\end{itemize}
+
+\subsection{Description List}
+\begin{description}
+    \item[Parser] Converts TeX source into a structured AST.
+    \item[Builder] Walks the AST and emits PDF content streams.
+    \item[Formatter] Maps LaTeX math commands to Unicode symbols.
+\end{description}
+
+\section{Tables}
+\begin{tabular}{lcc}
+\hline
+Quantity & Symbol & Value \\
+\hline
+Speed of light & $c$ & $3 \times 10^8$ m/s \\
+Planck constant & $h$ & $6.626 \times 10^{-34}$ J$\cdot$s \\
+Fine-structure & $\alpha$ & $\approx 1/137$ \\
+\hline
+\end{tabular}
+
+\section{Theorem Environments}
+\begin{theorem}[Pythagoras]
+For a right triangle with legs $a, b$ and hypotenuse $c$, $a^2 + b^2 = c^2$.
+\end{theorem}
+
+\begin{proof}
+By similarity of triangles. \qed
+\end{proof}
+
+\begin{definition}
+A \emph{group} is a set $G$ with an associative binary operation and identity.
+\end{definition}
+
+\begin{lemma}
+Every finite group has a well-defined order.
+\end{lemma}
+
+\section{Links, Colors, and Notes}
+Read the docs at \href{https://example.com/rtex}{rtex documentation} or visit
+\url{https://example.com}.
+
+Colored text: \textcolor{red}{Important warning} and \textcolor{blue}{Information}.
+
+A footnote marker\footnote{This footnote verifies bottom-of-page rendering.} ends the paragraph.
+
+\section{Code and Quotes}
+\begin{quote}
+    ``Programs must be written for people to read, and only incidentally for
+    machines to execute.'' --- Abelson \& Sussman
+\end{quote}
+
+\begin{verbatim}
+fn main() {
+    println!("Hello from rtex");
+}
+\end{verbatim}
+
+\section{References and Bibliography}
+See \cite{knuth1984} and \cite{lamport1994} for background. Equation~\eqref{eq:sample}
+uses a label below.
+
+\begin{equation}
+    \label{eq:sample}
+    \nabla \cdot \mathbf{E} = \frac{\rho}{\varepsilon_0}
+\end{equation}
+
+Cross-reference: Section~\ref{sec:conclusion}.
+
+\begin{thebibliography}{9}
+\bibitem{knuth1984} D.~E. Knuth, \emph{The TeXbook}, Addison-Wesley, 1984.
+\bibitem{lamport1994} L.~Lamport, \emph{LaTeX: A Document Preparation System}, 2nd ed., 1994.
+\end{thebibliography}
+
+\section{Conclusion}
+\label{sec:conclusion}
+If this document converts to a valid multi-section PDF, rtex covers the core
+LaTeX authoring surface area end to end.
+
+\end{document}

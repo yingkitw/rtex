@@ -69,7 +69,7 @@ pub mod template;
 pub use error::{LatexError, Position};
 pub use parser::{TexElement, TexParser};
 pub use pdf::builder::PdfBuilder;
-pub use output::{OutputFormat, DocumentMeta, render_elements};
+pub use output::{OutputFormat, DocumentMeta, render_elements, render_elements_in_dir};
 pub use packages::{PackageFetcher, PackageRequest};
 pub use intermediate::{write_intermediates, sibling_artifact, IntermediateMeta};
 pub use macros::expand_document;
@@ -236,7 +236,11 @@ impl NativeTexConverter {
         output: Option<&Path>,
     ) -> Result<Vec<u8>, LatexError> {
         let elements = self.parse_content(tex, base_dir);
-        let bytes = render_elements(elements.clone(), self.options.format)?;
+        let bytes = render_elements_in_dir(
+            elements.clone(),
+            self.options.format,
+            base_dir,
+        )?;
 
         if self.options.keep_intermediate {
             if let Some(out) = output {
