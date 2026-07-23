@@ -58,7 +58,11 @@ impl PackageFetcher {
         }
 
         for package_list in extract_braced_command(preamble, "\\usepackage") {
-            for package in package_list.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            for package in package_list
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 let pkg = package.split('[').next().unwrap_or(package).trim();
                 push_request(&mut requests, &mut seen, pkg, &format!("{pkg}.sty"));
             }
@@ -123,10 +127,8 @@ impl PackageFetcher {
             match fetch_url(&url) {
                 Ok(bytes) if !bytes.is_empty() => {
                     let dest = self.cache_dir.join(&request.file_name);
-                    std::fs::write(&dest, bytes).map_err(|source| LatexError::IoError {
-                        path: dest,
-                        source,
-                    })?;
+                    std::fs::write(&dest, bytes)
+                        .map_err(|source| LatexError::IoError { path: dest, source })?;
                     return Ok(());
                 }
                 Ok(_) => last_error = format!("empty response from {url}"),
@@ -192,7 +194,10 @@ fn fetch_url(url: &str) -> Result<Vec<u8>, String> {
     if !response.status().is_success() {
         return Err(format!("HTTP {}", response.status()));
     }
-    response.into_body().read_to_vec().map_err(|e| e.to_string())
+    response
+        .into_body()
+        .read_to_vec()
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -234,7 +239,13 @@ Hi
     #[test]
     fn ctan_urls_include_base_and_contrib() {
         let urls = ctan_candidate_urls("https://mirrors.ctan.org", "amsmath", "amsmath.sty");
-        assert!(urls.iter().any(|u| u.contains("/macros/latex/required/amsmath/")));
-        assert!(urls.iter().any(|u| u.contains("/macros/latex/contrib/amsmath/")));
+        assert!(
+            urls.iter()
+                .any(|u| u.contains("/macros/latex/required/amsmath/"))
+        );
+        assert!(
+            urls.iter()
+                .any(|u| u.contains("/macros/latex/contrib/amsmath/"))
+        );
     }
 }

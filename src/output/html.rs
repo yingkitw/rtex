@@ -14,7 +14,10 @@ pub fn render(elements: &[TexElement]) -> Result<Vec<u8>, LatexError> {
     let mut html = String::new();
     html.push_str("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n");
     html.push_str("  <meta charset=\"utf-8\" />\n");
-    html.push_str(&format!("  <title>{}</title>\n", super::common::escape_html(title)));
+    html.push_str(&format!(
+        "  <title>{}</title>\n",
+        super::common::escape_html(title)
+    ));
     if let Some(author) = &meta.author {
         html.push_str(&format!(
             "  <meta name=\"author\" content=\"{}\" />\n",
@@ -29,10 +32,16 @@ pub fn render(elements: &[TexElement]) -> Result<Vec<u8>, LatexError> {
             html.push_str(&format!("<h1>{}</h1>\n", super::common::escape_html(t)));
         }
         if let Some(a) = &meta.author {
-            html.push_str(&format!("<p class=\"author\">{}</p>\n", super::common::escape_html(a)));
+            html.push_str(&format!(
+                "<p class=\"author\">{}</p>\n",
+                super::common::escape_html(a)
+            ));
         }
         if let Some(d) = &meta.date {
-            html.push_str(&format!("<p class=\"date\">{}</p>\n", super::common::escape_html(d)));
+            html.push_str(&format!(
+                "<p class=\"date\">{}</p>\n",
+                super::common::escape_html(d)
+            ));
         }
         html.push_str("</header>\n");
     }

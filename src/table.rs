@@ -148,7 +148,11 @@ pub fn render_table(
 /// Ignores `|`, `@{}`, and `p{width}` — treats `p` as left-aligned.
 fn parse_column_spec(spec: &str) -> Vec<Align> {
     let mut result = Vec::new();
-    let mut chars = spec.trim().trim_start_matches('{').trim_end_matches('}').chars();
+    let mut chars = spec
+        .trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .chars();
 
     while let Some(ch) = chars.next() {
         match ch {
@@ -206,7 +210,10 @@ mod tests {
             vec![Align::Left, Align::Center, Align::Right]
         );
         assert_eq!(parse_column_spec("cc"), vec![Align::Center, Align::Center]);
-        assert_eq!(parse_column_spec("p{3cm}r"), vec![Align::Left, Align::Right]);
+        assert_eq!(
+            parse_column_spec("p{3cm}r"),
+            vec![Align::Left, Align::Right]
+        );
     }
 
     #[test]
@@ -215,7 +222,10 @@ mod tests {
         let content = "A & B & C \\\\\n\\hline\n1 & 2 & 3 \\\\";
         let table = Table::parse(spec, content);
 
-        assert_eq!(table.columns, vec![Align::Left, Align::Center, Align::Right]);
+        assert_eq!(
+            table.columns,
+            vec![Align::Left, Align::Center, Align::Right]
+        );
         assert_eq!(table.rows.len(), 3);
         assert!(table.rows[1].is_separator);
         assert_eq!(table.rows[0].cells, vec!["A", "B", "C"]);

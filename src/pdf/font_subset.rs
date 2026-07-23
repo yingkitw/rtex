@@ -7,8 +7,7 @@ pub fn collect_used_chars(elements: &[crate::parser::TexElement]) -> BTreeSet<ch
     let mut chars = BTreeSet::new();
     for elem in elements {
         match elem {
-            crate::parser::TexElement::Text(t)
-            | crate::parser::TexElement::CodeBlock(t) => {
+            crate::parser::TexElement::Text(t) | crate::parser::TexElement::CodeBlock(t) => {
                 for c in t.chars() {
                     chars.insert(c);
                 }
@@ -101,7 +100,10 @@ mod tests {
     fn collect_used_chars_includes_text() {
         let elements = vec![
             crate::parser::TexElement::Text("Hello α".to_string()),
-            crate::parser::TexElement::Section { level: 1, title: "World".to_string() },
+            crate::parser::TexElement::Section {
+                level: 1,
+                title: "World".to_string(),
+            },
         ];
         let chars = collect_used_chars(&elements);
         assert!(chars.contains(&'H'));
@@ -129,7 +131,8 @@ mod tests {
 
     #[test]
     fn subset_font_smaller_than_original() {
-        let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/DejaVuSans.ttf");
+        let font_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/DejaVuSans.ttf");
         let font_data = std::fs::read(&font_path).unwrap();
         let original_len = font_data.len();
 
@@ -140,9 +143,12 @@ mod tests {
 
         if let Some(subset_data) = subset_font(&font_data, &chars) {
             // Subset should be significantly smaller than original
-            assert!(subset_data.len() < original_len,
+            assert!(
+                subset_data.len() < original_len,
                 "subset {} bytes should be smaller than original {} bytes",
-                subset_data.len(), original_len);
+                subset_data.len(),
+                original_len
+            );
         }
         // If subsetting returns None (e.g. permissions don't allow it),
         // the PdfBuilder falls back to the full font, so this is fine.

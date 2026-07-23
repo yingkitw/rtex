@@ -105,7 +105,10 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
             for (idx, item) in items.iter().enumerate() {
                 out.push_str("<li>");
                 if let Some(label) = labels.get(idx).and_then(|l| l.as_ref()) {
-                    out.push_str(&format!("<span class=\"label\">{}</span> ", escape_html(label)));
+                    out.push_str(&format!(
+                        "<span class=\"label\">{}</span> ",
+                        escape_html(label)
+                    ));
                 }
                 render_elements_html(item, out);
                 out.push_str("</li>\n");
@@ -141,8 +144,16 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
             out.push_str(&escape_html(code));
             out.push_str("</code></pre>\n");
         }
-        TexElement::Image { path, width, height } => {
-            let mut attrs = format!("src=\"{}\" alt=\"{}\"", escape_html(path), escape_html(path));
+        TexElement::Image {
+            path,
+            width,
+            height,
+        } => {
+            let mut attrs = format!(
+                "src=\"{}\" alt=\"{}\"",
+                escape_html(path),
+                escape_html(path)
+            );
             if let Some(w) = width {
                 attrs.push_str(&format!(" width=\"{}\"", escape_html(w)));
             }
@@ -175,9 +186,15 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
             render_elements_html(content, out);
             out.push_str("</div>\n");
         }
-        TexElement::TableOfContents => out.push_str("<nav class=\"toc\"><em>Table of Contents</em></nav>\n"),
-        TexElement::ListOfFigures => out.push_str("<section class=\"lof\"><em>List of Figures</em></section>\n"),
-        TexElement::ListOfTables => out.push_str("<section class=\"lot\"><em>List of Tables</em></section>\n"),
+        TexElement::TableOfContents => {
+            out.push_str("<nav class=\"toc\"><em>Table of Contents</em></nav>\n")
+        }
+        TexElement::ListOfFigures => {
+            out.push_str("<section class=\"lof\"><em>List of Figures</em></section>\n")
+        }
+        TexElement::ListOfTables => {
+            out.push_str("<section class=\"lot\"><em>List of Tables</em></section>\n")
+        }
         TexElement::Footnote { text } => {
             out.push_str("<sup class=\"footnote\">");
             out.push_str(&escape_html(text));

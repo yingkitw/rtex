@@ -91,7 +91,23 @@ pub fn command_completions(prefix: &str) -> Vec<TexCompletion> {
             label: name.to_string(),
             insert_text: format!("{name}{{}}"),
             detail: Some((*detail).to_string()),
-            kind: if matches!(*name, "begin" | "end" | "itemize" | "enumerate" | "tabular" | "table" | "figure" | "center" | "quote" | "abstract" | "equation" | "verbatim" | "lstlisting" | "thebibliography") {
+            kind: if matches!(
+                *name,
+                "begin"
+                    | "end"
+                    | "itemize"
+                    | "enumerate"
+                    | "tabular"
+                    | "table"
+                    | "figure"
+                    | "center"
+                    | "quote"
+                    | "abstract"
+                    | "equation"
+                    | "verbatim"
+                    | "lstlisting"
+                    | "thebibliography"
+            ) {
                 CompletionKind::Environment
             } else {
                 CompletionKind::Command
@@ -122,8 +138,7 @@ pub fn environment_completions(prefix: &str) -> Vec<TexCompletion> {
         ("minipage", "Mini page box"),
     ];
 
-    ENVS
-        .iter()
+    ENVS.iter()
         .filter(|(name, _)| prefix.is_empty() || name.starts_with(prefix))
         .map(|(name, detail)| TexCompletion {
             label: name.to_string(),

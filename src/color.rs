@@ -16,31 +16,83 @@ pub struct Color {
 
 impl Color {
     /// White.
-    pub const WHITE: Color = Color { r: 1.0, g: 1.0, b: 1.0 };
+    pub const WHITE: Color = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+    };
     /// Black.
-    pub const BLACK: Color = Color { r: 0.0, g: 0.0, b: 0.0 };
+    pub const BLACK: Color = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+    };
     /// Red.
-    pub const RED: Color = Color { r: 1.0, g: 0.0, b: 0.0 };
+    pub const RED: Color = Color {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+    };
     /// Green.
-    pub const GREEN: Color = Color { r: 0.0, g: 0.5, b: 0.0 };
+    pub const GREEN: Color = Color {
+        r: 0.0,
+        g: 0.5,
+        b: 0.0,
+    };
     /// Blue.
-    pub const BLUE: Color = Color { r: 0.0, g: 0.0, b: 1.0 };
+    pub const BLUE: Color = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+    };
     /// Cyan.
-    pub const CYAN: Color = Color { r: 0.0, g: 1.0, b: 1.0 };
+    pub const CYAN: Color = Color {
+        r: 0.0,
+        g: 1.0,
+        b: 1.0,
+    };
     /// Magenta.
-    pub const MAGENTA: Color = Color { r: 1.0, g: 0.0, b: 1.0 };
+    pub const MAGENTA: Color = Color {
+        r: 1.0,
+        g: 0.0,
+        b: 1.0,
+    };
     /// Yellow.
-    pub const YELLOW: Color = Color { r: 1.0, g: 1.0, b: 0.0 };
+    pub const YELLOW: Color = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 0.0,
+    };
     /// Orange.
-    pub const ORANGE: Color = Color { r: 1.0, g: 0.65, b: 0.0 };
+    pub const ORANGE: Color = Color {
+        r: 1.0,
+        g: 0.65,
+        b: 0.0,
+    };
     /// Purple.
-    pub const PURPLE: Color = Color { r: 0.5, g: 0.0, b: 0.5 };
+    pub const PURPLE: Color = Color {
+        r: 0.5,
+        g: 0.0,
+        b: 0.5,
+    };
     /// Gray (50%).
-    pub const GRAY: Color = Color { r: 0.5, g: 0.5, b: 0.5 };
+    pub const GRAY: Color = Color {
+        r: 0.5,
+        g: 0.5,
+        b: 0.5,
+    };
     /// Dark gray.
-    pub const DARK_GRAY: Color = Color { r: 0.25, g: 0.25, b: 0.25 };
+    pub const DARK_GRAY: Color = Color {
+        r: 0.25,
+        g: 0.25,
+        b: 0.25,
+    };
     /// Light gray.
-    pub const LIGHT_GRAY: Color = Color { r: 0.75, g: 0.75, b: 0.75 };
+    pub const LIGHT_GRAY: Color = Color {
+        r: 0.75,
+        g: 0.75,
+        b: 0.75,
+    };
 
     /// Create a color from an HTML hex string (`#RRGGBB` or `RGB`).
     pub fn from_hex(hex: &str) -> Option<Self> {
@@ -135,7 +187,14 @@ mod tests {
     #[test]
     fn test_hex_colors() {
         assert_eq!(Color::from_hex("#FF0000"), Some(Color::RED));
-        assert_eq!(Color::from_hex("#00FF00"), Some(Color { r: 0.0, g: 1.0, b: 0.0 }));
+        assert_eq!(
+            Color::from_hex("#00FF00"),
+            Some(Color {
+                r: 0.0,
+                g: 1.0,
+                b: 0.0
+            })
+        );
         assert_eq!(Color::from_hex("F00"), Some(Color::RED));
         assert_eq!(Color::from_hex("invalid"), None);
     }

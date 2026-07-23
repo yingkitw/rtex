@@ -219,7 +219,10 @@ mod tests {
     #[test]
     fn custom_paper_size() {
         let t = DocumentTemplate {
-            paper: PaperSize::Custom { width: 300.0, height: 400.0 },
+            paper: PaperSize::Custom {
+                width: 300.0,
+                height: 400.0,
+            },
             orientation: PageOrientation::Landscape,
             ..Default::default()
         };

@@ -68,11 +68,7 @@ pub fn document_symbols(text: &str) -> Vec<TexSymbol> {
     root
 }
 
-fn attach_symbol(
-    symbol: TexSymbol,
-    stack: &mut [(usize, TexSymbol)],
-    root: &mut Vec<TexSymbol>,
-) {
+fn attach_symbol(symbol: TexSymbol, stack: &mut [(usize, TexSymbol)], root: &mut Vec<TexSymbol>) {
     if let Some((_, parent)) = stack.last_mut() {
         parent.children.push(symbol);
     } else {
@@ -135,6 +131,12 @@ Hello
 \section{Two}
 \end{document}";
         let symbols = document_symbols(text);
-        assert_eq!(symbols.iter().filter(|s| s.kind == SymbolKind::Section).count(), 2);
+        assert_eq!(
+            symbols
+                .iter()
+                .filter(|s| s.kind == SymbolKind::Section)
+                .count(),
+            2
+        );
     }
 }

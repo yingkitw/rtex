@@ -7,9 +7,9 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::tempdir;
     // Note: lopdf removed - using custom PDF generation
-    use crate::{NativeTexConverter, LatexError};
     use crate::parser::TexElement;
     use crate::parser::TexParser;
+    use crate::{LatexError, NativeTexConverter};
 
     #[test]
     fn test_converter_creation() {
@@ -57,7 +57,7 @@ Cached content
         let converter = NativeTexConverter::new();
         let input = PathBuf::from("/nonexistent/file.tex");
         let output = PathBuf::from("/tmp/output.pdf");
-        
+
         let result = converter.convert(&input, &output);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), LatexError::InvalidPath));
@@ -219,10 +219,10 @@ Cached string conversion
         let result = converter.convert(&input_path, &output_path);
 
         match result {
-            Err(LatexError::PdfError { .. }) => {},
-            Err(LatexError::IoError { .. }) => {},
+            Err(LatexError::PdfError { .. }) => {}
+            Err(LatexError::IoError { .. }) => {}
             Err(e) => panic!("Unexpected error type: {:?}", e),
-            Ok(_) => {},
+            Ok(_) => {}
         }
     }
 
@@ -243,29 +243,28 @@ Cached string conversion
     // Note: extract_pdf_text removed with lopdf dependency
     // PDF text extraction would require external tool or library
     // For now, we validate PDF structure only
-    
+
     /// Validate PDF structure and content
     fn validate_pdf_content(pdf_path: &PathBuf, _expected_texts: &[&str]) -> Result<(), String> {
         // Check file exists and has content
-        let metadata = fs::metadata(pdf_path)
-            .map_err(|e| format!("Failed to read PDF metadata: {}", e))?;
-        
+        let metadata =
+            fs::metadata(pdf_path).map_err(|e| format!("Failed to read PDF metadata: {}", e))?;
+
         if metadata.len() == 0 {
             return Err("PDF file is empty".to_string());
         }
-        
+
         if metadata.len() < 100 {
             return Err("PDF file too small, likely invalid".to_string());
         }
-        
+
         // Check PDF header
-        let pdf_data = fs::read(pdf_path)
-            .map_err(|e| format!("Failed to read PDF: {}", e))?;
-        
+        let pdf_data = fs::read(pdf_path).map_err(|e| format!("Failed to read PDF: {}", e))?;
+
         if !pdf_data.starts_with(b"%PDF") {
             return Err("PDF missing header signature".to_string());
         }
-        
+
         // Check PDF has proper structure (xref and trailer)
         let pdf_str = String::from_utf8_lossy(&pdf_data);
         if !pdf_str.contains("xref") {
@@ -277,14 +276,18 @@ Cached string conversion
         if !pdf_str.contains("%%EOF") {
             return Err("PDF missing EOF marker".to_string());
         }
-        
+
         // Note: Text content validation disabled after removing lopdf
         // PDFs are structurally valid but text extraction requires external tool
-        
+
         Ok(())
     }
 
-    fn verify_pdf_generation_with_validation(tex_content: &str, test_name: &str, expected_texts: &[&str]) -> bool {
+    fn verify_pdf_generation_with_validation(
+        tex_content: &str,
+        test_name: &str,
+        expected_texts: &[&str],
+    ) -> bool {
         let (output_dir, is_persistent) = get_test_output_dir(test_name);
         let input_path = output_dir.join(format!("{}.tex", test_name));
         let output_path = output_dir.join(format!("{}.pdf", test_name));
@@ -297,16 +300,16 @@ Cached string conversion
         match result {
             Ok(_) => {
                 assert!(output_path.exists(), "PDF file should exist");
-                
+
                 // Validate PDF content
                 if let Err(e) = validate_pdf_content(&output_path, expected_texts) {
                     panic!("PDF validation failed for {}: {}", test_name, e);
                 }
-                
+
                 if is_persistent {
                     println!("Test PDF saved to: {:?}", output_path);
                 }
-                
+
                 true
             }
             Err(e) => {
@@ -330,7 +333,7 @@ More text on another line.
         verify_pdf_generation_with_validation(
             tex_content,
             "text_element",
-            &["Plain text content here", "More text on another line"]
+            &["Plain text content here", "More text on another line"],
         );
     }
 
@@ -349,7 +352,12 @@ Content in section two.
         verify_pdf_generation_with_validation(
             tex_content,
             "section_element",
-            &["First Section", "Content in section one", "Subsection Title", "Second Section"]
+            &[
+                "First Section",
+                "Content in section one",
+                "Subsection Title",
+                "Second Section",
+            ],
         );
     }
 
@@ -367,7 +375,11 @@ Third paragraph content.
         verify_pdf_generation_with_validation(
             tex_content,
             "paragraph_element",
-            &["First paragraph content", "Second paragraph", "Third paragraph"]
+            &[
+                "First paragraph content",
+                "Second paragraph",
+                "Third paragraph",
+            ],
         );
     }
 
@@ -382,7 +394,7 @@ More math: $\alpha + \beta = \gamma$.
         verify_pdf_generation_with_validation(
             tex_content,
             "math_inline_element",
-            &["Inline math expression", "x = y + z", "a"]
+            &["Inline math expression", "x = y + z", "a"],
         );
     }
 
@@ -400,7 +412,7 @@ End of document.
         verify_pdf_generation_with_validation(
             tex_content,
             "math_display_element",
-            &["Display math equation", "End of document"]
+            &["Display math equation", "End of document"],
         );
     }
 
@@ -419,7 +431,12 @@ Shopping list:
         verify_pdf_generation_with_validation(
             tex_content,
             "itemlist_unordered_element",
-            &["Shopping list", "First bullet item", "Second bullet item", "Third bullet"]
+            &[
+                "Shopping list",
+                "First bullet item",
+                "Second bullet item",
+                "Third bullet",
+            ],
         );
     }
 
@@ -438,7 +455,12 @@ Procedure steps:
         verify_pdf_generation_with_validation(
             tex_content,
             "itemlist_ordered_element",
-            &["Procedure steps", "First step instruction", "Second step instruction", "Third step"]
+            &[
+                "Procedure steps",
+                "First step instruction",
+                "Second step instruction",
+                "Third step",
+            ],
         );
     }
 
@@ -457,7 +479,7 @@ Document body content starts here and should appear.
         verify_pdf_generation_with_validation(
             tex_content,
             "command_metadata_element",
-            &["Document body content starts"]
+            &["Document body content starts"],
         );
     }
 
@@ -638,15 +660,18 @@ This is a test for PDF file size verification.
             let input_path = temp_dir.path().join(format!("doc{}.tex", i));
             let output_path = temp_dir.path().join(format!("doc{}.pdf", i));
 
-            let tex_content = format!(r#"\documentclass{{article}}
+            let tex_content = format!(
+                r#"\documentclass{{article}}
 \begin{{document}}
 Document number {}
 \end{{document}}
-"#, i);
+"#,
+                i
+            );
             fs::write(&input_path, tex_content).unwrap();
 
             let result = converter.convert(&input_path, &output_path);
-            
+
             if result.is_ok() {
                 assert!(output_path.exists(), "PDF {} should exist", i);
             }
@@ -681,10 +706,10 @@ Test output directory creation.
     #[test]
     fn test_texttt_parsing_issue() {
         let content = r"demonstrate the \texttt{latex-rs} TeX to PDF converter.";
-        
+
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        
+
         // \texttt should produce a Command element with the text content
         assert!(elements.iter().any(|e| {
             matches!(e, TexElement::Command { name, args } if name == "texttt" && args == &["latex-rs".to_string()])
@@ -694,10 +719,10 @@ Test output directory creation.
     #[test]
     fn test_inline_math_parsing_issue() {
         let content = r"$\int_0^\infty e^{-x} dx = 1$";
-        
+
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        
+
         println!("Math input: {}", content);
         println!("Parsed elements:");
         for (i, elem) in elements.iter().enumerate() {
@@ -708,21 +733,24 @@ Test output directory creation.
     #[test]
     fn test_infinity_superscript() {
         use crate::math_formatter::MathFormatter;
-        
+
         let input = r"\int_0^\infty e^{-x} dx = 1";
         let output = MathFormatter::format(input);
         println!("Math format input: {}", input);
         println!("Math format output: {}", output);
-        
+
         // Let's also test just the infinity part
         let inf_input = r"^\infty";
         let inf_output = MathFormatter::format(inf_input);
         println!("Infinity input: {}", inf_input);
         println!("Infinity output: {}", inf_output);
-        
+
         // Check that infinity is properly formatted (with Unicode symbols using DejaVu)
-        assert!(output.contains("∫") || output.contains("∞"), 
-                "Infinity and integral should be formatted with Unicode symbols, got: {}", output);
+        assert!(
+            output.contains("∫") || output.contains("∞"),
+            "Infinity and integral should be formatted with Unicode symbols, got: {}",
+            output
+        );
     }
 
     #[test]

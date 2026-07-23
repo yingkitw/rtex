@@ -277,16 +277,26 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 445 (100% passing)
-- Warnings: 0
+- Tests: 400+ (see `cargo test`)
+- PDF: pdfrs primary (`vendor/pdfrs`), native fallback (`src/pdf/`); `/Producer` stamps `rtex/pdfrs` or `rtex/native`
+- Math: Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum)
 - Math symbols: 566
-- LaTeX commands: ~250+ (parser + math symbols + section levels + TOC + text formatting + alignment + page breaks + rules + boxes + quote + abstract + item labels + list of figures/tables + text formatting + phantom/raisebox + math accents + math alphabets + bibliography + appendix + index/glossary + rotatebox/scalebox + font declarations + special text chars + colorbox/fcolorbox + spacing commands + `description` + `align*`/`gather*`/`multline*`/`cases` + theorem-like + `\href` + `\section*` + `\binom`/`\tfrac` + nested `\[cases\]`)
-- Documentation: ~80%
-- File size: ~750 bytes for ASCII-only PDFs; ~385 KB when Unicode/math requires embedded DejaVu subset
+- LaTeX commands: ~250+
+- Documentation: ARCHITECTURE/SPEC/README aligned with dual PDF backends
+- File size: ~750 bytes for ASCII-only PDFs; subsetted Unicode/math via pdfrs Archive profile
+
+### Audit follow-ups (2026-07-23)
+- [x] Free disk / ignore nested `vendor/pdfrs/target`
+- [x] Document pdfrs-primary + `RTEX_PDF_BACKEND` + Producer stamp
+- [x] Stabilize path dep on `vendor/pdfrs`; track `Cargo.lock`; gate debug bins behind `dev-bins`
+- [x] Unify list-item math routing (`\frac`/`\sqrt` → MathBlock)
+- [x] Expand `integration_test` to all 10 examples (fail on error)
+- [x] Fix native MediaBox to use page layout dimensions
+- [x] Remove duplicate PdfBuilder pdfrs try-path (single fallback in `output/mod.rs`)
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)
-- Warnings: 0
+- Warnings: keep low
 - Math symbols: 300+
 - LaTeX commands: 200+
 - Documentation: 80%

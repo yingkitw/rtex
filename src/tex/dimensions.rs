@@ -63,7 +63,7 @@ impl Dimension {
             "nd" => (value * 1238.0 * PT_TO_SP as f64 / 1157.0).round() as i64,
             "nc" => (value * 14856.0 * PT_TO_SP as f64 / 1157.0).round() as i64,
             "em" => (value * 10.0 * PT_TO_SP as f64).round() as i64, // approx
-            "ex" => (value * 4.3 * PT_TO_SP as f64).round() as i64, // approx
+            "ex" => (value * 4.3 * PT_TO_SP as f64).round() as i64,  // approx
             _ => return None,
         };
 

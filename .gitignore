@@ -1,6 +1,6 @@
 /target
+/vendor/pdfrs/target
 /output
-Cargo.lock
 *.pdf
 *.aux
 *.log

@@ -84,11 +84,12 @@ impl PdfGenerator {
 
             // Stream data if present
             if obj.is_stream
-                && let Some(data) = &obj.stream_data {
-                    pdf.extend_from_slice(b"stream\n");
-                    pdf.extend_from_slice(data);
-                    pdf.extend_from_slice(b"\nendstream\n");
-                }
+                && let Some(data) = &obj.stream_data
+            {
+                pdf.extend_from_slice(b"stream\n");
+                pdf.extend_from_slice(data);
+                pdf.extend_from_slice(b"\nendstream\n");
+            }
 
             pdf.extend_from_slice(b"endobj\n");
             current_offset = pdf.len() as u32;
@@ -148,7 +149,8 @@ impl DictBuilder {
 
     #[allow(dead_code)]
     pub fn add_ref(&mut self, key: &str, obj_id: u32) -> &mut Self {
-        self.entries.push((key.to_string(), format!("{} 0 R", obj_id)));
+        self.entries
+            .push((key.to_string(), format!("{} 0 R", obj_id)));
         self
     }
 
@@ -247,7 +249,11 @@ impl ContentStream {
 
     /// Concatenate a transformation matrix to the current CTM (`a b c d e f cm`).
     pub fn concat_matrix(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
-        let _ = writeln!(&mut self.operations, "{} {} {} {} {} {} cm", a, b, c, d, e, f);
+        let _ = writeln!(
+            &mut self.operations,
+            "{} {} {} {} {} {} cm",
+            a, b, c, d, e, f
+        );
     }
 
     /// Show text — UTF-16BE for embedded fonts, WinAnsi literals for standard fonts.
@@ -278,7 +284,7 @@ impl ContentStream {
                 utf16_bytes.push((low & 0xFF) as u8);
             }
         }
-        
+
         // Write as hex string
         self.operations.push(b'<');
         for byte in utf16_bytes {
@@ -369,18 +375,30 @@ impl ContentStream {
 
     /// Fill a rectangle at (x, y) with the given width and height.
     pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        let _ = writeln!(&mut self.operations, "{} {} {} {} re f", x, y, width, height);
+        let _ = writeln!(
+            &mut self.operations,
+            "{} {} {} {} re f",
+            x, y, width, height
+        );
     }
 
     /// Stroke a rectangle at (x, y) with the given width and height.
     pub fn stroke_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        let _ = writeln!(&mut self.operations, "{} {} {} {} re S", x, y, width, height);
+        let _ = writeln!(
+            &mut self.operations,
+            "{} {} {} {} re S",
+            x, y, width, height
+        );
     }
 
     #[allow(dead_code)]
     /// Fill and stroke a rectangle at (x, y) with the given width and height.
     pub fn fill_and_stroke_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        let _ = writeln!(&mut self.operations, "{} {} {} {} re B", x, y, width, height);
+        let _ = writeln!(
+            &mut self.operations,
+            "{} {} {} {} re B",
+            x, y, width, height
+        );
     }
 
     /// Draw an image XObject at the given position and size.
@@ -388,7 +406,11 @@ impl ContentStream {
     /// `name` is the resource name (e.g. "Im1").
     pub fn draw_image(&mut self, name: &str, x: f32, y: f32, width: f32, height: f32) {
         self.operations.extend_from_slice(b"q\n");
-        let _ = writeln!(&mut self.operations, "{} 0 0 {} {} {} cm", width, height, x, y);
+        let _ = writeln!(
+            &mut self.operations,
+            "{} 0 0 {} {} {} cm",
+            width, height, x, y
+        );
         let _ = writeln!(&mut self.operations, "/{} Do", name);
         self.operations.extend_from_slice(b"Q\n");
     }
@@ -428,8 +450,7 @@ mod tests {
     #[test]
     fn test_dict_builder() {
         let mut dict = DictBuilder::new();
-        dict.add("Type", "/Page")
-            .add("MediaBox", "[0 0 612 792]");
+        dict.add("Type", "/Page").add("MediaBox", "[0 0 612 792]");
         let result = dict.build();
         assert!(result.contains("/Type /Page"));
         assert!(result.contains("/MediaBox [0 0 612 792]"));
@@ -442,7 +463,7 @@ mod tests {
         stream.set_font("F1", 12.0);
         stream.set_position(72.0, 720.0);
         stream.end_text();
-        
+
         let data = stream.data();
         assert!(data.starts_with(b"BT\n"));
         assert!(data.ends_with(b"ET\n"));
@@ -477,9 +498,15 @@ mod tests {
     #[test]
     fn test_dict_builder_ref_and_array() {
         let mut dict = DictBuilder::new();
-        dict.add("Type", "/Page")
-            .add_ref("Parent", 2)
-            .add_array("MediaBox", &["0".to_string(), "0".to_string(), "612".to_string(), "792".to_string()]);
+        dict.add("Type", "/Page").add_ref("Parent", 2).add_array(
+            "MediaBox",
+            &[
+                "0".to_string(),
+                "0".to_string(),
+                "612".to_string(),
+                "792".to_string(),
+            ],
+        );
         let result = dict.build();
         assert!(result.contains("/Parent 2 0 R"));
         assert!(result.contains("/MediaBox [0 0 612 792]"));
@@ -491,7 +518,7 @@ mod tests {
         stream.begin_text();
         stream.show_text("Hi");
         stream.end_text();
-        
+
         let data = stream.data();
         let text = String::from_utf8_lossy(&data);
         assert!(text.contains("BT"));

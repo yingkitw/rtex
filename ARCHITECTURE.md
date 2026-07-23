@@ -135,6 +135,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - **flate2**: Compression support
 - **serde** + **serde_json** + **toml**: Template serialization
 - **num_cpus**: Parallel worker pool sizing
+- **pdfrs** (vendored at `vendor/pdfrs`): Primary PDF layout/render engine
 
 ## Data Flow
 
@@ -143,16 +144,30 @@ User Input (CLI)
     ↓
 Argument Parsing (clap)
     ↓
-Conversion Request
-    ↓
 NativeTexConverter
     ↓
 TexParser → Parse LaTeX → TexElement[]
     ↓
-PdfBuilder → Generate PDF → PDF Document
+output::render_elements_in_dir
     ↓
-PDF Output (saved to file)
+PDF: pdfrs (primary) → stamp Producer rtex/pdfrs
+         ↓ on error / oversize / RTEX_PDF_BACKEND=native
+     native PdfBuilder → Producer rtex/native
+HTML / DOCX / EPUB: format-specific renderers
+    ↓
+Output file
 ```
+
+### PDF backends
+
+| Backend | When used | Module |
+|---------|-----------|--------|
+| **pdfrs** (primary) | Default for documents under size/element limits | `src/output/pdfrs_pdf.rs` → `vendor/pdfrs` |
+| **native** (fallback) | pdfrs error, output > 5 MB, or `RTEX_PDF_BACKEND=native` | `src/pdf/builder.rs` |
+
+Force a backend for tests/CI: `RTEX_PDF_BACKEND=pdfrs` or `RTEX_PDF_BACKEND=native` (fails if that backend cannot produce output).
+
+Math policy on the pdfrs path: simple symbols → Unicode via `MathFormatter`; `\frac` / `\sqrt` → display math layout (stacked fractions, vinculum).
 
 ## Extension Points
 
@@ -179,7 +194,7 @@ The `src/output/` module renders the same parsed `TexElement` AST to multiple fo
 
 | Format | Module | Notes |
 |--------|--------|-------|
-| PDF | `pdf/builder.rs` | Default; full layout engine |
+| PDF | `output/pdfrs_pdf.rs` + `pdf/builder.rs` | pdfrs primary; native fallback |
 | HTML | `output/html.rs` | Semantic HTML with embedded CSS |
 | DOCX | `output/docx.rs` | Minimal OOXML packaged as ZIP |
 | EPUB | `output/epub.rs` | EPUB 3 package with XHTML chapter |

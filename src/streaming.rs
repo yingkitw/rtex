@@ -4,15 +4,15 @@
 //! and memory-efficiency helpers for documents that may exceed available
 //! RAM when loaded as a single `String`.
 
-use std::fs::File;
 use std::fs;
+use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
-use crate::incremental::IncrementalCompiler;
-use crate::output::{render_elements, OutputFormat};
-use crate::packages::PackageFetcher;
 use crate::ConversionOptions;
+use crate::incremental::IncrementalCompiler;
+use crate::output::{OutputFormat, render_elements};
+use crate::packages::PackageFetcher;
 
 /// Callback trait for reporting conversion progress.
 pub trait ProgressReporter: Send {
@@ -144,8 +144,7 @@ impl<R: ProgressReporter> StreamingConverter<R> {
             if !self.incremental.needs_rebuild(input)
                 || IncrementalCompiler::outputs_up_to_date(input, output, &deps)
             {
-                self.reporter
-                    .stage_started("skipped (up to date)", 100.0);
+                self.reporter.stage_started("skipped (up to date)", 100.0);
                 self.reporter.stage_finished("skipped (up to date)");
                 self.incremental
                     .mark_built(input, vec![output.to_path_buf()], deps);
@@ -294,7 +293,10 @@ mod tests {
             self.events.lock().unwrap().push((name.to_string(), pct));
         }
         fn stage_finished(&mut self, name: &str) {
-            self.events.lock().unwrap().push((format!("done:{}", name), 0.0));
+            self.events
+                .lock()
+                .unwrap()
+                .push((format!("done:{}", name), 0.0));
         }
     }
 
@@ -334,7 +336,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let src = tmp.path().join("doc.tex");
         let dst = tmp.path().join("doc.pdf");
-        std::fs::write(&src, "\\documentclass{article}\\begin{document}Hi\\end{document}").unwrap();
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}Hi\\end{document}",
+        )
+        .unwrap();
 
         let mut first = StreamingConverter::new();
         first.convert(&src, &dst).expect("first conversion");
@@ -343,7 +349,9 @@ mod tests {
         let reporter = CollectingReporter::default();
         let events = reporter.events.clone();
         let mut second = StreamingConverter::with_reporter(reporter);
-        second.convert(&src, &dst).expect("second conversion should skip");
+        second
+            .convert(&src, &dst)
+            .expect("second conversion should skip");
 
         let log = events.lock().unwrap();
         assert!(log.iter().any(|(name, _)| name == "skipped (up to date)"));
@@ -354,15 +362,18 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let src = tmp.path().join("doc.tex");
         let dst = tmp.path().join("doc.pdf");
-        std::fs::write(&src, "\\documentclass{article}\\begin{document}Hi\\end{document}").unwrap();
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}Hi\\end{document}",
+        )
+        .unwrap();
 
         let mut converter = StreamingConverter::new();
         converter.convert(&src, &dst).expect("first conversion");
 
         let reporter = CollectingReporter::default();
         let events = reporter.events.clone();
-        let mut converter = StreamingConverter::with_reporter(reporter)
-            .with_force_rebuild(true);
+        let mut converter = StreamingConverter::with_reporter(reporter).with_force_rebuild(true);
         converter.convert(&src, &dst).expect("forced conversion");
 
         let log = events.lock().unwrap();
@@ -381,9 +392,8 @@ mod tests {
         )
         .unwrap();
 
-        let mut converter = StreamingConverter::new().with_options(
-            ConversionOptions::default().with_format(OutputFormat::Html),
-        );
+        let mut converter = StreamingConverter::new()
+            .with_options(ConversionOptions::default().with_format(OutputFormat::Html));
         converter.convert(&src, &dst).expect("html conversion");
 
         let html = std::fs::read_to_string(&dst).unwrap();

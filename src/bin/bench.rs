@@ -46,6 +46,9 @@ fn main() {
     }
 
     if count > 0 {
-        println!("\nOverall average: {:.1} ms per conversion", total_avg / count as f64);
+        println!(
+            "\nOverall average: {:.1} ms per conversion",
+            total_avg / count as f64
+        );
     }
 }

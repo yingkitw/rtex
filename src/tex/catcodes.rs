@@ -112,8 +112,10 @@ impl CatCodeTable {
         map.insert('~', CatCode::Active);
 
         // Remaining ASCII punctuation → Other
-        for c in ['!', '"', '\'', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';',
-                   '<', '=', '>', '?', '@', '[', ']', '`', '|'] {
+        for c in [
+            '!', '"', '\'', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?',
+            '@', '[', ']', '`', '|',
+        ] {
             map.insert(c, CatCode::Other);
         }
 

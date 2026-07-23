@@ -26,11 +26,7 @@ pub trait Plugin: Send {
 
     /// Intercept an unknown environment.  Return `Some(element)` to
     /// handle the environment, or `None` to fall through.
-    fn handle_environment(
-        &mut self,
-        _name: &str,
-        _content: &str,
-    ) -> Option<TexElement> {
+    fn handle_environment(&mut self, _name: &str, _content: &str) -> Option<TexElement> {
         None
     }
 
@@ -183,7 +179,10 @@ pub struct CustomFormatPlugin {
 
 impl CustomFormatPlugin {
     pub fn new(command: String, format_type: FormatType) -> Self {
-        Self { command, format_type }
+        Self {
+            command,
+            format_type,
+        }
     }
 
     pub fn bold(command: &str) -> Self {
@@ -247,7 +246,10 @@ mod tests {
         let mut reg = PluginRegistry::new();
         reg.register(Box::new(UrlPlugin));
         let result = reg.try_command("url", &["https://example.com".to_string()]);
-        assert_eq!(result, Some(TexElement::Text("(https://example.com)".to_string())));
+        assert_eq!(
+            result,
+            Some(TexElement::Text("(https://example.com)".to_string()))
+        );
     }
 
     #[test]
@@ -284,8 +286,7 @@ mod tests {
     #[test]
     fn test_custom_format_plugin_italic() {
         let _reg = PluginRegistry::new();
-        let result = CustomFormatPlugin::italic("em")
-            .handle_command("em", &["world".to_string()]);
+        let result = CustomFormatPlugin::italic("em").handle_command("em", &["world".to_string()]);
         assert_eq!(
             result,
             Some(TexElement::Command {

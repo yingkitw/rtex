@@ -162,7 +162,9 @@ impl MacroStore {
 
         // Count parameter tokens #1, #2, ...
         let mut param_count = 0;
-        while let Some(digit) = rest.get(pos + 1..).and_then(|s| s.chars().next())
+        while let Some(digit) = rest
+            .get(pos + 1..)
+            .and_then(|s| s.chars().next())
             .filter(|c| c.is_ascii_digit())
         {
             let n = digit.to_digit(10).unwrap() as usize;

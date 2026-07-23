@@ -3,8 +3,8 @@
 //! Tracks current page, Y position, margins, and handles automatic
 //! page breaks when content overflows the printable area.
 
-use crate::pdf::core::ContentStream;
 use crate::page_layout::PageLayout;
+use crate::pdf::core::ContentStream;
 
 /// State machine that manages content placement across multiple pages.
 pub struct LayoutState {
@@ -90,8 +90,13 @@ impl LayoutState {
 
     /// Finish the current page and start a fresh one.
     pub fn new_page(&mut self) {
-        let embedded = self.pages.last().map(|p| p.embedded_unicode()).unwrap_or(true);
-        self.all_footnotes.push(std::mem::take(&mut self.current_page_footnotes));
+        let embedded = self
+            .pages
+            .last()
+            .map(|p| p.embedded_unicode())
+            .unwrap_or(true);
+        self.all_footnotes
+            .push(std::mem::take(&mut self.current_page_footnotes));
         self.pages.push(ContentStream::with_encoding(embedded));
         self.current_y = self.content_top();
     }

@@ -360,10 +360,7 @@ pub fn build_citation_map(entries: &[(String, String)]) -> HashMap<String, usize
 
 /// Format citation keys as a numeric bracket string: `[1, 2, 3]`.
 pub fn format_citation(keys: &[String], cmap: &HashMap<String, usize>) -> String {
-    let mut nums: Vec<usize> = keys
-        .iter()
-        .filter_map(|k| cmap.get(k).copied())
-        .collect();
+    let mut nums: Vec<usize> = keys.iter().filter_map(|k| cmap.get(k).copied()).collect();
     nums.sort_unstable();
     nums.dedup();
 
@@ -546,10 +543,7 @@ mod tests {
             format_citation(&["b".to_string(), "a".to_string()], &cmap),
             "[1, 2]"
         );
-        assert_eq!(
-            format_citation(&["unknown".to_string()], &cmap),
-            ""
-        );
+        assert_eq!(format_citation(&["unknown".to_string()], &cmap), "");
     }
 
     #[test]
@@ -618,12 +612,16 @@ mod tests {
         mgr.add_entry(BibEntry {
             key: "b".to_string(),
             entry_type: "article".to_string(),
-            fields: [("title".to_string(), "B".to_string())].into_iter().collect(),
+            fields: [("title".to_string(), "B".to_string())]
+                .into_iter()
+                .collect(),
         });
         mgr.add_entry(BibEntry {
             key: "a".to_string(),
             entry_type: "article".to_string(),
-            fields: [("title".to_string(), "A".to_string())].into_iter().collect(),
+            fields: [("title".to_string(), "A".to_string())]
+                .into_iter()
+                .collect(),
         });
         let out = mgr.format_all();
         assert_eq!(out.len(), 2);

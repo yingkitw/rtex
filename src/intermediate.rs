@@ -111,9 +111,10 @@ Hello
         assert!(dir.path().join("doc.ast.json").exists());
         assert!(dir.path().join("doc.meta.json").exists());
 
-        let meta: IntermediateMeta =
-            serde_json::from_str(&std::fs::read_to_string(dir.path().join("doc.meta.json")).unwrap())
-                .unwrap();
+        let meta: IntermediateMeta = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("doc.meta.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(meta.format, "pdf");
         assert!(meta.element_count > 0);
         assert_eq!(meta.title.as_deref(), Some("Test"));

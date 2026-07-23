@@ -1,10 +1,10 @@
-use std::path::Path;
 use rtex::NativeTexConverter;
+use std::path::Path;
 
 fn main() {
     let input = Path::new("examples/sample.tex");
     let output = Path::new("debug_sample.pdf");
-    
+
     let result = NativeTexConverter::convert_file(input, output);
     match result {
         Ok(_) => println!("Converted successfully"),

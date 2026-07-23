@@ -8,8 +8,8 @@
 
 use crate::parser::TexElement;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
 /// A single cache entry with access tracking.
@@ -77,18 +77,30 @@ pub struct CacheStats {
 impl CacheStats {
     pub fn parsed_hit_rate(&self) -> f64 {
         let total = self.parsed_hits + self.parsed_misses;
-        if total == 0 { 0.0 } else { self.parsed_hits as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            self.parsed_hits as f64 / total as f64
+        }
     }
 
     pub fn output_hit_rate(&self) -> f64 {
         let total = self.output_hits + self.output_misses;
-        if total == 0 { 0.0 } else { self.output_hits as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            self.output_hits as f64 / total as f64
+        }
     }
 
     pub fn overall_hit_rate(&self) -> f64 {
         let total_hits = self.parsed_hits + self.output_hits;
         let total = total_hits + self.parsed_misses + self.output_misses;
-        if total == 0 { 0.0 } else { total_hits as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            total_hits as f64 / total as f64
+        }
     }
 }
 
@@ -213,12 +225,16 @@ impl DocumentCache {
         let ttl = self.config.ttl;
         self.parsed.retain(|_, e| {
             let expired = e.is_expired(ttl);
-            if expired { self.stats.expired_entries += 1; }
+            if expired {
+                self.stats.expired_entries += 1;
+            }
             !expired
         });
         self.output.retain(|_, e| {
             let expired = e.is_expired(ttl);
-            if expired { self.stats.expired_entries += 1; }
+            if expired {
+                self.stats.expired_entries += 1;
+            }
             !expired
         });
     }

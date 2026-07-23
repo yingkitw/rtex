@@ -29,77 +29,81 @@
 //! - `wasm` — enables `wasm-bindgen` exports for browser use
 //! - `lsp` — builds the `rtex-lsp` language server binary
 
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 use std::sync::Mutex;
 
-mod parser;
-mod pdf;
+mod bibliography;
+mod cache;
+mod color;
+mod common;
+pub mod config;
+pub mod error;
+mod fonts;
+mod image;
+mod incremental;
+mod intermediate;
+mod layout;
+pub mod lsp;
+mod macros;
 mod math;
 mod math_formatter;
-mod image;
-mod table;
-mod color;
-mod layout;
-mod macros;
-mod bibliography;
-mod references;
-mod streaming;
-mod plugins;
-mod typography;
-mod tex;
-mod cache;
-mod incremental;
 mod math_processor;
-mod parallel;
-mod watch;
-mod common;
-mod fonts;
-mod intermediate;
 mod output;
 mod packages;
-pub mod lsp;
-pub(crate) mod utils;
-pub mod error;
-pub mod config;
-pub mod traits;
 pub mod page_layout;
+mod parallel;
+mod parser;
+mod pdf;
+mod plugins;
+mod references;
+mod streaming;
+mod table;
 pub mod template;
+mod tex;
+pub mod traits;
+mod typography;
+pub(crate) mod utils;
+mod watch;
 
+pub use cache::{CacheConfig, CacheStats, DocumentCache};
 pub use error::{LatexError, Position};
-pub use parser::{TexElement, TexParser};
-pub use pdf::builder::PdfBuilder;
-pub use output::{OutputFormat, DocumentMeta, render_elements, render_elements_in_dir};
-pub use packages::{PackageFetcher, PackageRequest};
-pub use intermediate::{write_intermediates, sibling_artifact, IntermediateMeta};
+pub use incremental::IncrementalCompiler;
+pub use intermediate::{IntermediateMeta, sibling_artifact, write_intermediates};
+pub use lsp::{
+    CompletionKind, Severity, SymbolKind, TexCompletion, TexDiagnostic, TexPosition, TexRange,
+    TexSymbol, analyze_diagnostics, command_completions, completions_at, document_symbols,
+    hover_at,
+};
 pub use macros::expand_document;
 pub use math_formatter::MathFormatter;
-pub use streaming::{StreamingConverter, ProgressReporter, NoOpReporter, ConsoleReporter};
-pub use plugins::{Plugin, PluginRegistry, TodayPlugin, UrlPlugin, PluginError, FormatType, CustomFormatPlugin};
-pub use typography::{TypographyEngine, TypographyOptions, KerningTable, TextSegment};
-pub use tex::{
-    CatCode, Token, TexLexer, Dimension, Glue, Stretch, InfiniteUnit, TeXBox, BoxDirection,
-    LineItem, BrokenLine, TokenizedParagraph, LineBreaker, line_badness,
-};
-pub use cache::{DocumentCache, CacheConfig, CacheStats};
-pub use template::{DocumentTemplate, PaperSize, Margins, HeadingScale, ColorScheme, TitlePageConfig};
-pub use incremental::IncrementalCompiler;
-pub use math_processor::{MathProcessor, MathCommandType, MathCommandInfo};
+pub use math_processor::{MathCommandInfo, MathCommandType, MathProcessor};
+pub use output::{DocumentMeta, OutputFormat, PdfBackend, render_elements, render_elements_in_dir};
+pub use packages::{PackageFetcher, PackageRequest};
 pub use parallel::{ParallelConverter, convert_dir};
-pub use watch::{watch_single, watch_batch};
-pub use lsp::{
-    analyze_diagnostics, command_completions, completions_at, document_symbols, hover_at,
-    TexCompletion, TexDiagnostic, TexPosition, TexRange, TexSymbol, Severity, CompletionKind,
-    SymbolKind,
+pub use parser::{TexElement, TexParser};
+pub use pdf::builder::PdfBuilder;
+pub use plugins::{
+    CustomFormatPlugin, FormatType, Plugin, PluginError, PluginRegistry, TodayPlugin, UrlPlugin,
 };
+pub use streaming::{ConsoleReporter, NoOpReporter, ProgressReporter, StreamingConverter};
+pub use template::{
+    ColorScheme, DocumentTemplate, HeadingScale, Margins, PaperSize, TitlePageConfig,
+};
+pub use tex::{
+    BoxDirection, BrokenLine, CatCode, Dimension, Glue, InfiniteUnit, LineBreaker, LineItem,
+    Stretch, TeXBox, TexLexer, Token, TokenizedParagraph, line_badness,
+};
+pub use typography::{KerningTable, TextSegment, TypographyEngine, TypographyOptions};
+pub use watch::{watch_batch, watch_single};
 
 /// Run the rtex language server over stdio (requires `lsp` feature).
 #[cfg(feature = "lsp")]
 pub fn run_lsp_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     lsp::run_stdio_server()
 }
-pub use common::{Clear, Stats};
 pub use bibliography::{BibEntry, BibEntryType, BibliographyManager};
+pub use common::{Clear, Stats};
 
 /// Options controlling conversion format and package fetching.
 #[derive(Debug, Clone)]
@@ -236,11 +240,7 @@ impl NativeTexConverter {
         output: Option<&Path>,
     ) -> Result<Vec<u8>, LatexError> {
         let elements = self.parse_content(tex, base_dir);
-        let bytes = render_elements_in_dir(
-            elements.clone(),
-            self.options.format,
-            base_dir,
-        )?;
+        let bytes = render_elements_in_dir(elements.clone(), self.options.format, base_dir)?;
 
         if self.options.keep_intermediate {
             if let Some(out) = output {
@@ -261,7 +261,9 @@ impl NativeTexConverter {
     /// Return a snapshot of cache statistics (test-only).
     #[cfg(test)]
     pub fn cache_stats(&self) -> Option<CacheStats> {
-        self.cache.as_ref().map(|c| c.lock().unwrap().stats().clone())
+        self.cache
+            .as_ref()
+            .map(|c| c.lock().unwrap().stats().clone())
     }
 }
 
@@ -296,11 +298,16 @@ pub fn convert_tex_string_to_pdf_bytes(tex: &str) -> Result<Vec<u8>, LatexError>
 
 /// Convert TeX source to bytes in the requested format.
 pub fn convert_tex_string(tex: &str, format: OutputFormat) -> Result<Vec<u8>, LatexError> {
-    NativeTexConverter::with_options(ConversionOptions::default().with_format(format)).convert_string(tex)
+    NativeTexConverter::with_options(ConversionOptions::default().with_format(format))
+        .convert_string(tex)
 }
 
 /// Convert a `.tex` file to an output file using the given options.
-pub fn convert_tex_file(input: &Path, output: &Path, options: &ConversionOptions) -> Result<(), LatexError> {
+pub fn convert_tex_file(
+    input: &Path,
+    output: &Path,
+    options: &ConversionOptions,
+) -> Result<(), LatexError> {
     NativeTexConverter::with_options(options.clone()).convert(input, output)
 }
 

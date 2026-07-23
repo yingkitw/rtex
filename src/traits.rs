@@ -11,7 +11,7 @@ use std::path::Path;
 pub trait TexParser: Send + Sync {
     /// Parse LaTeX content into structured elements
     fn parse(&self, content: &str) -> Result<Vec<TexElement>>;
-    
+
     /// Parse a single command
     fn parse_command(&self, content: &str, position: usize) -> Result<Option<TexElement>>;
 }
@@ -20,12 +20,12 @@ pub trait TexParser: Send + Sync {
 pub trait MathFormatter: Send + Sync {
     /// Format a mathematical expression from LaTeX to display format
     fn format(&self, math: &str) -> String;
-    
+
     /// Format inline math (within text)
     fn format_inline(&self, math: &str) -> String {
         self.format(math)
     }
-    
+
     /// Format display math (standalone)
     fn format_display(&self, math: &str) -> String {
         self.format(math)
@@ -36,13 +36,13 @@ pub trait MathFormatter: Send + Sync {
 pub trait PdfBuilder: Send + Sync {
     /// Build a PDF from parsed elements
     fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<()>;
-    
+
     /// Set document title
     fn set_title(&mut self, title: String);
-    
+
     /// Set document author
     fn set_author(&mut self, author: String);
-    
+
     /// Set document date
     fn set_date(&mut self, date: String);
 }
@@ -51,10 +51,10 @@ pub trait PdfBuilder: Send + Sync {
 pub trait FontProvider: Send + Sync {
     /// Load a font from a path
     fn load_font(&self, path: &Path) -> Result<Vec<u8>>;
-    
+
     /// Get the default font
     fn default_font(&self) -> Result<Vec<u8>>;
-    
+
     /// Check if a font supports a character
     fn supports_character(&self, font_data: &[u8], ch: char) -> bool;
 }
@@ -63,13 +63,13 @@ pub trait FontProvider: Send + Sync {
 pub trait Cache<K, V>: Send + Sync {
     /// Get a value from the cache
     fn get(&self, key: &K) -> Option<&V>;
-    
+
     /// Insert a value into the cache
     fn insert(&mut self, key: K, value: V);
-    
+
     /// Clear the cache
     fn clear(&mut self);
-    
+
     /// Get cache size
     fn size(&self) -> usize;
 }
@@ -78,10 +78,10 @@ pub trait Cache<K, V>: Send + Sync {
 pub trait TextLayout: Send + Sync {
     /// Wrap text to a specified width
     fn wrap_text(&self, text: &str, max_width: usize) -> Vec<String>;
-    
+
     /// Calculate text width
     fn text_width(&self, text: &str) -> f32;
-    
+
     /// Calculate line height
     fn line_height(&self, font_size: f32) -> f32;
 }
@@ -90,7 +90,7 @@ pub trait TextLayout: Send + Sync {
 pub trait Validator<T>: Send + Sync {
     /// Validate an item
     fn validate(&self, item: &T) -> Result<()>;
-    
+
     /// Check if an item is valid
     fn is_valid(&self, item: &T) -> bool {
         self.validate(item).is_ok()
@@ -107,10 +107,10 @@ pub trait Transform<T>: Send + Sync {
 pub trait ResourceManager: Send + Sync {
     /// Initialize resources
     fn initialize(&mut self) -> Result<()>;
-    
+
     /// Clean up resources
     fn cleanup(&mut self) -> Result<()>;
-    
+
     /// Check if resources are initialized
     fn is_initialized(&self) -> bool;
 }
@@ -119,7 +119,7 @@ pub trait ResourceManager: Send + Sync {
 pub trait Configurable {
     /// Get configuration value
     fn get_config(&self, key: &str) -> Option<String>;
-    
+
     /// Set configuration value
     fn set_config(&mut self, key: String, value: String);
 }
@@ -130,7 +130,7 @@ mod tests {
 
     // Example implementation for testing
     struct MockMathFormatter;
-    
+
     impl MathFormatter for MockMathFormatter {
         fn format(&self, math: &str) -> String {
             math.replace("\\alpha", "α")

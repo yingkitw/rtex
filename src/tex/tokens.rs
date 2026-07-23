@@ -114,7 +114,10 @@ impl<'a> TexLexer<'a> {
                                     break;
                                 }
                             }
-                            return Some(Token::Char { ch: ' ', cat: CatCode::Space });
+                            return Some(Token::Char {
+                                ch: ' ',
+                                cat: CatCode::Space,
+                            });
                         }
                         CatCode::EndOfLine => {
                             self.advance();
@@ -126,7 +129,10 @@ impl<'a> TexLexer<'a> {
                                     break;
                                 }
                             }
-                            return Some(Token::Char { ch: ' ', cat: CatCode::Space });
+                            return Some(Token::Char {
+                                ch: ' ',
+                                cat: CatCode::Space,
+                            });
                         }
                         _ => break,
                     }
@@ -165,9 +171,27 @@ mod tests {
         let toks = lexer.tokenize();
         // In TeX every character is its own token.
         assert_eq!(toks.len(), 11);
-        assert_eq!(toks[0], Token::Char { ch: 'H', cat: CatCode::Letter });
-        assert_eq!(toks[5], Token::Char { ch: ' ', cat: CatCode::Space });
-        assert_eq!(toks[6], Token::Char { ch: 'w', cat: CatCode::Letter });
+        assert_eq!(
+            toks[0],
+            Token::Char {
+                ch: 'H',
+                cat: CatCode::Letter
+            }
+        );
+        assert_eq!(
+            toks[5],
+            Token::Char {
+                ch: ' ',
+                cat: CatCode::Space
+            }
+        );
+        assert_eq!(
+            toks[6],
+            Token::Char {
+                ch: 'w',
+                cat: CatCode::Letter
+            }
+        );
     }
 
     #[test]
@@ -175,7 +199,13 @@ mod tests {
         let mut lexer = TexLexer::new("\\section{Intro}");
         let toks = lexer.tokenize();
         assert_eq!(toks[0], Token::ControlSequence("section".to_string()));
-        assert_eq!(toks[1], Token::Char { ch: '{', cat: CatCode::BeginGroup });
+        assert_eq!(
+            toks[1],
+            Token::Char {
+                ch: '{',
+                cat: CatCode::BeginGroup
+            }
+        );
     }
 
     #[test]
@@ -192,7 +222,13 @@ mod tests {
         // Space before comment is preserved; EOL consumed by skip_comment.
         // Hello (5) + space (1) + world (5) = 11 tokens
         assert_eq!(toks.len(), 11);
-        assert_eq!(toks[6], Token::Char { ch: 'w', cat: CatCode::Letter });
+        assert_eq!(
+            toks[6],
+            Token::Char {
+                ch: 'w',
+                cat: CatCode::Letter
+            }
+        );
     }
 
     #[test]
@@ -200,7 +236,13 @@ mod tests {
         let mut lexer = TexLexer::new("a   b");
         let toks = lexer.tokenize();
         assert_eq!(toks.len(), 3);
-        assert_eq!(toks[1], Token::Char { ch: ' ', cat: CatCode::Space });
+        assert_eq!(
+            toks[1],
+            Token::Char {
+                ch: ' ',
+                cat: CatCode::Space
+            }
+        );
     }
 
     #[test]

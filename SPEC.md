@@ -33,8 +33,8 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 |-------|------------|
 | Language | Rust 2024 (MSRV 1.85) |
 | CLI | clap 4 |
-| PDF | Custom generator (`src/pdf/`) + DejaVu Sans embedding |
-| Math | Unicode mapping (`src/math/`) |
+| PDF | [pdfrs](https://crates.io/crates/pdfrs) (vendored) primary + native `src/pdf/` fallback |
+| Math | Unicode mapping (`src/math/`) + pdfrs display layout (`\frac`, `\sqrt` vinculum) |
 | Alt formats | HTML/DOCX/EPUB (`src/output/`) |
 | HTTP (packages) | ureq + rustls |
 | SVG | resvg + usvg |
@@ -42,11 +42,12 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 
 ## Quality Bar
 
-- `cargo build` and `cargo test` pass with 0 warnings
-- 340+ automated tests including round-trip and example PDF verification
+- `cargo build` and `cargo test` pass (warnings noted; eliminate when practical)
+- 400+ automated tests including round-trip and example PDF verification
 - Public APIs documented with rustdoc
 - User-facing docs in `README.md`, `docs/USER_GUIDE.md`, `ARCHITECTURE.md`
 - Surgical changes: no speculative features beyond `TODO.md`
+- PDF backend identifiable via `/Producer` (`rtex/pdfrs` or `rtex/native`); force with `RTEX_PDF_BACKEND`
 
 ## Success Criteria
 

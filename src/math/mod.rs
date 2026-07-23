@@ -7,7 +7,7 @@
 //!
 //! Orchestrated by [`MathFormatter`](crate::math_formatter::MathFormatter).
 
-pub mod symbols;
-pub mod scripts;
-pub mod radicals;
 pub mod fractions;
+pub mod radicals;
+pub mod scripts;
+pub mod symbols;

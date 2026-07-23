@@ -8,10 +8,9 @@ use crate::utils::extract_braced;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-mod text;
-mod math;
 mod commands;
-
+mod math;
+mod text;
 
 /// A structured element parsed from a LaTeX document.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -31,20 +30,35 @@ pub enum TexElement {
     /// Multi-line display math (`align`, `gather`, `multline`, `cases`).
     /// `lines` contains the formatted per-line content; `kind` records the
     /// source environment for downstream formatting choices.
-    MathLines { lines: Vec<String>, kind: MathLineKind },
+    MathLines {
+        lines: Vec<String>,
+        kind: MathLineKind,
+    },
     /// A list (`itemize` or `enumerate`).
-    ItemList { ordered: bool, labels: Vec<Option<String>>, items: Vec<Vec<TexElement>> },
+    ItemList {
+        ordered: bool,
+        labels: Vec<Option<String>>,
+        items: Vec<Vec<TexElement>>,
+    },
     /// A `description` list — each item is a (term, body) pair.
     DescriptionList { items: Vec<DescItem> },
     /// A theorem-like block (`theorem`, `lemma`, `proof`, `definition`,
     /// `corollary`, `proposition`, `remark`, `example`). `kind` is the
     /// environment name; `title` is set when `\begin{theorem}[name]` is used;
     /// `body` holds the inner parsed elements.
-    Theorem { kind: String, title: Option<String>, body: Vec<TexElement> },
+    Theorem {
+        kind: String,
+        title: Option<String>,
+        body: Vec<TexElement>,
+    },
     /// A code block from `lstlisting`.
     CodeBlock(String),
     /// An image inclusion (`\includegraphics`).
-    Image { path: String, width: Option<String>, height: Option<String> },
+    Image {
+        path: String,
+        width: Option<String>,
+        height: Option<String>,
+    },
     /// A table from `tabular` or `table` environment.
     Table(Table),
     /// Colored text from `\textcolor{color}{text}`.
@@ -121,7 +135,13 @@ impl TexParser {
         let mut store = crate::macros::MacroStore::new();
         let stripped = store.extract_definitions(&content);
         let expanded = store.expand_all(&stripped);
-        Self { content: expanded, position: 0, plugins: None, base_dir: None, search_paths: Vec::new() }
+        Self {
+            content: expanded,
+            position: 0,
+            plugins: None,
+            base_dir: None,
+            search_paths: Vec::new(),
+        }
     }
 
     /// Create a parser with a plugin registry for custom command and
@@ -147,12 +167,12 @@ impl TexParser {
     /// Parse the entire document into a sequence of elements.
     pub fn parse(&mut self) -> Vec<TexElement> {
         let mut elements = Vec::new();
-        
+
         // Extract metadata from preamble before skipping
         elements.extend(self.extract_preamble_metadata());
-        
+
         self.skip_preamble();
-        
+
         while self.position < self.content.len() {
             let start_position = self.position;
             if let Some(element) = self.parse_next() {
@@ -167,17 +187,17 @@ impl TexParser {
                 }
             }
         }
-        
+
         elements
     }
 
     fn extract_preamble_metadata(&mut self) -> Vec<TexElement> {
         let mut metadata = Vec::new();
         let original_position = self.position;
-        
+
         if let Some(begin_doc) = self.content.find("\\begin{document}") {
             let preamble = &self.content[..begin_doc];
-            
+
             // Extract all metadata commands using a helper
             for (cmd, offset) in &[("title", 7), ("author", 8), ("date", 6)] {
                 if let Some(element) = self.extract_metadata_command(preamble, cmd, *offset) {
@@ -185,12 +205,17 @@ impl TexParser {
                 }
             }
         }
-        
+
         self.position = original_position;
         metadata
     }
 
-    fn extract_metadata_command(&self, preamble: &str, cmd: &str, offset: usize) -> Option<TexElement> {
+    fn extract_metadata_command(
+        &self,
+        preamble: &str,
+        cmd: &str,
+        offset: usize,
+    ) -> Option<TexElement> {
         let search_str = format!("\\{}{{", cmd);
         if let Some(start) = preamble.find(&search_str) {
             let after_cmd = &preamble[start + offset..];
@@ -214,7 +239,7 @@ impl TexParser {
     /// Scan the next syntactic construct and return a [`TexElement`].
     fn parse_next(&mut self) -> Option<TexElement> {
         self.skip_whitespace_and_comments();
-        
+
         if self.position >= self.content.len() {
             return None;
         }
@@ -237,7 +262,7 @@ impl TexParser {
         if remaining.starts_with("\\section") {
             return self.parse_section(1);
         }
-        
+
         if remaining.starts_with("\\subsection") {
             return self.parse_section(2);
         }
@@ -297,7 +322,11 @@ impl TexParser {
             return self.parse_textcolor();
         }
 
-        if remaining.starts_with("\\texttt{") || remaining.starts_with("\\textbf{") || remaining.starts_with("\\textit{") || remaining.starts_with("\\emph{") {
+        if remaining.starts_with("\\texttt{")
+            || remaining.starts_with("\\textbf{")
+            || remaining.starts_with("\\textit{")
+            || remaining.starts_with("\\emph{")
+        {
             return self.parse_text_command();
         }
 
@@ -349,7 +378,10 @@ impl TexParser {
         }
 
         // Page breaks
-        if remaining.starts_with("\\newpage") || remaining.starts_with("\\clearpage") || remaining.starts_with("\\pagebreak") {
+        if remaining.starts_with("\\newpage")
+            || remaining.starts_with("\\clearpage")
+            || remaining.starts_with("\\pagebreak")
+        {
             return self.parse_pagebreak();
         }
 
@@ -361,24 +393,44 @@ impl TexParser {
 
         // Alignment commands
         if remaining.starts_with("\\raggedright") || remaining.starts_with("\\flushleft") {
-            self.position += if remaining.starts_with("\\raggedright") { "\\raggedright".len() } else { "\\flushleft".len() };
-            return Some(TexElement::Command { name: "raggedright".to_string(), args: vec![] });
+            self.position += if remaining.starts_with("\\raggedright") {
+                "\\raggedright".len()
+            } else {
+                "\\flushleft".len()
+            };
+            return Some(TexElement::Command {
+                name: "raggedright".to_string(),
+                args: vec![],
+            });
         }
         if remaining.starts_with("\\raggedleft") || remaining.starts_with("\\flushright") {
-            self.position += if remaining.starts_with("\\raggedleft") { "\\raggedleft".len() } else { "\\flushright".len() };
-            return Some(TexElement::Command { name: "raggedleft".to_string(), args: vec![] });
+            self.position += if remaining.starts_with("\\raggedleft") {
+                "\\raggedleft".len()
+            } else {
+                "\\flushright".len()
+            };
+            return Some(TexElement::Command {
+                name: "raggedleft".to_string(),
+                args: vec![],
+            });
         }
 
         // No indent
         if remaining.starts_with("\\noindent") {
             self.position += "\\noindent".len();
-            return Some(TexElement::Command { name: "noindent".to_string(), args: vec![] });
+            return Some(TexElement::Command {
+                name: "noindent".to_string(),
+                args: vec![],
+            });
         }
 
         // Today
         if remaining.starts_with("\\today") {
             self.position += "\\today".len();
-            return Some(TexElement::Command { name: "today".to_string(), args: vec![] });
+            return Some(TexElement::Command {
+                name: "today".to_string(),
+                args: vec![],
+            });
         }
 
         // Special text characters (insert literal symbols)
@@ -512,7 +564,10 @@ impl TexParser {
         for (prefix, name) in &spacing_cmds {
             if remaining.starts_with(prefix) {
                 self.position += prefix.len();
-                return Some(TexElement::Command { name: name.to_string(), args: vec![] });
+                return Some(TexElement::Command {
+                    name: name.to_string(),
+                    args: vec![],
+                });
             }
         }
 
@@ -537,7 +592,10 @@ impl TexParser {
         // Appendix marker
         if remaining.starts_with("\\appendix") {
             self.position += "\\appendix".len();
-            return Some(TexElement::Command { name: "appendix".to_string(), args: vec![] });
+            return Some(TexElement::Command {
+                name: "appendix".to_string(),
+                args: vec![],
+            });
         }
 
         // Index and glossary entries
@@ -579,14 +637,20 @@ impl TexParser {
         for (prefix, name) in &sizes {
             if remaining.starts_with(prefix) {
                 self.position += prefix.len();
-                return Some(TexElement::Command { name: name.to_string(), args: vec![] });
+                return Some(TexElement::Command {
+                    name: name.to_string(),
+                    args: vec![],
+                });
             }
         }
 
         // Centering declaration
         if remaining.starts_with("\\centering") {
             self.position += "\\centering".len();
-            return Some(TexElement::Command { name: "centering".to_string(), args: vec![] });
+            return Some(TexElement::Command {
+                name: "centering".to_string(),
+                args: vec![],
+            });
         }
 
         // Deprecated font declarations (still widely used)
@@ -603,7 +667,10 @@ impl TexParser {
         for (prefix, name) in &font_decls {
             if remaining.starts_with(prefix) {
                 self.position += prefix.len();
-                return Some(TexElement::Command { name: name.to_string(), args: vec![] });
+                return Some(TexElement::Command {
+                    name: name.to_string(),
+                    args: vec![],
+                });
             }
         }
 
@@ -627,7 +694,7 @@ impl TexParser {
     fn skip_whitespace_and_comments(&mut self) {
         while self.position < self.content.len() {
             let remaining = &self.content[self.position..];
-            
+
             if remaining.starts_with('%') {
                 if let Some(newline) = remaining.find('\n') {
                     self.position += newline + 1;
@@ -817,8 +884,8 @@ impl TexParser {
             "itemize" => self.parse_itemize(false),
             "description" => self.parse_description(),
             "enumerate" => self.parse_itemize(true),
-            "theorem" | "lemma" | "proof" | "definition" | "corollary"
-            | "proposition" | "remark" | "example" => self.parse_theorem(&env_name),
+            "theorem" | "lemma" | "proof" | "definition" | "corollary" | "proposition"
+            | "remark" | "example" => self.parse_theorem(&env_name),
             "equation" => self.parse_equation(),
             "equation*" => self.parse_equation(),
             "align" => self.parse_math_lines(MathLineKind::Align),
@@ -850,13 +917,17 @@ impl TexParser {
     fn parse_itemize(&mut self, ordered: bool) -> Option<TexElement> {
         let mut items: Vec<Vec<TexElement>> = Vec::new();
         let mut labels: Vec<Option<String>> = Vec::new();
-        let end_marker = if ordered { "\\end{enumerate}" } else { "\\end{itemize}" };
+        let end_marker = if ordered {
+            "\\end{enumerate}"
+        } else {
+            "\\end{itemize}"
+        };
 
         while self.position < self.content.len() {
             self.skip_whitespace_and_comments();
-            
+
             let remaining = &self.content[self.position..];
-            
+
             if remaining.starts_with(end_marker) {
                 self.position += end_marker.len();
                 break;
@@ -865,7 +936,7 @@ impl TexParser {
             if remaining.starts_with("\\item") {
                 self.position += "\\item".len();
                 self.skip_whitespace_and_comments();
-                
+
                 // Check for optional [label]
                 let label = if self.content[self.position..].starts_with('[') {
                     self.position += 1;
@@ -876,23 +947,23 @@ impl TexParser {
                 } else {
                     None
                 };
-                
+
                 let mut item_content = Vec::new();
-                
+
                 while self.position < self.content.len() {
                     let remaining = &self.content[self.position..];
-                    
+
                     if remaining.starts_with("\\item") || remaining.starts_with(end_marker) {
                         break;
                     }
-                    
+
                     if let Some(elem) = self.parse_next() {
                         item_content.push(elem);
                     } else {
                         break;
                     }
                 }
-                
+
                 labels.push(label);
                 items.push(item_content);
             } else {
@@ -900,7 +971,11 @@ impl TexParser {
             }
         }
 
-        Some(TexElement::ItemList { ordered, labels, items })
+        Some(TexElement::ItemList {
+            ordered,
+            labels,
+            items,
+        })
     }
 
     /// Parse `\begin{description} … \end{description}`.
@@ -1204,7 +1279,7 @@ impl TexParser {
         }
 
         let remaining = &self.content[self.position..];
-        
+
         if !remaining.starts_with('{') {
             return None;
         }
@@ -1212,7 +1287,7 @@ impl TexParser {
         self.position += 1;
         let content = self.read_until('}');
         self.position += 1;
-        
+
         Some(content)
     }
 
@@ -1220,10 +1295,10 @@ impl TexParser {
     fn read_until(&mut self, delimiter: char) -> String {
         let start = self.position;
         let mut depth = 0;
-        
+
         while self.position < self.content.len() {
             let ch = self.content[self.position..].chars().next().unwrap();
-            
+
             if ch == '{' {
                 depth += 1;
             } else if ch == '}' {
@@ -1234,24 +1309,24 @@ impl TexParser {
             } else if ch == delimiter && depth == 0 {
                 break;
             }
-            
+
             self.position += ch.len_utf8();
         }
-        
+
         self.content[start..self.position].to_string()
     }
 
     /// Read characters until `delimiter` is found, returning the text before it.
     fn read_until_str(&mut self, delimiter: &str) -> String {
         let start = self.position;
-        
+
         while self.position < self.content.len() {
             if self.content[self.position..].starts_with(delimiter) {
                 break;
             }
             self.position += 1;
         }
-        
+
         self.content[start..self.position].to_string()
     }
 
@@ -1297,7 +1372,12 @@ Visible text
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements.is_empty() || elements.iter().all(|e| !matches!(e, TexElement::Command { .. })));
+        assert!(
+            elements.is_empty()
+                || elements
+                    .iter()
+                    .all(|e| !matches!(e, TexElement::Command { .. }))
+        );
     }
 
     #[test]
@@ -1357,18 +1437,22 @@ Background info.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements.iter().any(|e| {
-            matches!(e, TexElement::Section { level: 1, title } if title == "Intro")
-        }));
+        assert!(
+            elements.iter().any(|e| {
+                matches!(e, TexElement::Section { level: 1, title } if title == "Intro")
+            })
+        );
         assert!(elements.iter().any(|e| {
             matches!(e, TexElement::Section { level: 2, title } if title == "Method")
         }));
         assert!(elements.iter().any(|e| {
             matches!(e, TexElement::Section { level: 3, title } if title == "Details")
         }));
-        assert!(elements.iter().any(|e| {
-            matches!(e, TexElement::Section { level: 4, title } if title == "Note")
-        }));
+        assert!(
+            elements.iter().any(|e| {
+                matches!(e, TexElement::Section { level: 4, title } if title == "Note")
+            })
+        );
         assert!(elements.iter().any(|e| {
             matches!(e, TexElement::Section { level: 5, title } if title == "Fine Print")
         }));
@@ -1409,9 +1493,11 @@ Some text.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements.iter().any(|e| {
-            matches!(e, TexElement::TableOfContents)
-        }));
+        assert!(
+            elements
+                .iter()
+                .any(|e| { matches!(e, TexElement::TableOfContents) })
+        );
     }
 
     #[test]
@@ -1522,14 +1608,28 @@ Body text.
         let elements = parser.parse();
 
         // \textbf, \textit, \texttt should produce Command elements
-        let cmds: Vec<_> = elements.iter().filter_map(|e| {
-            if let TexElement::Command { name, args } = e {
-                Some((name.clone(), args.clone()))
-            } else { None }
-        }).collect();
-        assert!(cmds.iter().any(|(n, a)| n == "textbf" && a == &["bold".to_string()]));
-        assert!(cmds.iter().any(|(n, a)| n == "textit" && a == &["italic".to_string()]));
-        assert!(cmds.iter().any(|(n, a)| n == "texttt" && a == &["mono".to_string()]));
+        let cmds: Vec<_> = elements
+            .iter()
+            .filter_map(|e| {
+                if let TexElement::Command { name, args } = e {
+                    Some((name.clone(), args.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            cmds.iter()
+                .any(|(n, a)| n == "textbf" && a == &["bold".to_string()])
+        );
+        assert!(
+            cmds.iter()
+                .any(|(n, a)| n == "textit" && a == &["italic".to_string()])
+        );
+        assert!(
+            cmds.iter()
+                .any(|(n, a)| n == "texttt" && a == &["mono".to_string()])
+        );
     }
 
     #[test]
@@ -1585,7 +1685,12 @@ A & B & C \\
 
         assert!(elements.iter().any(|element| {
             if let TexElement::Table(table) = element {
-                table.columns == vec![crate::table::Align::Left, crate::table::Align::Center, crate::table::Align::Right]
+                table.columns
+                    == vec![
+                        crate::table::Align::Left,
+                        crate::table::Align::Center,
+                        crate::table::Align::Right,
+                    ]
                     && table.rows.len() == 4
                     && table.rows[0].is_separator
                     && table.rows[1].cells == vec!["A", "B", "C"]
@@ -1685,9 +1790,11 @@ X & Y \\
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements.iter().any(|element| {
-            matches!(element, TexElement::Text(t) if t.contains("hi hi"))
-        }));
+        assert!(
+            elements
+                .iter()
+                .any(|element| { matches!(element, TexElement::Text(t) if t.contains("hi hi")) })
+        );
     }
 
     #[test]
@@ -1761,9 +1868,11 @@ See \cite{smith2024, jones2023}.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements.iter().any(|element| {
-            matches!(element, TexElement::Label { key } if key == "sec:intro")
-        }));
+        assert!(
+            elements.iter().any(|element| {
+                matches!(element, TexElement::Label { key } if key == "sec:intro")
+            })
+        );
     }
 
     #[test]
@@ -1777,9 +1886,11 @@ See Section~\ref{sec:intro}.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements.iter().any(|element| {
-            matches!(element, TexElement::Ref { key } if key == "sec:intro")
-        }));
+        assert!(
+            elements.iter().any(|element| {
+                matches!(element, TexElement::Ref { key } if key == "sec:intro")
+            })
+        );
     }
 
     #[test]
@@ -1974,8 +2085,18 @@ Visit \url{https://example.com}.
 
     #[test]
     fn parser_parses_font_size_commands() {
-        let sizes = ["\\tiny", "\\scriptsize", "\\footnotesize", "\\small",
-                     "\\normalsize", "\\large", "\\Large", "\\LARGE", "\\huge", "\\Huge"];
+        let sizes = [
+            "\\tiny",
+            "\\scriptsize",
+            "\\footnotesize",
+            "\\small",
+            "\\normalsize",
+            "\\large",
+            "\\Large",
+            "\\LARGE",
+            "\\huge",
+            "\\Huge",
+        ];
         for cmd in &sizes {
             let content = format!("{}text", cmd);
             let name = &cmd[1..]; // strip backslash
@@ -1997,8 +2118,7 @@ Visit \url{https://example.com}.
         }
 
         let content = r#"\input{included}"#;
-        let mut parser = TexParser::new(content.to_string())
-            .with_base_dir(tmp.path());
+        let mut parser = TexParser::new(content.to_string()).with_base_dir(tmp.path());
         let elements = parser.parse();
         assert!(elements.iter().any(|e| {
             matches!(e, TexElement::Command { name, args } if name == "textbf" && args == &["included".to_string()])
@@ -2016,11 +2136,14 @@ Visit \url{https://example.com}.
         }
 
         let content = r#"\input{chapter1}"#;
-        let mut parser = TexParser::new(content.to_string())
-            .with_base_dir(tmp.path());
+        let mut parser = TexParser::new(content.to_string()).with_base_dir(tmp.path());
         let elements = parser.parse();
         assert!(elements.iter().any(|e| {
-            if let TexElement::Text(t) = e { t.contains("Chapter text") } else { false }
+            if let TexElement::Text(t) = e {
+                t.contains("Chapter text")
+            } else {
+                false
+            }
         }));
     }
 
@@ -2030,7 +2153,11 @@ Visit \url{https://example.com}.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
         // Should not panic; parser skips the command and continues
-        assert!(!elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "newpage")));
+        assert!(
+            !elements
+                .iter()
+                .any(|e| matches!(e, TexElement::Command { name, .. } if name == "newpage"))
+        );
     }
 
     #[test]
@@ -2048,7 +2175,9 @@ Visit \url{https://example.com}.
         let elements = parser.parse();
         assert!(elements.iter().any(|e| {
             if let TexElement::Center(inner) = e {
-                inner.iter().any(|i| matches!(i, TexElement::Text(t) if t.contains("centered")))
+                inner
+                    .iter()
+                    .any(|i| matches!(i, TexElement::Text(t) if t.contains("centered")))
             } else {
                 false
             }
@@ -2060,7 +2189,11 @@ Visit \url{https://example.com}.
         let content = r#"Hello\footnote{This is a note.}"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::Footnote { text } if text == "This is a note.")));
+        assert!(
+            elements
+                .iter()
+                .any(|e| matches!(e, TexElement::Footnote { text } if text == "This is a note."))
+        );
     }
 
     #[test]
@@ -2068,7 +2201,9 @@ Visit \url{https://example.com}.
         let content = r#"\part{The Beginning}"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::Section { level: 0, title } if title == "The Beginning")));
+        assert!(elements.iter().any(
+            |e| matches!(e, TexElement::Section { level: 0, title } if title == "The Beginning")
+        ));
     }
 
     #[test]
@@ -2076,7 +2211,11 @@ Visit \url{https://example.com}.
         let content = r#"\chapter{Intro}"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::Section { level: 6, title } if title == "Intro")));
+        assert!(
+            elements
+                .iter()
+                .any(|e| matches!(e, TexElement::Section { level: 6, title } if title == "Intro"))
+        );
     }
 
     #[test]
@@ -2124,7 +2263,11 @@ Visit \url{https://example.com}.
         let content = r#"\listoffigures"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::ListOfFigures)));
+        assert!(
+            elements
+                .iter()
+                .any(|e| matches!(e, TexElement::ListOfFigures))
+        );
     }
 
     #[test]
@@ -2132,7 +2275,11 @@ Visit \url{https://example.com}.
         let content = r#"\listoftables"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::ListOfTables)));
+        assert!(
+            elements
+                .iter()
+                .any(|e| matches!(e, TexElement::ListOfTables))
+        );
     }
 
     #[test]
@@ -2307,11 +2454,20 @@ Visit \url{https://example.com}.
     fn parser_parses_font_declarations() {
         let mut parser = TexParser::new(r#"\em \bf \it \rm \sf \tt \sc \sl"#.to_string());
         let elements = parser.parse();
-        let names: Vec<&str> = elements.iter().filter_map(|e| {
-            if let TexElement::Command { name, args } = e {
-                if args.is_empty() { Some(name.as_str()) } else { None }
-            } else { None }
-        }).collect();
+        let names: Vec<&str> = elements
+            .iter()
+            .filter_map(|e| {
+                if let TexElement::Command { name, args } = e {
+                    if args.is_empty() {
+                        Some(name.as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert!(names.contains(&"em"));
         assert!(names.contains(&"bf"));
         assert!(names.contains(&"it"));
@@ -2338,8 +2494,14 @@ Visit \url{https://example.com}.
         for (cmd, expected) in &cases {
             let mut parser = TexParser::new(cmd.to_string());
             let elements = parser.parse();
-            assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t == *expected)),
-                "Command {} should produce text {}", cmd, expected);
+            assert!(
+                elements
+                    .iter()
+                    .any(|e| matches!(e, TexElement::Text(t) if t == *expected)),
+                "Command {} should produce text {}",
+                cmd,
+                expected
+            );
         }
     }
 
@@ -2362,11 +2524,22 @@ Visit \url{https://example.com}.
     #[test]
     fn parser_parses_spacing_commands() {
         let cmds = [
-            "\\hfill", "\\vfill", "\\hrulefill", "\\dotfill",
-            "\\medskip", "\\bigskip", "\\smallskip",
-            "\\strut", "\\mathstrut",
-            "\\qquad", "\\quad",
-            "\\;", "\\,", "\\!", "\\:", "\\ ",
+            "\\hfill",
+            "\\vfill",
+            "\\hrulefill",
+            "\\dotfill",
+            "\\medskip",
+            "\\bigskip",
+            "\\smallskip",
+            "\\strut",
+            "\\mathstrut",
+            "\\qquad",
+            "\\quad",
+            "\\;",
+            "\\,",
+            "\\!",
+            "\\:",
+            "\\ ",
         ];
         for cmd in &cmds {
             let mut parser = TexParser::new(cmd.to_string());
@@ -2416,7 +2589,12 @@ Visit \url{https://example.com}.
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].term, "Apple");
         assert_eq!(items[1].term, "Bear");
-        assert!(items[0].body.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("red fruit"))));
+        assert!(
+            items[0]
+                .body
+                .iter()
+                .any(|e| matches!(e, TexElement::Text(t) if t.contains("red fruit")))
+        );
     }
 
     #[test]
@@ -2462,7 +2640,10 @@ Visit \url{https://example.com}.
         let (lines, kind) = ml.expect("should produce a MathLines element");
         assert_eq!(lines.len(), 2);
         assert!(matches!(kind, super::MathLineKind::Align));
-        assert!(!lines[0].contains('&'), "& should be stripped from align lines");
+        assert!(
+            !lines[0].contains('&'),
+            "& should be stripped from align lines"
+        );
     }
 
     #[test]
@@ -2477,9 +2658,11 @@ Visit \url{https://example.com}.
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
 
-        assert!(elements
-            .iter()
-            .any(|e| matches!(e, TexElement::MathLines { lines, .. } if lines.len() == 2)));
+        assert!(
+            elements
+                .iter()
+                .any(|e| matches!(e, TexElement::MathLines { lines, .. } if lines.len() == 2))
+        );
     }
 
     #[test]
@@ -2545,7 +2728,10 @@ Visit \url{https://example.com}.
         let (lines, kind) = ml.expect("cases should produce MathLines");
         assert_eq!(lines.len(), 2);
         assert!(matches!(kind, super::MathLineKind::Cases));
-        assert!(lines[0].contains("if"), "cases should include 'if' between value and condition");
+        assert!(
+            lines[0].contains("if"),
+            "cases should include 'if' between value and condition"
+        );
     }
 
     #[test]
@@ -2576,9 +2762,10 @@ Inline \(E = mc^2\) math.
 \end{document}"#;
         let mut p = TexParser::new(inline.to_string());
         let els = p.parse();
-        assert!(els
-            .iter()
-            .any(|e| matches!(e, TexElement::MathInline(s) if s.contains("E = mc^2"))));
+        assert!(
+            els.iter()
+                .any(|e| matches!(e, TexElement::MathInline(s) if s.contains("E = mc^2")))
+        );
 
         let display = r#"\documentclass{article}
 \begin{document}
@@ -2586,9 +2773,10 @@ Display \[ \int_0^\infty e^{-x} dx = 1 \] math.
 \end{document}"#;
         let mut p = TexParser::new(display.to_string());
         let els = p.parse();
-        assert!(els
-            .iter()
-            .any(|e| matches!(e, TexElement::MathDisplay(s) if s.contains("infty"))));
+        assert!(
+            els.iter()
+                .any(|e| matches!(e, TexElement::MathDisplay(s) if s.contains("infty")))
+        );
     }
 
     #[test]
@@ -2610,7 +2798,10 @@ For a right triangle with legs $a, b$ and hypotenuse $c$, $a^2 + b^2 = c^2$.
         let (kind, title, body) = thm.expect("should produce a Theorem element");
         assert_eq!(kind, "theorem");
         assert_eq!(title.as_deref(), Some("Pythagoras"));
-        assert!(body.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("right triangle"))));
+        assert!(
+            body.iter()
+                .any(|e| matches!(e, TexElement::Text(t) if t.contains("right triangle")))
+        );
     }
 
     #[test]
@@ -2656,7 +2847,11 @@ Body.
                 _ => None,
             })
             .collect();
-        assert_eq!(titles.len(), 3, "expected 3 starred sections, got {titles:?}");
+        assert_eq!(
+            titles.len(),
+            3,
+            "expected 3 starred sections, got {titles:?}"
+        );
         assert_eq!(titles[0], (&1, &"Acknowledgement".to_string()));
         assert_eq!(titles[1], (&2, &"Preface".to_string()));
         assert_eq!(titles[2], (&3, &"Notes".to_string()));
@@ -2685,11 +2880,7 @@ f(x) = \begin{cases}
         for elem in &elements {
             match elem {
                 TexElement::MathLines { lines, .. } => {
-                    if lines
-                        .first()
-                        .map(|s| s.contains("f(x) ="))
-                        .unwrap_or(false)
-                    {
+                    if lines.first().map(|s| s.contains("f(x) =")).unwrap_or(false) {
                         found_prefix = true;
                     }
                 }

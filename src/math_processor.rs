@@ -129,15 +129,26 @@ impl MathProcessor {
     /// Standard math environments supported by LaTeX / amsmath.
     pub fn environments() -> Vec<&'static str> {
         vec![
-            "equation", "equation*",
-            "align", "align*",
-            "gather", "gather*",
-            "multline", "multline*",
-            "eqnarray", "eqnarray*",
-            "split", "aligned",
+            "equation",
+            "equation*",
+            "align",
+            "align*",
+            "gather",
+            "gather*",
+            "multline",
+            "multline*",
+            "eqnarray",
+            "eqnarray*",
+            "split",
+            "aligned",
             "cases",
-            "matrix", "pmatrix", "bmatrix", "Bmatrix",
-            "vmatrix", "Vmatrix", "smallmatrix",
+            "matrix",
+            "pmatrix",
+            "bmatrix",
+            "Bmatrix",
+            "vmatrix",
+            "Vmatrix",
+            "smallmatrix",
             "array",
         ]
     }
@@ -152,50 +163,72 @@ impl MathProcessor {
         // Roots
         self.add("sqrt", 1, 1, MathCommandType::Root);
         // Big operators
-        for name in ["sum", "prod", "int", "oint", "iint", "iiint",
-                      "lim", "limsup", "liminf", "max", "min", "sup", "inf"] {
+        for name in [
+            "sum", "prod", "int", "oint", "iint", "iiint", "lim", "limsup", "liminf", "max", "min",
+            "sup", "inf",
+        ] {
             self.add(name, 0, 0, MathCommandType::Operator);
         }
         // Functions
-        for name in ["sin", "cos", "tan", "sec", "csc", "cot",
-                      "sinh", "cosh", "tanh", "ln", "log", "exp",
-                      "det", "gcd", "lcm"] {
+        for name in [
+            "sin", "cos", "tan", "sec", "csc", "cot", "sinh", "cosh", "tanh", "ln", "log", "exp",
+            "det", "gcd", "lcm",
+        ] {
             self.add(name, 0, 0, MathCommandType::Function);
         }
         // Accents
-        for name in ["hat", "widehat", "tilde", "widetilde",
-                      "bar", "overline", "underline",
-                      "vec", "dot", "ddot"] {
+        for name in [
+            "hat",
+            "widehat",
+            "tilde",
+            "widetilde",
+            "bar",
+            "overline",
+            "underline",
+            "vec",
+            "dot",
+            "ddot",
+        ] {
             self.add(name, 1, 0, MathCommandType::Accent);
         }
         // Styles
-        for name in ["displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle"] {
+        for name in [
+            "displaystyle",
+            "textstyle",
+            "scriptstyle",
+            "scriptscriptstyle",
+        ] {
             self.add(name, 0, 0, MathCommandType::Style);
         }
         // Matrices
-        for name in ["matrix", "pmatrix", "bmatrix", "Bmatrix",
-                      "vmatrix", "Vmatrix", "smallmatrix"] {
+        for name in [
+            "matrix",
+            "pmatrix",
+            "bmatrix",
+            "Bmatrix",
+            "vmatrix",
+            "Vmatrix",
+            "smallmatrix",
+        ] {
             self.add(name, 0, 0, MathCommandType::Matrix);
         }
         // Delimiters
-        for name in ["left", "right", "bigl", "bigr", "Bigl", "Bigr",
-                      "biggl", "biggr", "Biggl", "Biggr",
-                      "big", "Big", "bigg", "Bigg"] {
+        for name in [
+            "left", "right", "bigl", "bigr", "Bigl", "Bigr", "biggl", "biggr", "Biggl", "Biggr",
+            "big", "Big", "bigg", "Bigg",
+        ] {
             self.add(name, 1, 0, MathCommandType::Delimiter);
         }
         // Common symbols that are commands
-        for name in ["alpha", "beta", "gamma", "delta", "epsilon",
-                      "zeta", "eta", "theta", "iota", "kappa", "lambda",
-                      "mu", "nu", "xi", "pi", "rho", "sigma", "tau",
-                      "upsilon", "phi", "chi", "psi", "omega",
-                      "Gamma", "Delta", "Theta", "Lambda", "Xi",
-                      "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
-                      "infty", "partial", "nabla", "forall", "exists",
-                      "in", "notin", "subset", "supset", "subseteq",
-                      "supseteq", "cup", "cap", "emptyset", "times",
-                      "div", "pm", "mp", "leq", "geq", "neq", "approx",
-                      "equiv", "sim", "propto", "cdot", "ldots",
-                      "cdots", "vdots", "ddots", "vec", "hat"] {
+        for name in [
+            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa",
+            "lambda", "mu", "nu", "xi", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi",
+            "psi", "omega", "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon",
+            "Phi", "Psi", "Omega", "infty", "partial", "nabla", "forall", "exists", "in", "notin",
+            "subset", "supset", "subseteq", "supseteq", "cup", "cap", "emptyset", "times", "div",
+            "pm", "mp", "leq", "geq", "neq", "approx", "equiv", "sim", "propto", "cdot", "ldots",
+            "cdots", "vdots", "ddots", "vec", "hat",
+        ] {
             self.add(name, 0, 0, MathCommandType::Symbol);
         }
     }

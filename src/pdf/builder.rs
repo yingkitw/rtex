@@ -4,10 +4,10 @@
 //! DejaVu Sans for Unicode math support, and handles page layout,
 //! text wrapping, and automatic page breaks.
 
-use crate::parser::{MathLineKind, TexElement};
 use crate::math_formatter::MathFormatter;
+use crate::parser::{MathLineKind, TexElement};
+use crate::pdf::core::{DictBuilder, PdfGenerator};
 use crate::pdf::text_renderer::PdfTextRenderer;
-use crate::pdf::core::{PdfGenerator, DictBuilder};
 use std::path::Path;
 
 /// Flatten a slice of inline elements into a single string suitable for the
@@ -39,9 +39,21 @@ fn flatten_inline(elements: &[TexElement]) -> String {
             }
             TexElement::Command { name, args } => {
                 let inline_cmds = [
-                    "textbf", "textit", "texttt", "emph", "textsuperscript",
-                    "textsubscript", "text", "ensuremath", "textsc", "textrm",
-                    "textsf", "textsl", "textup", "textmd", "underline",
+                    "textbf",
+                    "textit",
+                    "texttt",
+                    "emph",
+                    "textsuperscript",
+                    "textsubscript",
+                    "text",
+                    "ensuremath",
+                    "textsc",
+                    "textrm",
+                    "textsf",
+                    "textsl",
+                    "textup",
+                    "textmd",
+                    "underline",
                     "url",
                 ];
                 if inline_cmds.contains(&name.as_str()) {
@@ -81,9 +93,7 @@ fn flatten_inline(elements: &[TexElement]) -> String {
                 out.push_str(&heading);
                 out.push_str(&flatten_inline(body));
             }
-            TexElement::Center(inner)
-            | TexElement::Quote(inner)
-            | TexElement::Abstract(inner) => {
+            TexElement::Center(inner) | TexElement::Quote(inner) | TexElement::Abstract(inner) => {
                 out.push_str(&flatten_inline(inner));
             }
             TexElement::Footnote { text } | TexElement::Caption { text } => {
@@ -153,21 +163,23 @@ impl PdfBuilder {
 
     /// Build a PDF from `elements` and return the raw bytes.
     ///
-    /// Uses [pdfrs](https://crates.io/crates/pdfrs) when the mapped document is small
-    /// enough; falls back to the native PDF engine for large or complex documents.
+    /// Uses [pdfrs](https://crates.io/crates/pdfrs) when the mapped document fits
+    /// size limits; falls back to the native PDF engine otherwise.
+    /// Override with `RTEX_PDF_BACKEND=pdfrs|native`.
     pub fn build_to_bytes(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
         let elements = self.prepare_elements(elements);
-        if let Ok(bytes) = self.try_build_to_bytes_pdfrs(&elements) {
-            if bytes.len() <= crate::output::pdfrs_pdf::PDFRS_MAX_BYTES {
-                return Ok(bytes);
-            }
-        }
-        self.build_to_bytes_native(elements)
+        crate::output::render_elements_in_dir(elements, crate::output::OutputFormat::Pdf, None)
+            .map_err(|e| e.to_string())
     }
 
     /// Native rtex PDF engine (font subsetting, layout, math formatting).
     pub fn build_to_bytes_native(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
         let elements = self.prepare_elements(elements);
+        self.emit_native_pdf(elements)
+    }
+
+    /// Emit a native PDF from already-prepared elements (no second plugin pass).
+    pub(crate) fn emit_native_pdf(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
         let mut generator = PdfGenerator::new();
 
         // Subset and embed DejaVu only when Unicode/math characters are present
@@ -177,7 +189,8 @@ impl PdfBuilder {
             let full_font_data = crate::fonts::DEJAVU_SANS.to_vec();
             let font_data = crate::pdf::font_subset::subset_font(&full_font_data, &used_chars)
                 .unwrap_or(full_font_data);
-            self.create_embedded_font_objects(&mut generator, &font_data)?.0
+            self.create_embedded_font_objects(&mut generator, &font_data)?
+                .0
         } else {
             self.create_standard_font_objects(&mut generator)?
         };
@@ -238,9 +251,7 @@ impl PdfBuilder {
         let resources = if xobj_entries.is_empty() {
             format!("<<\n/Font << /F1 {font_id} 0 R >>\n>>\n")
         } else {
-            format!(
-                "<<\n/Font << /F1 {font_id} 0 R >>\n/XObject << {xobj_entries}>>\n>>\n"
-            )
+            format!("<<\n/Font << /F1 {font_id} 0 R >>\n/XObject << {xobj_entries}>>\n>>\n")
         };
 
         // Create a content stream and page object for each page
@@ -275,7 +286,7 @@ impl PdfBuilder {
         // Update each page to reference parent
         for (page_id, content_id) in &page_ids {
             let page_with_parent = format!(
-                "<<\n/Type /Page\n/Parent {pages_id} 0 R\n/MediaBox [0 0 595 842]\n/Contents {content_id} 0 R\n/Resources {resources}\n>>\n"
+                "<<\n/Type /Page\n/Parent {pages_id} 0 R\n/MediaBox {media_box}\n/Contents {content_id} 0 R\n/Resources {resources}\n>>\n"
             );
             generator.objects[*page_id as usize - 1].content = page_with_parent;
         }
@@ -301,7 +312,7 @@ impl PdfBuilder {
         }
         info_entries.push(format!(
             "/Producer {} /Creator {}",
-            Self::pdf_string_literal("rtex"),
+            Self::pdf_string_literal("rtex/native"),
             Self::pdf_string_literal("rtex")
         ));
         let info_content = format!("<<\n{}\n>>\n", info_entries.join("\n"));
@@ -335,38 +346,12 @@ impl PdfBuilder {
         elements
     }
 
-    fn try_build_to_bytes_pdfrs(&self, elements: &[TexElement]) -> Result<Vec<u8>, String> {
-        let page_layout = self
-            .template
-            .as_ref()
-            .map(|t| t.page_layout())
-            .unwrap_or_else(crate::page_layout::PageLayout::a4_portrait);
-        let base_font_size = self
-            .template
-            .as_ref()
-            .map(|t| t.base_font_size)
-            .unwrap_or(11.0);
-
-        let options = crate::output::pdfrs_pdf::PdfRenderOptions {
-            layout: crate::output::pdfrs_pdf::rtex_layout_to_pdfrs(page_layout),
-            font: "Helvetica".to_string(),
-            base_font_size,
-            image_base_dir: None,
-        };
-
-        crate::output::pdfrs_pdf::render_pdf_bytes(elements, options).map_err(|e| match e {
-            crate::error::LatexError::PdfError { message, .. } => message,
-            other => other.to_string(),
-        })
-    }
-
     /// Build a PDF from `elements` and write it to `output_path`.
     pub fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<(), String> {
         let pdf = self.build_to_bytes(elements)?;
-        std::fs::write(output_path, &pdf)
-            .map_err(|e| format!("Failed to write PDF: {}", e))
+        std::fs::write(output_path, &pdf).map_err(|e| format!("Failed to write PDF: {}", e))
     }
-    
+
     fn create_standard_font_objects(&self, generator: &mut PdfGenerator) -> Result<u32, String> {
         let font = "<<\n/Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n/Encoding /WinAnsiEncoding\n>>\n";
         Ok(generator.add_object(font.to_string()))
@@ -379,7 +364,7 @@ impl PdfBuilder {
     ) -> Result<(u32, u32, u32, u32), String> {
         // Compress font data
         let compressed_font = self.compress_font_data(font_data);
-        
+
         // Create font file stream
         let font_file_dict = format!(
             "<<\n/Length {}\n/Length1 {}\n/Filter /FlateDecode\n>>\n",
@@ -387,7 +372,7 @@ impl PdfBuilder {
             font_data.len()
         );
         let font_file_id = generator.add_stream_object(font_file_dict, compressed_font);
-        
+
         // Create font descriptor
         let font_descriptor = format!(
             "<<\n/Type /FontDescriptor\n/FontName /DejaVuSans\n/Flags 32\n\
@@ -396,7 +381,7 @@ impl PdfBuilder {
             font_file_id
         );
         let font_descriptor_id = generator.add_object(font_descriptor);
-        
+
         // Create CIDFont
         let cid_font = format!(
             "<<\n/Type /Font\n/Subtype /CIDFontType2\n/BaseFont /DejaVuSans\n\
@@ -405,7 +390,7 @@ impl PdfBuilder {
             font_descriptor_id
         );
         let cid_font_id = generator.add_object(cid_font);
-        
+
         // Create ToUnicode CMap - maps character IDs to Unicode values
         let cmap_content = b"/CIDInit /ProcSet findresource begin\n\
 12 dict begin\n\
@@ -542,10 +527,10 @@ endcmap\n\
 CMapName currentdict /CMap defineresource pop\n\
 end\n\
 end";
-        
+
         let cmap_dict = format!("<<\n/Length {}\n>>\n", cmap_content.len());
         let to_unicode_id = generator.add_stream_object(cmap_dict, cmap_content.to_vec());
-        
+
         // Create Type0 font
         let type0_font = format!(
             "<<\n/Type /Font\n/Subtype /Type0\n/BaseFont /DejaVuSans\n\
@@ -553,10 +538,10 @@ end";
             cid_font_id, to_unicode_id
         );
         let font_id = generator.add_object(type0_font);
-        
+
         Ok((font_id, font_descriptor_id, cid_font_id, to_unicode_id))
     }
-    
+
     fn compress_font_data(&self, font_data: &[u8]) -> Vec<u8> {
         use std::io::Write;
         let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
@@ -593,7 +578,11 @@ impl PdfBuilder {
         let mut state = LayoutState::with_encoding(*page_layout, embedded_unicode);
         // Resolve style values from template or use defaults
         let tp = self.template.as_ref().map(|t| &t.title_page);
-        let base_font_size = self.template.as_ref().map(|t| t.base_font_size).unwrap_or(11.0);
+        let base_font_size = self
+            .template
+            .as_ref()
+            .map(|t| t.base_font_size)
+            .unwrap_or(11.0);
         let mut line_height = state.line_height(base_font_size);
 
         let title_font_size = tp.map(|tp| tp.title_font_size).unwrap_or(24.0);
@@ -679,7 +668,11 @@ impl PdfBuilder {
                         accumulated_text.clear();
                     }
                     sections_seen.push((*level, title.clone(), state.pages.len()));
-                    let headings = self.template.as_ref().map(|t| t.headings.clone()).unwrap_or_default();
+                    let headings = self
+                        .template
+                        .as_ref()
+                        .map(|t| t.headings.clone())
+                        .unwrap_or_default();
                     let font_size = match *level {
                         0 => 25.0,
                         1 => headings.h1,
@@ -821,7 +814,8 @@ impl PdfBuilder {
                         let x = match kind {
                             MathLineKind::Multline if idx == 0 => state.left_margin(),
                             MathLineKind::Multline if idx + 1 == total => {
-                                (state.left_margin() + content_width - text_width).max(state.left_margin())
+                                (state.left_margin() + content_width - text_width)
+                                    .max(state.left_margin())
                             }
                             _ => state.left_margin() + (content_width - text_width).max(0.0) / 2.0,
                         };
@@ -835,7 +829,11 @@ impl PdfBuilder {
                         state.advance(math_line_height + 4.0);
                     }
                 }
-                TexElement::ItemList { ordered, labels, items } => {
+                TexElement::ItemList {
+                    ordered,
+                    labels,
+                    items,
+                } => {
                     if !accumulated_text.is_empty() {
                         self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
@@ -960,16 +958,22 @@ impl PdfBuilder {
                     stream.end_text();
                     state.advance(code_height);
                 }
-                TexElement::Image { path: _, width, height } => {
+                TexElement::Image {
+                    path: _,
+                    width,
+                    height,
+                } => {
                     if !accumulated_text.is_empty() {
                         self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
                     if let Some((img_name, _)) = image_xobjects.get(&elem_idx) {
-                        let img_width = width.as_ref()
+                        let img_width = width
+                            .as_ref()
                             .and_then(|w| crate::image::parse_dimension(w))
                             .unwrap_or(200.0);
-                        let img_height = height.as_ref()
+                        let img_height = height
+                            .as_ref()
                             .and_then(|h| crate::image::parse_dimension(h))
                             .unwrap_or(img_width);
                         let total_height = img_height + 20.0;
@@ -977,7 +981,9 @@ impl PdfBuilder {
                         state.advance(10.0);
                         let x = state.left_margin();
                         let y = state.current_y - img_height;
-                        state.current_stream().draw_image(img_name, x, y, img_width, img_height);
+                        state
+                            .current_stream()
+                            .draw_image(img_name, x, y, img_width, img_height);
                         state.advance(total_height - 10.0);
                     }
                 }
@@ -1027,7 +1033,9 @@ impl PdfBuilder {
                     accumulated_text.push_str(&text);
                     accumulated_text.push(' ');
                 }
-                TexElement::Command { name, args: _ } if matches!(name.as_str(), "newpage" | "clearpage" | "pagebreak") => {
+                TexElement::Command { name, args: _ }
+                    if matches!(name.as_str(), "newpage" | "clearpage" | "pagebreak") =>
+                {
                     if !accumulated_text.is_empty() {
                         self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
@@ -1039,7 +1047,9 @@ impl PdfBuilder {
                         self.render_text_block(&mut state, &accumulated_text, line_height);
                         accumulated_text.clear();
                     }
-                    let space = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                    let space = crate::tex::Dimension::parse(&args[0])
+                        .map(|d| d.pt() as f32)
+                        .unwrap_or(0.0);
                     state.advance(space.max(0.0));
                 }
                 TexElement::Command { name, args } if name == "underline" && !args.is_empty() => {
@@ -1086,7 +1096,23 @@ impl PdfBuilder {
                     }
                     // Text formatting — render the text even if we can't
                     // yet apply bold/italic/monospace styling.
-                    if matches!(name.as_str(), "textbf" | "textit" | "texttt" | "emph" | "textsuperscript" | "textsubscript" | "text" | "ensuremath" | "textsc" | "textrm" | "textsf" | "textsl" | "textup" | "textmd") {
+                    if matches!(
+                        name.as_str(),
+                        "textbf"
+                            | "textit"
+                            | "texttt"
+                            | "emph"
+                            | "textsuperscript"
+                            | "textsubscript"
+                            | "text"
+                            | "ensuremath"
+                            | "textsc"
+                            | "textrm"
+                            | "textsf"
+                            | "textsl"
+                            | "textup"
+                            | "textmd"
+                    ) {
                         if let Some(text) = args.first() {
                             accumulated_text.push_str(text);
                             accumulated_text.push(' ');
@@ -1095,7 +1121,8 @@ impl PdfBuilder {
                     }
                     if name == "overline" {
                         if let Some(text) = args.first() {
-                            let with_overline: String = text.chars().map(|c| format!("{}̅", c)).collect();
+                            let with_overline: String =
+                                text.chars().map(|c| format!("{}̅", c)).collect();
                             accumulated_text.push_str(&with_overline);
                             accumulated_text.push(' ');
                         }
@@ -1103,7 +1130,8 @@ impl PdfBuilder {
                     }
                     if name == "sout" {
                         if let Some(text) = args.first() {
-                            let with_strike: String = text.chars().map(|c| format!("{}̶", c)).collect();
+                            let with_strike: String =
+                                text.chars().map(|c| format!("{}̶", c)).collect();
                             accumulated_text.push_str(&with_strike);
                             accumulated_text.push(' ');
                         }
@@ -1124,28 +1152,29 @@ impl PdfBuilder {
                     }
                     if name == "phantom" || name == "vphantom" || name == "hphantom" {
                         if let Some(text) = args.first()
-                            && !text.is_empty() {
-                                // Flush accumulated text first
-                                if !accumulated_text.is_empty() {
-                                    self.render_text_block(&mut state, &accumulated_text, line_height);
-                                    accumulated_text.clear();
-                                }
-                                let font_size = state.current_font_size;
-                                let x = state.left_margin();
-                                let y = state.current_y;
-                                let stream = state.current_stream();
-                                stream.begin_text();
-                                stream.set_font("F1", font_size);
-                                stream.set_text_rendering_mode(3); // invisible
-                                stream.set_position(x, y);
-                                stream.show_text(text);
-                                stream.set_text_rendering_mode(0); // back to visible
-                                stream.end_text();
-                                if name == "vphantom" || name == "phantom" {
-                                    state.advance(line_height);
-                                }
-                                // For hphantom, we don't advance vertically; the width is consumed by the invisible text
+                            && !text.is_empty()
+                        {
+                            // Flush accumulated text first
+                            if !accumulated_text.is_empty() {
+                                self.render_text_block(&mut state, &accumulated_text, line_height);
+                                accumulated_text.clear();
                             }
+                            let font_size = state.current_font_size;
+                            let x = state.left_margin();
+                            let y = state.current_y;
+                            let stream = state.current_stream();
+                            stream.begin_text();
+                            stream.set_font("F1", font_size);
+                            stream.set_text_rendering_mode(3); // invisible
+                            stream.set_position(x, y);
+                            stream.show_text(text);
+                            stream.set_text_rendering_mode(0); // back to visible
+                            stream.end_text();
+                            if name == "vphantom" || name == "phantom" {
+                                state.advance(line_height);
+                            }
+                            // For hphantom, we don't advance vertically; the width is consumed by the invisible text
+                        }
                         continue;
                     }
                     if name == "raisebox" && args.len() >= 2 {
@@ -1153,7 +1182,9 @@ impl PdfBuilder {
                             self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
-                        let distance = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                        let distance = crate::tex::Dimension::parse(&args[0])
+                            .map(|d| d.pt() as f32)
+                            .unwrap_or(0.0);
                         let text = &args[1];
                         let font_size = state.current_font_size;
                         state.ensure_space(font_size + distance.abs());
@@ -1334,8 +1365,12 @@ impl PdfBuilder {
                             self.render_text_block(&mut state, &accumulated_text, line_height);
                             accumulated_text.clear();
                         }
-                        let width = crate::tex::Dimension::parse(&args[0]).map(|d| d.pt() as f32).unwrap_or(0.0);
-                        let height = crate::tex::Dimension::parse(&args[1]).map(|d| d.pt() as f32).unwrap_or(0.0);
+                        let width = crate::tex::Dimension::parse(&args[0])
+                            .map(|d| d.pt() as f32)
+                            .unwrap_or(0.0);
+                        let height = crate::tex::Dimension::parse(&args[1])
+                            .map(|d| d.pt() as f32)
+                            .unwrap_or(0.0);
                         if width > 0.0 && height > 0.0 {
                             state.ensure_space(height.max(line_height));
                             let x = state.left_margin();
@@ -1382,11 +1417,23 @@ impl PdfBuilder {
                         state.advance(1.0);
                         continue;
                     }
-                    if matches!(name.as_str(), "hfill" | "vfill" | "dotfill" | "strut" | "mathstrut") {
+                    if matches!(
+                        name.as_str(),
+                        "hfill" | "vfill" | "dotfill" | "strut" | "mathstrut"
+                    ) {
                         // No-op in basic renderer
                         continue;
                     }
-                    if matches!(name.as_str(), "qquad" | "quad" | "semicolon" | "comma" | "bang" | "colon" | "control_space") {
+                    if matches!(
+                        name.as_str(),
+                        "qquad"
+                            | "quad"
+                            | "semicolon"
+                            | "comma"
+                            | "bang"
+                            | "colon"
+                            | "control_space"
+                    ) {
                         let space = match name.as_str() {
                             "qquad" => "  ",
                             "quad" => " ",
@@ -1435,7 +1482,9 @@ impl PdfBuilder {
                 TexElement::Footnote { text } => {
                     footnote_counter += 1;
                     accumulated_text.push_str(&format!("[{}]", footnote_counter));
-                    state.current_page_footnotes.push((footnote_counter, text.clone()));
+                    state
+                        .current_page_footnotes
+                        .push((footnote_counter, text.clone()));
                 }
                 TexElement::Caption { text } => {
                     if !accumulated_text.is_empty() {
@@ -1538,7 +1587,9 @@ impl PdfBuilder {
         }
 
         // Archive footnotes for the final page (empty vec if none)
-        state.all_footnotes.push(std::mem::take(&mut state.current_page_footnotes));
+        state
+            .all_footnotes
+            .push(std::mem::take(&mut state.current_page_footnotes));
 
         Ok(state)
     }
@@ -1597,27 +1648,27 @@ impl PdfBuilder {
         state.centering = false;
         state.raggedleft = false;
     }
-    
+
     fn add_math_spacing(&self, math: &str) -> String {
         let mut result = String::new();
         let chars: Vec<char> = math.chars().collect();
         let mut i = 0;
-        
+
         while i < chars.len() {
             let ch = chars[i];
-            
+
             // Check for multi-character operators
-            if i + 2 < chars.len() && chars[i..i+3] == ['+', '/', '-'] {
+            if i + 2 < chars.len() && chars[i..i + 3] == ['+', '/', '-'] {
                 result.push_str(" +/- ");
                 i += 3;
                 continue;
             }
-            if i + 2 < chars.len() && chars[i..i+3] == ['-', '/', '+'] {
+            if i + 2 < chars.len() && chars[i..i + 3] == ['-', '/', '+'] {
                 result.push_str(" -/+ ");
                 i += 3;
                 continue;
             }
-            
+
             // Add spaces around single operators
             match ch {
                 '=' | '+' | '*' => {
@@ -1629,7 +1680,12 @@ impl PdfBuilder {
                 }
                 '-' => {
                     // Only add space if not part of a negative number
-                    if i > 0 && !matches!(chars.get(i-1), Some(&'[') | Some(&'(') | Some(&' ') | Some(&'=')) {
+                    if i > 0
+                        && !matches!(
+                            chars.get(i - 1),
+                            Some(&'[') | Some(&'(') | Some(&' ') | Some(&'=')
+                        )
+                    {
                         if !result.ends_with(' ') {
                             result.push(' ');
                         }
@@ -1649,22 +1705,22 @@ impl PdfBuilder {
             }
             i += 1;
         }
-        
+
         // Clean up multiple spaces
         let mut cleaned = result.trim().to_string();
         while cleaned.contains("  ") {
             cleaned = cleaned.replace("  ", " ");
         }
-        
+
         cleaned
     }
-    
+
     fn format_inline_math(&self, text: &str) -> String {
         let mut result = String::new();
         let chars = text.chars();
         let mut in_math = false;
         let mut math_buffer = String::new();
-        
+
         for ch in chars {
             if ch == '$' {
                 if in_math {
@@ -1681,7 +1737,7 @@ impl PdfBuilder {
                 result.push(ch);
             }
         }
-        
+
         if !math_buffer.is_empty() {
             if in_math {
                 result.push('$');

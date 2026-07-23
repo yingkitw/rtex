@@ -18,7 +18,11 @@ pub struct Position {
 
 impl Position {
     pub fn new(line: usize, column: usize, offset: usize) -> Self {
-        Self { line, column, offset }
+        Self {
+            line,
+            column,
+            offset,
+        }
     }
 
     pub fn start() -> Self {
@@ -85,23 +89,15 @@ pub enum LatexError {
 
     /// Font loading error
     #[error("Font error for '{font_name}': {message}")]
-    FontError {
-        font_name: String,
-        message: String,
-    },
+    FontError { font_name: String, message: String },
 
     /// Math formatting error
     #[error("Math error in '{expression}': {message}")]
-    MathError {
-        expression: String,
-        message: String,
-    },
+    MathError { expression: String, message: String },
 
     /// Configuration error
     #[error("Configuration error: {message}")]
-    ConfigError {
-        message: String,
-    },
+    ConfigError { message: String },
 
     /// Unsupported feature
     #[error("Unsupported feature: {feature}{suggestion_info}",
@@ -136,25 +132,26 @@ where
         self.map_err(|e| {
             let err: LatexError = e.into();
             match err {
-                LatexError::ParseError { message: msg, line, column, .. } => {
-                    LatexError::ParseError {
-                        message: msg,
-                        line,
-                        column,
-                        context: Some(message.into()),
-                    }
-                }
-                LatexError::PdfError { message: msg, .. } => {
-                    LatexError::PdfError {
-                        message: msg,
-                        context: Some(message.into()),
-                    }
-                }
+                LatexError::ParseError {
+                    message: msg,
+                    line,
+                    column,
+                    ..
+                } => LatexError::ParseError {
+                    message: msg,
+                    line,
+                    column,
+                    context: Some(message.into()),
+                },
+                LatexError::PdfError { message: msg, .. } => LatexError::PdfError {
+                    message: msg,
+                    context: Some(message.into()),
+                },
                 other => other,
             }
         })
     }
-    
+
     fn with_context<F>(self, f: F) -> Result<T>
     where
         F: FnOnce() -> String,
@@ -163,20 +160,21 @@ where
             let err: LatexError = e.into();
             let context_msg = f();
             match err {
-                LatexError::ParseError { message: msg, line, column, .. } => {
-                    LatexError::ParseError {
-                        message: msg,
-                        line,
-                        column,
-                        context: Some(context_msg),
-                    }
-                }
-                LatexError::PdfError { message: msg, .. } => {
-                    LatexError::PdfError {
-                        message: msg,
-                        context: Some(context_msg),
-                    }
-                }
+                LatexError::ParseError {
+                    message: msg,
+                    line,
+                    column,
+                    ..
+                } => LatexError::ParseError {
+                    message: msg,
+                    line,
+                    column,
+                    context: Some(context_msg),
+                },
+                LatexError::PdfError { message: msg, .. } => LatexError::PdfError {
+                    message: msg,
+                    context: Some(context_msg),
+                },
                 other => other,
             }
         })

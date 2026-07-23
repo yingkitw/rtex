@@ -244,41 +244,65 @@ mod tests {
     fn detects_unclosed_brace() {
         let text = "\\section{Intro";
         let diags = analyze_diagnostics(text);
-        assert!(diags.iter().any(|d| d.code.as_deref() == Some("unclosed-brace")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("unclosed-brace"))
+        );
     }
 
     #[test]
     fn detects_unmatched_end_brace() {
         let text = "hello } world";
         let diags = analyze_diagnostics(text);
-        assert!(diags.iter().any(|d| d.code.as_deref() == Some("unmatched-brace")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("unmatched-brace"))
+        );
     }
 
     #[test]
     fn detects_environment_mismatch() {
         let text = "\\begin{itemize}\\end{enumerate}";
         let diags = analyze_diagnostics(text);
-        assert!(diags.iter().any(|d| d.code.as_deref() == Some("env-mismatch")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("env-mismatch"))
+        );
     }
 
     #[test]
     fn detects_unclosed_math() {
         let text = "The value is $x = 1";
         let diags = analyze_diagnostics(text);
-        assert!(diags.iter().any(|d| d.code.as_deref() == Some("unclosed-math")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("unclosed-math"))
+        );
     }
 
     #[test]
     fn warns_missing_end_document() {
         let text = "\\documentclass{article}\\begin{document}Hi";
         let diags = analyze_diagnostics(text);
-        assert!(diags.iter().any(|d| d.code.as_deref() == Some("missing-end-document")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("missing-end-document"))
+        );
     }
 
     #[test]
     fn ignores_braces_in_comments() {
         let text = "% { not a brace\n\\begin{document}";
         let diags = analyze_diagnostics(text);
-        assert!(!diags.iter().any(|d| d.code.as_deref() == Some("unmatched-brace")));
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.code.as_deref() == Some("unmatched-brace"))
+        );
     }
 }

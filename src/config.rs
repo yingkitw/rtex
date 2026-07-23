@@ -20,7 +20,6 @@ pub enum QualityPreset {
     Print,
 }
 
-
 /// Font embedding options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum FontEmbedding {
@@ -32,7 +31,6 @@ pub enum FontEmbedding {
     #[default]
     Full,
 }
-
 
 /// Configuration for latex-rs operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +82,7 @@ impl Config {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Create configuration with a specific quality preset
     pub fn with_quality(quality: QualityPreset) -> Self {
         let mut config = Self {
@@ -94,7 +92,7 @@ impl Config {
         config.apply_quality_preset();
         config
     }
-    
+
     /// Apply quality preset settings
     fn apply_quality_preset(&mut self) {
         match self.quality {
@@ -124,37 +122,37 @@ impl Config {
             }
         }
     }
-    
+
     /// Set verbose mode
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
         self
     }
-    
+
     /// Set debug mode
     pub fn debug(mut self, debug: bool) -> Self {
         self.debug = debug;
         self
     }
-    
+
     /// Set output directory
     pub fn output_dir(mut self, dir: PathBuf) -> Self {
         self.output_dir = dir;
         self
     }
-    
+
     /// Set custom font
     pub fn custom_font(mut self, font_path: PathBuf) -> Self {
         self.custom_font = Some(font_path);
         self
     }
-    
+
     /// Set compression level
     pub fn compression_level(mut self, level: u8) -> Self {
         self.compression_level = level.min(9);
         self
     }
-    
+
     /// Enable or disable caching.
     pub fn caching(mut self, enabled: bool) -> Self {
         self.cache_math = enabled;
@@ -206,7 +204,7 @@ mod tests {
         let draft = Config::with_quality(QualityPreset::Draft);
         assert_eq!(draft.compression_level, 3);
         assert_eq!(draft.font_embedding, FontEmbedding::Subset);
-        
+
         let print = Config::with_quality(QualityPreset::Print);
         assert_eq!(print.compression_level, 9);
         assert!(!print.cache_math);
@@ -219,7 +217,7 @@ mod tests {
             .debug(true)
             .compression_level(8)
             .caching(false);
-        
+
         assert!(config.verbose);
         assert!(config.debug);
         assert_eq!(config.compression_level, 8);
@@ -228,9 +226,7 @@ mod tests {
 
     #[test]
     fn test_toml_roundtrip() {
-        let config = Config::new()
-            .verbose(true)
-            .compression_level(7);
+        let config = Config::new().verbose(true).compression_level(7);
         let toml_str = config.to_toml().unwrap();
         let restored = Config::from_toml(&toml_str).unwrap();
         assert!(restored.verbose);
@@ -239,9 +235,7 @@ mod tests {
 
     #[test]
     fn test_json_roundtrip() {
-        let config = Config::new()
-            .debug(true)
-            .caching(false);
+        let config = Config::new().debug(true).caching(false);
         let json_str = config.to_json().unwrap();
         let restored = Config::from_json(&json_str).unwrap();
         assert!(restored.debug);

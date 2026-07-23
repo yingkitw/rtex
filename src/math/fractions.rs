@@ -24,12 +24,10 @@ where
         let remaining = &text[index..];
 
         // Match `\frac`, `\dfrac`, `\tfrac` — all take {num}{denom}.
-        if let Some(cmd_len) = [
-            "\\frac", "\\dfrac", "\\tfrac",
-        ]
-        .iter()
-        .find(|cmd| remaining.starts_with(*cmd))
-        .map(|cmd| cmd.len())
+        if let Some(cmd_len) = ["\\frac", "\\dfrac", "\\tfrac"]
+            .iter()
+            .find(|cmd| remaining.starts_with(*cmd))
+            .map(|cmd| cmd.len())
         {
             let after = index + cmd_len;
 
@@ -162,9 +160,6 @@ mod tests {
     #[test]
     fn binom_emits_cnk_notation() {
         assert_eq!(format_fractions("\\binom{n}{k}", identity), "C(n, k)");
-        assert_eq!(
-            format_fractions("\\dbinom{2n}{n}", identity),
-            "C(2n, n)"
-        );
+        assert_eq!(format_fractions("\\dbinom{2n}{n}", identity), "C(2n, n)");
     }
 }

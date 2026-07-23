@@ -2,8 +2,8 @@
 
 use std::io::Write;
 
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 use crate::error::LatexError;
 use crate::parser::TexElement;
@@ -86,7 +86,10 @@ fn paragraph_xml(text: &str, heading: bool) -> String {
             escaped
         )
     } else {
-        format!("<w:p><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>", escaped)
+        format!(
+            "<w:p><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+            escaped
+        )
     }
 }
 

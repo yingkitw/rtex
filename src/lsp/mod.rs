@@ -9,11 +9,11 @@ pub mod hover;
 pub mod positions;
 pub mod symbols;
 
-pub use completion::{TexCompletion, CompletionKind, command_completions, completions_at};
-pub use diagnostics::{TexDiagnostic, Severity, analyze_diagnostics};
+pub use completion::{CompletionKind, TexCompletion, command_completions, completions_at};
+pub use diagnostics::{Severity, TexDiagnostic, analyze_diagnostics};
 pub use hover::hover_at;
 pub use positions::{TexPosition, TexRange, offset_to_position, range_to_positions};
-pub use symbols::{TexSymbol, SymbolKind, document_symbols};
+pub use symbols::{SymbolKind, TexSymbol, document_symbols};
 
 #[cfg(feature = "lsp")]
 pub mod server;

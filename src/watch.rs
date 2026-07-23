@@ -22,12 +22,18 @@ where
     // Initial build + capture mtimes
     for (inp, out) in inputs {
         if let Ok(meta) = fs::metadata(inp) {
-            last_mtimes.insert(inp.clone(), meta.modified().unwrap_or(SystemTime::UNIX_EPOCH));
+            last_mtimes.insert(
+                inp.clone(),
+                meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            );
         }
         convert_fn(inp, out)?;
     }
 
-    println!("Watching {} file(s) for changes... (Ctrl+C to stop)", inputs.len());
+    println!(
+        "Watching {} file(s) for changes... (Ctrl+C to stop)",
+        inputs.len()
+    );
 
     loop {
         thread::sleep(Duration::from_secs(1));
@@ -37,7 +43,10 @@ where
                 continue;
             };
             let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-            let prev = last_mtimes.get(inp).copied().unwrap_or(SystemTime::UNIX_EPOCH);
+            let prev = last_mtimes
+                .get(inp)
+                .copied()
+                .unwrap_or(SystemTime::UNIX_EPOCH);
 
             if mtime > prev {
                 println!("  [change detected] {}", inp.display());
@@ -71,7 +80,9 @@ pub(crate) fn discover_inputs(path: &Path) -> Vec<PathBuf> {
             }
         } else {
             // Unbraced form: \input file (ends at whitespace or end of line)
-            let end = trimmed.find(|c: char| c.is_whitespace()).unwrap_or(trimmed.len());
+            let end = trimmed
+                .find(|c: char| c.is_whitespace())
+                .unwrap_or(trimmed.len());
             trimmed[..end].to_string()
         };
 
@@ -113,7 +124,10 @@ where
 
     for path in &watched {
         if let Ok(meta) = fs::metadata(path) {
-            last_mtimes.insert(path.clone(), meta.modified().unwrap_or(SystemTime::UNIX_EPOCH));
+            last_mtimes.insert(
+                path.clone(),
+                meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            );
         }
     }
     convert_fn(input, output)?;
@@ -128,9 +142,14 @@ where
 
         let mut changed = false;
         for path in &watched {
-            let Ok(meta) = fs::metadata(path) else { continue };
+            let Ok(meta) = fs::metadata(path) else {
+                continue;
+            };
             let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-            let prev = last_mtimes.get(path).copied().unwrap_or(SystemTime::UNIX_EPOCH);
+            let prev = last_mtimes
+                .get(path)
+                .copied()
+                .unwrap_or(SystemTime::UNIX_EPOCH);
 
             if mtime > prev {
                 println!("  [change detected] {}", path.display());
@@ -157,10 +176,7 @@ where
                             .unwrap_or(SystemTime::UNIX_EPOCH)
                     });
                 }
-                println!(
-                    "  [deps updated] now watching {} file(s)",
-                    watched.len()
-                );
+                println!("  [deps updated] now watching {} file(s)", watched.len());
             }
         }
     }
@@ -170,8 +186,8 @@ where
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn watch_triggers_on_change() {

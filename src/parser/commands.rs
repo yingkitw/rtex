@@ -30,7 +30,11 @@ impl TexParser {
 
         self.skip_whitespace_and_comments();
 
-        self.parse_braced_content().map(|title| TexElement::Section { level: level as usize, title })
+        self.parse_braced_content()
+            .map(|title| TexElement::Section {
+                level: level as usize,
+                title,
+            })
     }
 
     /// Parse a generic one-argument command (\title, \author, \date, …).
@@ -40,9 +44,9 @@ impl TexParser {
         self.skip_whitespace_and_comments();
 
         self.parse_braced_content().map(|arg| TexElement::Command {
-                name: name.to_string(),
-                args: vec![arg],
-            })
+            name: name.to_string(),
+            args: vec![arg],
+        })
     }
 
     /// Parse `\texttt{arg}`, `\textbf{arg}`, `\textit{arg}`, or `\emph{arg}`.
@@ -96,7 +100,11 @@ impl TexParser {
         self.skip_whitespace_and_comments();
 
         let path = self.parse_braced_content()?;
-        Some(TexElement::Image { path, width, height })
+        Some(TexElement::Image {
+            path,
+            width,
+            height,
+        })
     }
 
     pub(super) fn parse_textcolor(&mut self) -> Option<TexElement> {
@@ -162,7 +170,10 @@ impl TexParser {
         } else {
             "newpage"
         };
-        Some(TexElement::Command { name: name.to_string(), args: vec![] })
+        Some(TexElement::Command {
+            name: name.to_string(),
+            args: vec![],
+        })
     }
 
     /// Parse `\input{filename}` and splice the referenced file inline.
@@ -199,7 +210,10 @@ impl TexParser {
         self.position += "\\vspace{".len();
         let length = self.read_until('}');
         self.position += 1; // skip closing brace
-        Some(TexElement::Command { name: "vspace".to_string(), args: vec![length] })
+        Some(TexElement::Command {
+            name: "vspace".to_string(),
+            args: vec![length],
+        })
     }
 
     /// Parse `\underline{text}`.
@@ -207,7 +221,10 @@ impl TexParser {
         self.position += "\\underline{".len();
         let text = self.read_until('}');
         self.position += 1; // skip closing brace
-        Some(TexElement::Command { name: "underline".to_string(), args: vec![text] })
+        Some(TexElement::Command {
+            name: "underline".to_string(),
+            args: vec![text],
+        })
     }
 
     /// Parse `\footnote{text}`.
@@ -231,7 +248,10 @@ impl TexParser {
         self.position += "\\url{".len();
         let text = self.read_until('}');
         self.position += 1; // skip closing brace
-        Some(TexElement::Command { name: "url".to_string(), args: vec![text] })
+        Some(TexElement::Command {
+            name: "url".to_string(),
+            args: vec![text],
+        })
     }
 
     /// Parse `\href{url}{text}` (hyperref).
@@ -268,7 +288,10 @@ impl TexParser {
         } else {
             String::new()
         };
-        Some(TexElement::Command { name: "raisebox".to_string(), args: vec![distance, text] })
+        Some(TexElement::Command {
+            name: "raisebox".to_string(),
+            args: vec![distance, text],
+        })
     }
 
     /// Parse `\rotatebox{angle}{text}`.
@@ -285,7 +308,10 @@ impl TexParser {
         } else {
             String::new()
         };
-        Some(TexElement::Command { name: "rotatebox".to_string(), args: vec![angle, text] })
+        Some(TexElement::Command {
+            name: "rotatebox".to_string(),
+            args: vec![angle, text],
+        })
     }
 
     /// Parse `\scalebox{factor}{text}`.
@@ -302,7 +328,10 @@ impl TexParser {
         } else {
             String::new()
         };
-        Some(TexElement::Command { name: "scalebox".to_string(), args: vec![factor, text] })
+        Some(TexElement::Command {
+            name: "scalebox".to_string(),
+            args: vec![factor, text],
+        })
     }
 
     /// Parse `\colorbox{color}{text}`.
@@ -319,7 +348,10 @@ impl TexParser {
         } else {
             String::new()
         };
-        Some(TexElement::Command { name: "colorbox".to_string(), args: vec![color, text] })
+        Some(TexElement::Command {
+            name: "colorbox".to_string(),
+            args: vec![color, text],
+        })
     }
 
     /// Parse `\fcolorbox{framecolor}{backcolor}{text}`.
@@ -345,15 +377,25 @@ impl TexParser {
         } else {
             String::new()
         };
-        Some(TexElement::Command { name: "fcolorbox".to_string(), args: vec![frame, back, text] })
+        Some(TexElement::Command {
+            name: "fcolorbox".to_string(),
+            args: vec![frame, back, text],
+        })
     }
 
     /// Parse any command of the form `\name{text}` into a [`TexElement::Command`].
-    pub(super) fn parse_simple_braced_command(&mut self, name: &str, prefix_len: usize) -> Option<TexElement> {
+    pub(super) fn parse_simple_braced_command(
+        &mut self,
+        name: &str,
+        prefix_len: usize,
+    ) -> Option<TexElement> {
         self.position += prefix_len;
         let text = self.read_until('}');
         self.position += 1; // skip closing brace
-        Some(TexElement::Command { name: name.to_string(), args: vec![text] })
+        Some(TexElement::Command {
+            name: name.to_string(),
+            args: vec![text],
+        })
     }
 
     /// Parse `\rule{width}{height}` for horizontal rules or vertical struts.
@@ -370,7 +412,10 @@ impl TexParser {
         } else {
             String::new()
         };
-        Some(TexElement::Command { name: "rule".to_string(), args: vec![width, height] })
+        Some(TexElement::Command {
+            name: "rule".to_string(),
+            args: vec![width, height],
+        })
     }
 
     /// Skip past an unknown command so parsing can continue.

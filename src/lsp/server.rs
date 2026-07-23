@@ -11,15 +11,14 @@ use std::error::Error;
 use lsp_server::{Connection, Message, Notification, Request, Response};
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionResponse, Diagnostic, DiagnosticSeverity,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverContents,
-    InitializeParams, MarkupContent, MarkupKind, NumberOrString, OneOf, Position, Range,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, Uri,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, Hover, HoverContents, InitializeParams,
+    MarkupContent, MarkupKind, NumberOrString, OneOf, Position, Range, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, Uri,
 };
 
 use super::{
-    analyze_diagnostics, command_completions, completions_at, document_symbols, hover_at,
-    range_to_positions, CompletionKind, TexCompletion, TexDiagnostic, TexRange, TexSymbol,
+    CompletionKind, TexCompletion, TexDiagnostic, TexRange, TexSymbol, analyze_diagnostics,
+    command_completions, completions_at, document_symbols, hover_at, range_to_positions,
 };
 
 #[allow(clippy::mutable_key_type)]
@@ -68,7 +67,8 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     documents.insert(uri.clone(), text.clone());
                     publish_diagnostics(&connection, &uri, &text)?;
                 } else if method == "textDocument/didChange" {
-                    let params: DidChangeTextDocumentParams = serde_json::from_value(params.clone())?;
+                    let params: DidChangeTextDocumentParams =
+                        serde_json::from_value(params.clone())?;
                     let uri = params.text_document.uri;
                     if let Some(change) = params.content_changes.into_iter().next() {
                         let text = change.text;
@@ -79,7 +79,9 @@ pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
                     break;
                 }
             }
-            Message::Request(Request { id, method, params, .. }) => {
+            Message::Request(Request {
+                id, method, params, ..
+            }) => {
                 let response = match method.as_str() {
                     "shutdown" => Response::new_ok(id.clone(), serde_json::Value::Null),
                     "textDocument/completion" => {
@@ -230,7 +232,10 @@ fn to_lsp_diagnostic(text: &str, diag: &TexDiagnostic) -> Diagnostic {
 fn to_lsp_symbol(text: &str, symbol: &TexSymbol) -> lsp_types::DocumentSymbol {
     let (start, end) = range_to_positions(
         text,
-        TexRange::span(symbol.range_start, symbol.range_end.max(symbol.range_start + 1)),
+        TexRange::span(
+            symbol.range_start,
+            symbol.range_end.max(symbol.range_start + 1),
+        ),
     );
     #[allow(deprecated)]
     lsp_types::DocumentSymbol {
@@ -261,7 +266,13 @@ fn to_lsp_symbol(text: &str, symbol: &TexSymbol) -> lsp_types::DocumentSymbol {
                 character: end.character,
             },
         },
-        children: Some(symbol.children.iter().map(|c| to_lsp_symbol(text, c)).collect()),
+        children: Some(
+            symbol
+                .children
+                .iter()
+                .map(|c| to_lsp_symbol(text, c))
+                .collect(),
+        ),
         tags: None,
         deprecated: None,
     }

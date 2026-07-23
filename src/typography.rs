@@ -60,23 +60,36 @@ impl KerningTable {
     pub fn dejavu_sans() -> Self {
         let mut t = Self::new();
         // Common kerning pairs (negative = tighter)
-        t.insert('A', 'V', -50); t.insert('V', 'A', -50);
-        t.insert('A', 'W', -40); t.insert('W', 'A', -40);
-        t.insert('A', 'Y', -50); t.insert('Y', 'A', -50);
+        t.insert('A', 'V', -50);
+        t.insert('V', 'A', -50);
+        t.insert('A', 'W', -40);
+        t.insert('W', 'A', -40);
+        t.insert('A', 'Y', -50);
+        t.insert('Y', 'A', -50);
         t.insert('L', 'T', -40);
-        t.insert('T', 'o', -30); t.insert('T', 'a', -30);
-        t.insert('T', 'e', -30); t.insert('T', 'r', -30);
-        t.insert('V', 'o', -30); t.insert('V', 'a', -30);
-        t.insert('W', 'o', -20); t.insert('W', 'a', -20);
-        t.insert('Y', 'o', -40); t.insert('Y', 'a', -40);
-        t.insert('P', 'a', -20); t.insert('P', 'e', -20);
-        t.insert('F', 'a', -30); t.insert('F', 'e', -30);
-        t.insert('L', 'V', -30); t.insert('L', 'W', -20);
+        t.insert('T', 'o', -30);
+        t.insert('T', 'a', -30);
+        t.insert('T', 'e', -30);
+        t.insert('T', 'r', -30);
+        t.insert('V', 'o', -30);
+        t.insert('V', 'a', -30);
+        t.insert('W', 'o', -20);
+        t.insert('W', 'a', -20);
+        t.insert('Y', 'o', -40);
+        t.insert('Y', 'a', -40);
+        t.insert('P', 'a', -20);
+        t.insert('P', 'e', -20);
+        t.insert('F', 'a', -30);
+        t.insert('F', 'e', -30);
+        t.insert('L', 'V', -30);
+        t.insert('L', 'W', -20);
         t.insert('D', 'A', -20);
         t.insert('O', 'X', -20);
         t.insert('C', 'A', -10);
-        t.insert('K', 'o', -20); t.insert('K', 'e', -20);
-        t.insert('X', 'o', -20); t.insert('X', 'a', -20);
+        t.insert('K', 'o', -20);
+        t.insert('K', 'e', -20);
+        t.insert('X', 'o', -20);
+        t.insert('X', 'a', -20);
         t.insert('r', 't', -10);
         t.insert('a', 'v', -10);
         t.insert('e', 'x', -10);
@@ -139,9 +152,9 @@ impl TypographyEngine {
         // Longer sequences first to avoid partial matches.
         s = s.replace("ffi", "\u{FB03}");
         s = s.replace("ffl", "\u{FB04}");
-        s = s.replace("ff",  "\u{FB00}");
-        s = s.replace("fi",  "\u{FB01}");
-        s = s.replace("fl",  "\u{FB02}");
+        s = s.replace("ff", "\u{FB00}");
+        s = s.replace("fi", "\u{FB01}");
+        s = s.replace("fl", "\u{FB02}");
         s
     }
 
@@ -210,10 +223,7 @@ mod tests {
 
     #[test]
     fn test_apply_ligatures_office() {
-        assert_eq!(
-            TypographyEngine::apply_ligatures("office"),
-            "o\u{FB03}ce"
-        );
+        assert_eq!(TypographyEngine::apply_ligatures("office"), "o\u{FB03}ce");
     }
 
     #[test]

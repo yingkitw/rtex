@@ -156,18 +156,12 @@ fn parse_infinite_unit(s: &str) -> Option<(i32, InfiniteUnit)> {
         ("fil", InfiniteUnit::Fil),
     ] {
         if let Some(num) = s.strip_suffix(suffix) {
-            let amount: i32 = if num.is_empty() {
-                1
-            } else {
-                num.parse().ok()?
-            };
+            let amount: i32 = if num.is_empty() { 1 } else { num.parse().ok()? };
             return Some((amount, unit));
         }
     }
     None
 }
-
-
 
 #[cfg(test)]
 mod tests {

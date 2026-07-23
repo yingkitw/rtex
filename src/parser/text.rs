@@ -11,14 +11,19 @@ impl TexParser {
         while self.position < self.content.len() {
             let remaining = &self.content[self.position..];
 
-            if remaining.starts_with('\\') || remaining.starts_with("\n\n") || remaining.starts_with('}') {
+            if remaining.starts_with('\\')
+                || remaining.starts_with("\n\n")
+                || remaining.starts_with('}')
+            {
                 break;
             }
 
             if remaining.starts_with('$') {
                 self.position += 1;
 
-                if self.position < self.content.len() && self.content[self.position..].starts_with('$') {
+                if self.position < self.content.len()
+                    && self.content[self.position..].starts_with('$')
+                {
                     self.position -= 1;
                     break;
                 }

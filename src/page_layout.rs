@@ -26,8 +26,8 @@ impl PageLayout {
     /// Create a standard portrait layout (8.5" x 11")
     pub fn portrait() -> Self {
         PageLayout {
-            width: 612.0,   // 8.5 inches
-            height: 792.0,  // 11 inches
+            width: 612.0,  // 8.5 inches
+            height: 792.0, // 11 inches
             margin_left: 72.0,
             margin_right: 72.0,
             margin_top: 72.0,
@@ -38,8 +38,8 @@ impl PageLayout {
     /// Create a standard landscape layout (11" x 8.5")
     pub fn landscape() -> Self {
         PageLayout {
-            width: 792.0,   // 11 inches
-            height: 612.0,  // 8.5 inches
+            width: 792.0,  // 11 inches
+            height: 612.0, // 8.5 inches
             margin_left: 72.0,
             margin_right: 72.0,
             margin_top: 72.0,
@@ -50,8 +50,8 @@ impl PageLayout {
     /// Create A4 portrait layout
     pub fn a4_portrait() -> Self {
         PageLayout {
-            width: 595.0,   // A4 width
-            height: 842.0,  // A4 height
+            width: 595.0,  // A4 width
+            height: 842.0, // A4 height
             margin_left: 72.0,
             margin_right: 72.0,
             margin_top: 72.0,
@@ -62,8 +62,8 @@ impl PageLayout {
     /// Create A4 landscape layout
     pub fn a4_landscape() -> Self {
         PageLayout {
-            width: 842.0,   // A4 height
-            height: 595.0,  // A4 width
+            width: 842.0,  // A4 height
+            height: 595.0, // A4 width
             margin_left: 72.0,
             margin_right: 72.0,
             margin_top: 72.0,
@@ -178,8 +178,7 @@ mod tests {
 
     #[test]
     fn test_custom_margins() {
-        let layout = PageLayout::portrait()
-            .with_custom_margins(50.0, 50.0, 100.0, 100.0);
+        let layout = PageLayout::portrait().with_custom_margins(50.0, 50.0, 100.0, 100.0);
         assert_eq!(layout.margin_left, 50.0);
         assert_eq!(layout.margin_top, 100.0);
     }

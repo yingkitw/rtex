@@ -52,8 +52,7 @@ impl RefStore {
                     last_number = format!("{}", table_counter);
                 }
                 TexElement::Label { key } => {
-                    self.labels
-                        .insert(key.clone(), (last_number.clone(), 1));
+                    self.labels.insert(key.clone(), (last_number.clone(), 1));
                 }
                 _ => {}
             }
@@ -94,12 +93,27 @@ mod tests {
     #[test]
     fn test_section_labels() {
         let elements = vec![
-            TexElement::Section { level: 1, title: "Intro".to_string() },
-            TexElement::Label { key: "sec:intro".to_string() },
-            TexElement::Section { level: 2, title: "Details".to_string() },
-            TexElement::Label { key: "sec:details".to_string() },
-            TexElement::Section { level: 1, title: "Next".to_string() },
-            TexElement::Label { key: "sec:next".to_string() },
+            TexElement::Section {
+                level: 1,
+                title: "Intro".to_string(),
+            },
+            TexElement::Label {
+                key: "sec:intro".to_string(),
+            },
+            TexElement::Section {
+                level: 2,
+                title: "Details".to_string(),
+            },
+            TexElement::Label {
+                key: "sec:details".to_string(),
+            },
+            TexElement::Section {
+                level: 1,
+                title: "Next".to_string(),
+            },
+            TexElement::Label {
+                key: "sec:next".to_string(),
+            },
         ];
         let mut store = RefStore::new();
         store.scan(&elements);
@@ -112,7 +126,9 @@ mod tests {
     fn test_equation_label() {
         let elements = vec![
             TexElement::MathDisplay("x = y".to_string()),
-            TexElement::Label { key: "eq:1".to_string() },
+            TexElement::Label {
+                key: "eq:1".to_string(),
+            },
         ];
         let mut store = RefStore::new();
         store.scan(&elements);
@@ -122,8 +138,14 @@ mod tests {
     #[test]
     fn test_figure_label() {
         let elements = vec![
-            TexElement::Image { path: "a.png".to_string(), width: None, height: None },
-            TexElement::Label { key: "fig:1".to_string() },
+            TexElement::Image {
+                path: "a.png".to_string(),
+                width: None,
+                height: None,
+            },
+            TexElement::Label {
+                key: "fig:1".to_string(),
+            },
         ];
         let mut store = RefStore::new();
         store.scan(&elements);
@@ -138,7 +160,9 @@ mod tests {
         };
         let elements = vec![
             TexElement::Table(table),
-            TexElement::Label { key: "tab:1".to_string() },
+            TexElement::Label {
+                key: "tab:1".to_string(),
+            },
         ];
         let mut store = RefStore::new();
         store.scan(&elements);
@@ -148,8 +172,13 @@ mod tests {
     #[test]
     fn test_pageref() {
         let elements = vec![
-            TexElement::Section { level: 1, title: "A".to_string() },
-            TexElement::Label { key: "sec:a".to_string() },
+            TexElement::Section {
+                level: 1,
+                title: "A".to_string(),
+            },
+            TexElement::Label {
+                key: "sec:a".to_string(),
+            },
         ];
         let mut store = RefStore::new();
         store.scan(&elements);

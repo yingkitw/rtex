@@ -18,10 +18,7 @@ pub enum LineItem {
     /// Flexible glue between boxes.
     Glue(Glue),
     /// Optional break point with width and penalty.
-    Penalty {
-        width: Dimension,
-        penalty: i32,
-    },
+    Penalty { width: Dimension, penalty: i32 },
 }
 
 /// One line produced by the breaker.

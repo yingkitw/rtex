@@ -2,10 +2,10 @@
 // Tests deterministic conversion, structural validation, and regression detection
 
 use rtex::convert_tex_to_pdf;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use sha2::{Sha256, Digest};
 
 const FIXTURE_DIR: &str = "tests/fixtures";
 
@@ -21,8 +21,7 @@ fn convert_latex_to_bytes(latex_content: &str) -> Result<Vec<u8>, String> {
     convert_tex_to_pdf(&input_path, &output_path)
         .map_err(|e| format!("Failed to convert LaTeX to PDF: {}", e))?;
 
-    fs::read(&output_path)
-        .map_err(|e| format!("Failed to read PDF file: {}", e))
+    fs::read(&output_path).map_err(|e| format!("Failed to read PDF file: {}", e))
 }
 
 /// Calculate SHA256 hash of PDF data
@@ -244,11 +243,9 @@ Test
 
 #[test]
 fn test_happy_path_minimal() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/minimal.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/minimal.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read minimal.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read minimal.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert minimal.tex");
     validate_pdf_structure(&pdf).expect("Minimal PDF structure invalid");
@@ -256,11 +253,10 @@ fn test_happy_path_minimal() {
 
 #[test]
 fn test_happy_path_text_formatting() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/text_formatting.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/text_formatting.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read text_formatting.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read text_formatting.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert text_formatting.tex");
     validate_pdf_structure(&pdf).expect("Text formatting PDF structure invalid");
@@ -268,11 +264,9 @@ fn test_happy_path_text_formatting() {
 
 #[test]
 fn test_happy_path_mathematics() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/mathematics.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/mathematics.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read mathematics.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read mathematics.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert mathematics.tex");
     validate_pdf_structure(&pdf).expect("Mathematics PDF structure invalid");
@@ -280,11 +274,9 @@ fn test_happy_path_mathematics() {
 
 #[test]
 fn test_happy_path_lists() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/lists.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/lists.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read lists.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read lists.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert lists.tex");
     validate_pdf_structure(&pdf).expect("Lists PDF structure invalid");
@@ -292,11 +284,9 @@ fn test_happy_path_lists() {
 
 #[test]
 fn test_happy_path_tables() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/tables.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/tables.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read tables.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read tables.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert tables.tex");
     validate_pdf_structure(&pdf).expect("Tables PDF structure invalid");
@@ -304,11 +294,9 @@ fn test_happy_path_tables() {
 
 #[test]
 fn test_happy_path_metadata() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/metadata.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/metadata.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read metadata.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read metadata.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert metadata.tex");
     validate_pdf_structure(&pdf).expect("Metadata PDF structure invalid");
@@ -316,11 +304,10 @@ fn test_happy_path_metadata() {
 
 #[test]
 fn test_happy_path_complex_document() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/complex_document.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/complex_document.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read complex_document.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read complex_document.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert complex_document.tex");
     validate_pdf_structure(&pdf).expect("Complex document PDF structure invalid");
@@ -328,11 +315,10 @@ fn test_happy_path_complex_document() {
 
 #[test]
 fn test_happy_path_comprehensive_latex_to_pdf() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/comprehensive.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/comprehensive.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read comprehensive.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read comprehensive.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert comprehensive.tex");
     validate_pdf_structure(&pdf).expect("Comprehensive PDF structure invalid");
@@ -350,7 +336,10 @@ fn test_happy_path_comprehensive_latex_to_pdf() {
     );
 
     let pdf_str = String::from_utf8_lossy(&pdf);
-    assert!(pdf_str.contains("/Type /Page"), "PDF should contain page objects");
+    assert!(
+        pdf_str.contains("/Type /Page"),
+        "PDF should contain page objects"
+    );
     assert!(
         pdf_str.matches("/Type /Page").count() >= 2,
         "comprehensive document should span multiple pages, got {} page objects",
@@ -362,11 +351,10 @@ fn test_happy_path_comprehensive_latex_to_pdf() {
 
 #[test]
 fn test_edge_case_empty_document() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/edge_cases/empty_document.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/edge_cases/empty_document.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read empty_document.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read empty_document.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert empty_document.tex");
     validate_pdf_structure(&pdf).expect("Empty document PDF structure invalid");
@@ -374,11 +362,9 @@ fn test_edge_case_empty_document() {
 
 #[test]
 fn test_edge_case_long_text() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/edge_cases/long_text.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/edge_cases/long_text.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read long_text.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read long_text.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert long_text.tex");
     validate_pdf_structure(&pdf).expect("Long text PDF structure invalid");
@@ -386,11 +372,10 @@ fn test_edge_case_long_text() {
 
 #[test]
 fn test_edge_case_special_chars() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/edge_cases/special_chars.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/edge_cases/special_chars.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read special_chars.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read special_chars.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert special_chars.tex");
     validate_pdf_structure(&pdf).expect("Special chars PDF structure invalid");
@@ -398,11 +383,9 @@ fn test_edge_case_special_chars() {
 
 #[test]
 fn test_edge_case_deep_nesting() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/edge_cases/deep_nesting.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/edge_cases/deep_nesting.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read deep_nesting.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read deep_nesting.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert deep_nesting.tex");
     validate_pdf_structure(&pdf).expect("Deep nesting PDF structure invalid");
@@ -410,11 +393,10 @@ fn test_edge_case_deep_nesting() {
 
 #[test]
 fn test_edge_case_mixed_content() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/edge_cases/mixed_content.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/edge_cases/mixed_content.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read mixed_content.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read mixed_content.tex fixture");
 
     let pdf = convert_latex_to_bytes(&latex).expect("Failed to convert mixed_content.tex");
     validate_pdf_structure(&pdf).expect("Mixed content PDF structure invalid");
@@ -424,11 +406,10 @@ fn test_edge_case_mixed_content() {
 
 #[test]
 fn test_malformed_unclosed_command() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/malformed/unclosed_command.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/malformed/unclosed_command.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read unclosed_command.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read unclosed_command.tex fixture");
 
     // Should handle gracefully (may succeed or fail with appropriate error)
     let result = convert_latex_to_bytes(&latex);
@@ -445,11 +426,9 @@ fn test_malformed_unclosed_command() {
 
 #[test]
 fn test_malformed_invalid_math() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/malformed/invalid_math.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/malformed/invalid_math.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read invalid_math.tex fixture");
+    let latex = fs::read_to_string(&fixture_path).expect("Failed to read invalid_math.tex fixture");
 
     // Should handle gracefully
     let result = convert_latex_to_bytes(&latex);
@@ -465,11 +444,10 @@ fn test_malformed_invalid_math() {
 
 #[test]
 fn test_malformed_missing_structure() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/malformed/missing_structure.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/malformed/missing_structure.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read missing_structure.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read missing_structure.tex fixture");
 
     // Should handle gracefully
     let result = convert_latex_to_bytes(&latex);
@@ -485,11 +463,10 @@ fn test_malformed_missing_structure() {
 
 #[test]
 fn test_malformed_unknown_commands() {
-    let fixture_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/malformed/unknown_commands.tex");
+    let fixture_path = PathBuf::from(FIXTURE_DIR).join("latex/malformed/unknown_commands.tex");
 
-    let latex = fs::read_to_string(&fixture_path)
-        .expect("Failed to read unknown_commands.tex fixture");
+    let latex =
+        fs::read_to_string(&fixture_path).expect("Failed to read unknown_commands.tex fixture");
 
     // Should handle gracefully (parser typically ignores unknown commands)
     let result = convert_latex_to_bytes(&latex);
@@ -508,23 +485,20 @@ fn test_malformed_unknown_commands() {
 #[test]
 #[ignore] // Run manually with: cargo test --test round_trip -- --ignored test_golden_file
 fn test_golden_file_minimal() {
-    let latex_path = PathBuf::from(FIXTURE_DIR)
-        .join("latex/happy_path/minimal.tex");
-    let golden_path = PathBuf::from(FIXTURE_DIR)
-        .join("golden_pdfs/minimal.pdf");
+    let latex_path = PathBuf::from(FIXTURE_DIR).join("latex/happy_path/minimal.tex");
+    let golden_path = PathBuf::from(FIXTURE_DIR).join("golden_pdfs/minimal.pdf");
 
-    let latex = fs::read_to_string(&latex_path)
-        .expect("Failed to read minimal.tex fixture");
+    let latex = fs::read_to_string(&latex_path).expect("Failed to read minimal.tex fixture");
 
-    let actual_pdf = convert_latex_to_bytes(&latex)
-        .expect("Failed to convert minimal.tex");
+    let actual_pdf = convert_latex_to_bytes(&latex).expect("Failed to convert minimal.tex");
 
     if golden_path.exists() {
-        let expected_pdf = fs::read(&golden_path)
-            .expect("Failed to read golden PDF");
+        let expected_pdf = fs::read(&golden_path).expect("Failed to read golden PDF");
 
-        assert_eq!(actual_pdf, expected_pdf,
-                   "PDF output differs from golden file. Run with --ignored generate-golden to update.");
+        assert_eq!(
+            actual_pdf, expected_pdf,
+            "PDF output differs from golden file. Run with --ignored generate-golden to update."
+        );
     } else {
         panic!("Golden file not found. Run generate-golden test first.");
     }
@@ -548,8 +522,15 @@ fn generate_golden_files() {
 
     for fixture in fixtures {
         let latex_path = PathBuf::from(FIXTURE_DIR).join(fixture);
-        let pdf_name = latex_path.file_stem().unwrap().to_string_lossy().to_string() + ".pdf";
-        let golden_path = PathBuf::from(FIXTURE_DIR).join("golden_pdfs").join(&pdf_name);
+        let pdf_name = latex_path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
+            + ".pdf";
+        let golden_path = PathBuf::from(FIXTURE_DIR)
+            .join("golden_pdfs")
+            .join(&pdf_name);
 
         let latex = fs::read_to_string(&latex_path)
             .unwrap_or_else(|_| panic!("Failed to read {}", fixture));
@@ -591,7 +572,10 @@ Regression test content
     let pdf2 = convert_latex_to_bytes(latex).unwrap();
     let hash2 = pdf_hash(&pdf2);
 
-    assert_eq!(hash1, hash2, "Regression detected: Same input produced different output");
+    assert_eq!(
+        hash1, hash2,
+        "Regression detected: Same input produced different output"
+    );
 
     // Test different inputs produce different outputs
     let latex2 = r#"\documentclass{article}
@@ -602,7 +586,10 @@ Different content
     let pdf3 = convert_latex_to_bytes(latex2).unwrap();
     let hash3 = pdf_hash(&pdf3);
 
-    assert_ne!(hash1, hash3, "Different inputs should produce different outputs");
+    assert_ne!(
+        hash1, hash3,
+        "Different inputs should produce different outputs"
+    );
 }
 
 // ==================== File Size Validation ====================

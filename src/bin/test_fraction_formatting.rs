@@ -24,8 +24,9 @@ fn main() {
 
 fn format_fraction_simple(latex: &str) -> String {
     // Simple version of what format_fractions does
-    
-    latex.replace(r"\frac{", "(")
+
+    latex
+        .replace(r"\frac{", "(")
         .replace("}{", ")/(")
         .replace("}", ")")
 }

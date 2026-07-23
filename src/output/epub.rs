@@ -2,8 +2,8 @@
 
 use std::io::Write;
 
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 use crate::error::LatexError;
 use crate::parser::TexElement;
@@ -25,7 +25,8 @@ pub fn render(elements: &[TexElement]) -> Result<Vec<u8>, LatexError> {
     let mut zip = ZipWriter::new(cursor);
 
     let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    let deflated = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let deflated =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     zip.start_file("mimetype", stored)
         .map_err(|e| epub_error(e.to_string()))?;

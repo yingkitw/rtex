@@ -7,7 +7,7 @@
 use crate::error::LatexError;
 use crate::{NativeTexConverter, TexConverter};
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 /// Result of a single conversion job.
@@ -70,10 +70,13 @@ impl ParallelConverter {
                         }
                     };
                     let res = converter.convert(&input, &output);
-                    let _ = res_tx.send((idx, match res {
-                        Ok(()) => Ok(output),
-                        Err(e) => Err((input, e)),
-                    }));
+                    let _ = res_tx.send((
+                        idx,
+                        match res {
+                            Ok(()) => Ok(output),
+                            Err(e) => Err((input, e)),
+                        },
+                    ));
                 }
             });
             handles.push(handle);
@@ -100,11 +103,7 @@ impl ParallelConverter {
 
 /// Convenience: convert every `.tex` file in `inputs` directory to a
 /// `.pdf` in `outputs` directory, using the same base name.
-pub fn convert_dir(
-    inputs: &Path,
-    outputs: &Path,
-    workers: Option<usize>,
-) -> Vec<ConversionResult> {
+pub fn convert_dir(inputs: &Path, outputs: &Path, workers: Option<usize>) -> Vec<ConversionResult> {
     let mut jobs = Vec::new();
     if let Ok(entries) = std::fs::read_dir(inputs) {
         for entry in entries.flatten() {
@@ -116,8 +115,7 @@ pub fn convert_dir(
             }
         }
     }
-    ParallelConverter::with_workers(workers.unwrap_or_else(num_cpus::get))
-        .convert_batch(&jobs)
+    ParallelConverter::with_workers(workers.unwrap_or_else(num_cpus::get)).convert_batch(&jobs)
 }
 
 #[cfg(test)]

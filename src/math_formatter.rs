@@ -11,11 +11,11 @@ impl MathFormatter {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Convert a LaTeX math expression to a Unicode-rich display string.
     pub fn format(math: &str) -> String {
         let mut result = math.to_string();
-        
+
         result = Self::format_matrices(&result);
         result = Self::format_sqrt(&result);
         result = Self::format_fractions(&result);
@@ -28,7 +28,14 @@ impl MathFormatter {
 
         result
     }
-    
+
+    /// Replace `\sqrt` constructs with Unicode radicals while preserving other LaTeX.
+    ///
+    /// Useful before handing mixed expressions (with `\frac`, etc.) to pdfrs display math.
+    pub fn replace_sqrt_in_expression(expr: &str) -> String {
+        crate::math::radicals::format_sqrt(expr, Self::format)
+    }
+
     fn format_matrices(text: &str) -> String {
         let mut result = String::new();
         let mut index = 0;
@@ -37,31 +44,31 @@ impl MathFormatter {
             let remaining = &text[index..];
             if remaining.starts_with("\\begin{pmatrix}") {
                 let matrix_end = index + "\\begin{pmatrix}".len();
-                
+
                 // Find the matching \end{pmatrix}
                 if let Some(end_pos) = remaining.find("\\end{pmatrix}") {
                     let matrix_content = &remaining[matrix_end - index..end_pos];
-                    
+
                     // Convert matrix to bracket notation
                     result.push('[');
                     result.push_str(matrix_content);
                     result.push(']');
-                    
+
                     index += end_pos + "\\end{pmatrix}".len();
                     continue;
                 }
             }
-            
+
             if remaining.starts_with("\\begin{bmatrix}") {
                 let matrix_end = index + "\\begin{bmatrix}".len();
-                
+
                 if let Some(end_pos) = remaining.find("\\end{bmatrix}") {
                     let matrix_content = &remaining[matrix_end - index..end_pos];
-                    
+
                     result.push('[');
                     result.push_str(matrix_content);
                     result.push(']');
-                    
+
                     index += end_pos + "\\end{bmatrix}".len();
                     continue;
                 }
@@ -77,11 +84,11 @@ impl MathFormatter {
 
         result
     }
-    
+
     fn format_sqrt(text: &str) -> String {
         crate::math::radicals::format_sqrt(text, Self::format)
     }
-    
+
     fn format_fractions(text: &str) -> String {
         crate::math::fractions::format_fractions(text, Self::format)
     }
@@ -107,7 +114,9 @@ impl MathFormatter {
             for (prefix, mapper) in &alphabets {
                 if remaining.starts_with(prefix) {
                     let arg_start = index + prefix.len();
-                    if let Some((arg, next_index)) = crate::utils::extract_braced(text, arg_start - 1) {
+                    if let Some((arg, next_index)) =
+                        crate::utils::extract_braced(text, arg_start - 1)
+                    {
                         let formatted = Self::format(&arg);
                         for ch in formatted.chars() {
                             if let Some(mapped) = mapper(ch) {
@@ -141,9 +150,9 @@ impl MathFormatter {
             ("\\vec{", "\u{20d7}"),   // combining right arrow above
             ("\\hat{", "\u{0302}"),   // combining circumflex
             ("\\tilde{", "\u{0303}"), // combining tilde
-            ("\\bar{", "\u{0304}"),  // combining macron
-            ("\\dot{", "\u{0307}"),  // combining dot above
-            ("\\ddot{", "\u{0308}"), // combining diaeresis
+            ("\\bar{", "\u{0304}"),   // combining macron
+            ("\\dot{", "\u{0307}"),   // combining dot above
+            ("\\ddot{", "\u{0308}"),  // combining diaeresis
         ];
 
         while index < text.len() {
@@ -152,7 +161,9 @@ impl MathFormatter {
             for (prefix, combining) in &accents {
                 if remaining.starts_with(prefix) {
                     let arg_start = index + prefix.len();
-                    if let Some((arg, next_index)) = crate::utils::extract_braced(text, arg_start - 1) {
+                    if let Some((arg, next_index)) =
+                        crate::utils::extract_braced(text, arg_start - 1)
+                    {
                         let formatted = Self::format(&arg);
                         for ch in formatted.chars() {
                             result.push(ch);
@@ -174,11 +185,11 @@ impl MathFormatter {
 
         result
     }
-    
+
     fn format_superscripts(text: &str) -> String {
         Self::format_script(text, '^', true)
     }
-    
+
     fn format_subscripts(text: &str) -> String {
         Self::format_script(text, '_', false)
     }
@@ -195,7 +206,8 @@ impl MathFormatter {
                 .expect("remaining is never empty while index < text.len()");
 
             if ch == marker
-                && let Some((token, next_index)) = Self::read_script_token(text, index + ch.len_utf8())
+                && let Some((token, next_index)) =
+                    Self::read_script_token(text, index + ch.len_utf8())
             {
                 result.push_str(&Self::render_script_token(&token, is_super));
                 index = next_index;
@@ -275,7 +287,6 @@ impl MathFormatter {
 
         Some((first.to_string(), start + first.len_utf8()))
     }
-
 }
 
 fn mathbb_char(ch: char) -> Option<char> {
@@ -372,8 +383,12 @@ mod tests {
 
     #[test]
     fn format_root_and_exponents() {
-        let formatted = MathFormatter::format("\\sqrt{b^2-4ac}");
-        assert_eq!(formatted, "√(b²-4ac)");
+        assert_eq!(MathFormatter::format("\\sqrt{x}"), "√x");
+        assert_eq!(MathFormatter::format("\\sqrt{b^2}"), "√b²");
+        assert_eq!(MathFormatter::format("\\sqrt{b^2-4ac}"), "√(b²-4ac)");
+        assert_eq!(MathFormatter::format("\\sqrt[3]{8}"), "∛8");
+        assert_eq!(MathFormatter::format("\\sqrt[4]{16}"), "∜16");
+        assert_eq!(MathFormatter::format("\\sqrt[5]{32}"), "⁵√32");
     }
 
     #[test]

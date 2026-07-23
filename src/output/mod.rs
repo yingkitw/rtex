@@ -3,15 +3,15 @@
 //! Converts parsed [`TexElement`] trees into HTML, DOCX, EPUB, or PDF bytes.
 
 pub mod common;
-mod html;
 mod docx;
 mod epub;
+mod html;
 pub mod pdfrs_pdf;
 
 use crate::error::LatexError;
 use crate::parser::TexElement;
 use crate::pdf::builder::PdfBuilder;
-use pdfrs_pdf::{PDFRS_MAX_BYTES, PdfRenderOptions, render_pdf_bytes};
+pub use pdfrs_pdf::{PDFRS_MAX_BYTES, PdfBackend, PdfRenderOptions, render_pdf_bytes};
 
 pub use common::DocumentMeta;
 
@@ -66,7 +66,10 @@ impl std::str::FromStr for OutputFormat {
 }
 
 /// Render parsed elements to bytes in the requested format.
-pub fn render_elements(elements: Vec<TexElement>, format: OutputFormat) -> Result<Vec<u8>, LatexError> {
+pub fn render_elements(
+    elements: Vec<TexElement>,
+    format: OutputFormat,
+) -> Result<Vec<u8>, LatexError> {
     render_elements_in_dir(elements, format, None)
 }
 
@@ -85,26 +88,79 @@ pub fn render_elements_in_dir(
 }
 
 /// Render PDF via pdfrs; fall back to the native engine only on failure or oversize output.
+///
+/// Override with `RTEX_PDF_BACKEND=pdfrs|native` (fail if forced backend cannot run).
 fn render_pdf_with_fallback(
     elements: Vec<TexElement>,
     image_base: Option<&std::path::Path>,
 ) -> Result<Vec<u8>, LatexError> {
-    let mut options = PdfRenderOptions::default();
-    options.image_base_dir = image_base.map(std::path::Path::to_path_buf);
+    let forced = PdfBackend::from_env();
+    let options = PdfRenderOptions {
+        image_base_dir: image_base.map(std::path::Path::to_path_buf),
+        ..Default::default()
+    };
 
-    if let Ok(bytes) = render_pdf_bytes(&elements, options) {
-        if bytes.len() <= PDFRS_MAX_BYTES {
-            return Ok(bytes);
+    if forced != Some(PdfBackend::Native) {
+        match render_pdf_bytes(&elements, options) {
+            Ok(bytes) if bytes.len() <= PDFRS_MAX_BYTES => {
+                return Ok(stamp_pdf_producer(bytes, PdfBackend::Pdfrs));
+            }
+            Ok(_) if forced == Some(PdfBackend::Pdfrs) => {
+                return Err(LatexError::PdfError {
+                    message: "RTEX_PDF_BACKEND=pdfrs but output exceeds PDFRS_MAX_BYTES".into(),
+                    context: None,
+                });
+            }
+            Err(e) if forced == Some(PdfBackend::Pdfrs) => return Err(e),
+            _ => {}
         }
     }
 
+    if forced == Some(PdfBackend::Pdfrs) {
+        return Err(LatexError::PdfError {
+            message: "RTEX_PDF_BACKEND=pdfrs but pdfrs rendering failed".into(),
+            context: None,
+        });
+    }
+
     let mut builder = PdfBuilder::new();
-    builder
-        .build_to_bytes_native(elements)
+    let bytes = builder
+        .emit_native_pdf(elements)
         .map_err(|message| LatexError::PdfError {
             message,
             context: None,
-        })
+        })?;
+    Ok(stamp_pdf_producer(bytes, PdfBackend::Native))
+}
+
+/// Stamp `/Producer` so PDF metadata identifies which backend ran.
+fn stamp_pdf_producer(mut pdf: Vec<u8>, backend: PdfBackend) -> Vec<u8> {
+    let label = backend.producer_label();
+    let replacements = [
+        (
+            b"/Producer (pdfrs)".as_slice(),
+            format!("/Producer ({label})").into_bytes(),
+        ),
+        (
+            b"/Producer (rtex)".as_slice(),
+            format!("/Producer ({label})").into_bytes(),
+        ),
+        (
+            b"/Producer (pdf-cli)".as_slice(),
+            format!("/Producer ({label})").into_bytes(),
+        ),
+    ];
+    for (from, to) in replacements {
+        if let Some(pos) = find_bytes(&pdf, from) {
+            pdf.splice(pos..pos + from.len(), to);
+            break;
+        }
+    }
+    pdf
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 #[cfg(test)]
@@ -129,7 +185,10 @@ Hello \textbf{world} and $x^2$.
     fn output_format_parse_and_extension() {
         assert_eq!(OutputFormat::parse("HTML"), Some(OutputFormat::Html));
         assert_eq!(OutputFormat::Html.extension(), "html");
-        assert_eq!(OutputFormat::Docx.mime_type(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        assert_eq!(
+            OutputFormat::Docx.mime_type(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
     }
 
     #[test]
@@ -155,5 +214,33 @@ Hello \textbf{world} and $x^2$.
         let text = String::from_utf8_lossy(&bytes);
         assert!(text.contains("application/epub+zip"));
         assert!(text.contains("chapter.xhtml"));
+    }
+
+    #[test]
+    fn pdf_stamps_pdfrs_producer() {
+        let bytes = render_elements(sample_elements(), OutputFormat::Pdf).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("rtex/pdfrs"),
+            "expected /Producer rtex/pdfrs on primary path"
+        );
+    }
+
+    #[test]
+    fn pdf_backend_env_native_stamps_native_producer() {
+        // SAFETY: test-only; serial test process, restored immediately after.
+        unsafe {
+            std::env::set_var("RTEX_PDF_BACKEND", "native");
+        }
+        let bytes = render_elements(sample_elements(), OutputFormat::Pdf).unwrap();
+        unsafe {
+            std::env::remove_var("RTEX_PDF_BACKEND");
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            text.contains("rtex/native"),
+            "expected /Producer rtex/native when forced"
+        );
     }
 }

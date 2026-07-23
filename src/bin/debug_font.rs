@@ -1,4 +1,4 @@
-use rtex::{TexParser, PdfBuilder};
+use rtex::{PdfBuilder, TexParser};
 use std::path::Path;
 
 fn main() {
@@ -15,12 +15,14 @@ Special characters test:
 ˣ Modifier letter x
 \end{document}
 ";
-    
+
     let mut parser = TexParser::new(content.to_string());
     let elements = parser.parse();
-    
+
     let mut builder = PdfBuilder::new();
-    builder.build(elements, Path::new("output/font_test.pdf")).unwrap();
-    
+    builder
+        .build(elements, Path::new("output/font_test.pdf"))
+        .unwrap();
+
     println!("Font test PDF generated: output/font_test.pdf");
 }

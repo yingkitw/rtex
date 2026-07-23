@@ -34,8 +34,8 @@ impl ImageInfo {
     }
 
     fn from_svg_path(path: &Path) -> Result<Self, String> {
-        let svg_data =
-            std::fs::read(path).map_err(|e| format!("Failed to read SVG '{}': {}", path.display(), e))?;
+        let svg_data = std::fs::read(path)
+            .map_err(|e| format!("Failed to read SVG '{}': {}", path.display(), e))?;
         Self::from_svg_bytes(&svg_data)
     }
 
@@ -49,7 +49,11 @@ impl ImageInfo {
 
         let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
             .ok_or_else(|| "Failed to allocate SVG raster buffer".to_string())?;
-        resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::default(),
+            &mut pixmap.as_mut(),
+        );
 
         let rgba = pixmap.data();
         let mut data = Vec::with_capacity((width as usize) * (height as usize) * 3);

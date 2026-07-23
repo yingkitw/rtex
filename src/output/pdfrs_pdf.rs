@@ -1,13 +1,12 @@
 //! LaTeX AST → [pdfrs](https://crates.io/crates/pdfrs) element conversion and PDF rendering.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use pdfrs::elements::{Element, TableAlignment, TextSegment};
 use pdfrs::optimization::{OptimizationProfile, OptimizedPdfGenerator};
-use pdfrs::pdf_generator::PageLayout as PdfrsLayout;
+use pdfrs::pdf_generator::{AccessibilityOptions, PageLayout as PdfrsLayout};
 
 use crate::error::LatexError;
-use crate::page_layout::PageLayout;
 use crate::parser::TexElement;
 use crate::table::{Align, Table};
 
@@ -16,6 +15,37 @@ pub const PDFRS_MAX_BYTES: usize = 5_000_000;
 
 /// Maximum mapped element count before falling back to the native engine.
 pub const PDFRS_MAX_ELEMENTS: usize = 5_000;
+
+/// Which PDF engine produced (or should produce) the document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdfBackend {
+    /// Vendored [pdfrs](https://crates.io/crates/pdfrs) layout engine (primary).
+    Pdfrs,
+    /// Native `src/pdf/` builder (fallback).
+    Native,
+}
+
+impl PdfBackend {
+    /// Read `RTEX_PDF_BACKEND=pdfrs|native` when set.
+    pub fn from_env() -> Option<Self> {
+        match std::env::var("RTEX_PDF_BACKEND")
+            .ok()?
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "pdfrs" => Some(Self::Pdfrs),
+            "native" => Some(Self::Native),
+            _ => None,
+        }
+    }
+
+    pub fn producer_label(self) -> &'static str {
+        match self {
+            Self::Pdfrs => "rtex/pdfrs",
+            Self::Native => "rtex/native",
+        }
+    }
+}
 
 /// Document metadata extracted from `\title`, `\author`, `\date`.
 #[derive(Debug, Default, Clone)]
@@ -93,6 +123,7 @@ pub struct PdfRenderOptions {
     pub font: String,
     pub base_font_size: f32,
     pub image_base_dir: Option<PathBuf>,
+    pub accessibility: Option<AccessibilityOptions>,
 }
 
 impl Default for PdfRenderOptions {
@@ -102,28 +133,20 @@ impl Default for PdfRenderOptions {
             font: "Helvetica".to_string(),
             base_font_size: 11.0,
             image_base_dir: None,
+            accessibility: None,
         }
-    }
-}
-
-/// Convert rtex page layout into pdfrs layout.
-pub fn rtex_layout_to_pdfrs(layout: PageLayout) -> PdfrsLayout {
-    PdfrsLayout {
-        width: layout.width,
-        height: layout.height,
-        margin_left: layout.margin_left,
-        margin_right: layout.margin_right,
-        margin_top: layout.margin_top,
-        margin_bottom: layout.margin_bottom,
-        ..PdfrsLayout::portrait()
     }
 }
 
 /// Render LaTeX elements to PDF bytes using pdfrs.
 pub fn render_pdf_bytes(
     elements: &[TexElement],
-    options: PdfRenderOptions,
+    mut options: PdfRenderOptions,
 ) -> Result<Vec<u8>, LatexError> {
+    let meta = extract_document_meta(elements);
+    if let Some(title) = meta.title {
+        options.accessibility = Some(options.accessibility.unwrap_or_default().with_title(title));
+    }
     let pdfrs_elements = tex_to_pdfrs_document(elements);
     if pdfrs_elements.len() > PDFRS_MAX_ELEMENTS {
         return Err(LatexError::PdfError {
@@ -149,20 +172,15 @@ pub fn render_pdfrs_element_bytes(
     if let Some(base) = options.image_base_dir {
         generator = generator.with_image_base_dir(base);
     }
-    generator.generate_bytes(elements).map_err(|e| LatexError::PdfError {
-        message: e.to_string(),
-        context: None,
-    })
-}
-
-/// Convenience when only an image search path is needed.
-pub fn render_pdf_bytes_with_image_base(
-    elements: &[TexElement],
-    image_base_dir: Option<&Path>,
-) -> Result<Vec<u8>, LatexError> {
-    let mut options = PdfRenderOptions::default();
-    options.image_base_dir = image_base_dir.map(Path::to_path_buf);
-    render_pdf_bytes(elements, options)
+    if let Some(accessibility) = options.accessibility {
+        generator = generator.with_accessibility(accessibility);
+    }
+    generator
+        .generate_bytes(elements)
+        .map_err(|e| LatexError::PdfError {
+            message: e.to_string(),
+            context: None,
+        })
 }
 
 struct ElementWriter {
@@ -209,8 +227,7 @@ impl ElementWriter {
             last.push(' ');
             last.push_str(trimmed);
         } else {
-            self.segments
-                .push(TextSegment::Plain(trimmed.to_string()));
+            self.segments.push(TextSegment::Plain(trimmed.to_string()));
         }
     }
 
@@ -262,12 +279,12 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
         }
         TexElement::MathDisplay(expr) => {
             writer.push_block(Element::MathBlock {
-                expression: expr.clone(),
+                expression: math_block_expression(expr),
             });
         }
         TexElement::MathLines { lines, .. } => {
             writer.push_block(Element::MathBlock {
-                expression: lines.join(" \\\\ "),
+                expression: math_block_expression(&lines.join(" \\\\ ")),
             });
         }
         TexElement::ItemList {
@@ -287,18 +304,22 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
                     .filter(|el| matches!(el, TexElement::ItemList { .. }))
                     .collect();
 
+                let (text, display_math) = split_item_content(&inline);
                 if !inline.is_empty() {
-                    let text = flatten_item_text(&inline);
                     if *ordered {
                         writer.out.push(Element::OrderedListItem {
                             number: (idx + 1) as u32,
-                            text,
+                            text: text.clone(),
                             depth: list_depth,
                         });
                     } else {
                         let label = labels.get(idx).and_then(|l| l.as_ref());
                         let display = if let Some(lbl) = label {
-                            format!("{lbl} {text}")
+                            if text.is_empty() {
+                                lbl.clone()
+                            } else {
+                                format!("{lbl} {text}")
+                            }
                         } else {
                             text
                         };
@@ -307,6 +328,12 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
                             depth: list_depth,
                         });
                     }
+                }
+
+                for expr in display_math {
+                    writer.out.push(Element::MathBlock {
+                        expression: math_block_expression(&expr),
+                    });
                 }
 
                 for nested_list in nested {
@@ -370,9 +397,7 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
         TexElement::Ref { key } | TexElement::PageRef { key } => {
             writer.push_plain(&format!("?? ({key})"));
         }
-        TexElement::Center(inner)
-        | TexElement::Quote(inner)
-        | TexElement::Abstract(inner) => {
+        TexElement::Center(inner) | TexElement::Quote(inner) | TexElement::Abstract(inner) => {
             if matches!(element, TexElement::Abstract(_)) {
                 writer.push_block(Element::Heading {
                     level: 3,
@@ -440,9 +465,7 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
                 });
             }
             "today" => {
-                writer.push_plain(
-                    &chrono::Local::now().format("%B %d, %Y").to_string(),
-                );
+                writer.push_plain(&chrono::Local::now().format("%B %d, %Y").to_string());
             }
             _ => {
                 if let Some(text) = args.first() {
@@ -498,30 +521,30 @@ fn flush_plain_buffer(writer: &mut ElementWriter, plain: &mut String) {
     plain.clear();
 }
 
-/// Push inline math using pdfrs layout when needed, otherwise formatted Unicode.
+/// Push inline math using display layout for fractions, otherwise formatted Unicode.
 fn push_inline_math_segment(writer: &mut ElementWriter, expr: &str) {
     let trimmed = expr.trim();
     if trimmed.is_empty() {
         return;
     }
-    if needs_pdfrs_math_layout(trimmed) {
-        writer.push_segment(TextSegment::MathInline(trimmed.to_string()));
-    } else {
-        writer.push_segment(TextSegment::Plain(format_math_for_text(trimmed)));
+    if inline_uses_display_math(trimmed) {
+        writer.push_block(Element::MathBlock {
+            expression: math_block_expression(trimmed),
+        });
+        return;
     }
+    writer.push_segment(TextSegment::Plain(format_math_for_text(trimmed)));
 }
 
-fn needs_pdfrs_math_layout(expr: &str) -> bool {
-    // Use pdfrs layout only for expressions that need structural rendering
-    // (fractions, roots, scripts). Simple symbol lists are better handled by
-    // MathFormatter Unicode output.
+fn inline_uses_display_math(expr: &str) -> bool {
     expr.contains("\\frac")
+        || expr.contains("\\dfrac")
+        || expr.contains("\\tfrac")
         || expr.contains("\\sqrt")
-        || expr.contains('^')
-        || expr.contains('_')
-        || expr.contains("\\begin{")
-        || expr.contains("\\pm")
-        || expr.contains("\\mp")
+}
+
+fn math_block_expression(expr: &str) -> String {
+    expr.to_string()
 }
 
 fn push_maketitle(_writer: &mut ElementWriter) {
@@ -555,16 +578,29 @@ fn push_table(table: &Table, out: &mut Vec<Element>) {
 }
 
 fn flatten_item_text(items: &[TexElement]) -> String {
+    split_item_content(items).0
+}
+
+/// Split list-item content into plain text and display-math expressions.
+///
+/// `\frac` / `\sqrt` go to display layout (vinculum / stacked fractions);
+/// simple symbols stay as Unicode in the list item text.
+fn split_item_content(items: &[TexElement]) -> (String, Vec<String>) {
     let mut parts = Vec::new();
+    let mut display = Vec::new();
+
     for item in items {
         match item {
             TexElement::Text(t) => {
-                let s = t.trim();
-                if !s.is_empty() {
-                    parts.push(s.to_string());
+                collect_text_with_math(t, &mut parts, &mut display);
+            }
+            TexElement::MathInline(m) => {
+                if inline_uses_display_math(m) {
+                    display.push(m.clone());
+                } else {
+                    parts.push(format_math_for_text(m));
                 }
             }
-            TexElement::MathInline(m) => parts.push(format_math_for_text(m)),
             TexElement::Command { name, args }
                 if matches!(name.as_str(), "textbf" | "textit" | "emph" | "texttt") =>
             {
@@ -576,7 +612,50 @@ fn flatten_item_text(items: &[TexElement]) -> String {
             _ => {}
         }
     }
-    parts.join(" ")
+    (parts.join(" "), display)
+}
+
+fn collect_text_with_math(text: &str, parts: &mut Vec<String>, display: &mut Vec<String>) {
+    let mut plain = String::new();
+    let mut in_math = false;
+    let mut math_buf = String::new();
+
+    for ch in text.chars() {
+        if ch == '$' {
+            if in_math {
+                let trimmed = math_buf.trim().to_string();
+                if !trimmed.is_empty() {
+                    if inline_uses_display_math(&trimmed) {
+                        flush_part(parts, &mut plain);
+                        display.push(trimmed);
+                    } else {
+                        plain.push_str(&format_math_for_text(&trimmed));
+                    }
+                }
+                math_buf.clear();
+                in_math = false;
+            } else {
+                in_math = true;
+            }
+        } else if in_math {
+            math_buf.push(ch);
+        } else {
+            plain.push(ch);
+        }
+    }
+    if in_math {
+        plain.push('$');
+        plain.push_str(&math_buf);
+    }
+    flush_part(parts, &mut plain);
+}
+
+fn flush_part(parts: &mut Vec<String>, plain: &mut String) {
+    let trimmed = plain.trim();
+    if !trimmed.is_empty() {
+        parts.push(trimmed.to_string());
+    }
+    plain.clear();
 }
 
 fn section_heading_level(level: usize) -> u8 {
@@ -732,7 +811,8 @@ mod tests {
 
     #[test]
     fn advanced_math_example_renders_greek_symbols() {
-        let content = std::fs::read_to_string("examples/advanced_math.tex").expect("advanced_math.tex");
+        let content =
+            std::fs::read_to_string("examples/advanced_math.tex").expect("advanced_math.tex");
         let mut parser = crate::TexParser::new(content);
         let elements = parser.parse();
         let pdf = render_pdf_bytes(&elements, PdfRenderOptions::default()).unwrap();
@@ -763,15 +843,21 @@ mod tests {
         let elements = parser.parse();
         let mapped = tex_to_pdfrs_document(&elements);
         assert!(
-            mapped.iter().any(|e| matches!(e, Element::DefinitionItem { .. })),
+            mapped
+                .iter()
+                .any(|e| matches!(e, Element::DefinitionItem { .. })),
             "expected description list items"
         );
         assert!(
-            mapped.iter().any(|e| matches!(e, Element::MathBlock { .. })),
+            mapped
+                .iter()
+                .any(|e| matches!(e, Element::MathBlock { .. })),
             "expected display math blocks"
         );
         assert!(
-            mapped.iter().any(|e| matches!(e, Element::RichParagraph { .. })),
+            mapped
+                .iter()
+                .any(|e| matches!(e, Element::RichParagraph { .. })),
             "expected inline rich paragraphs for texttt/href"
         );
         let pdf = render_pdf_bytes(&elements, PdfRenderOptions::default()).unwrap();
@@ -807,9 +893,7 @@ mod tests {
         let formatted = crate::math_formatter::MathFormatter::format(
             "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
         );
-        let elements = vec![Element::Paragraph {
-            text: formatted,
-        }];
+        let elements = vec![Element::Paragraph { text: formatted }];
         let pdf = render_pdfrs_element_bytes(&elements, PdfRenderOptions::default()).unwrap();
         assert!(
             pdf.len() < 500_000,
@@ -828,6 +912,23 @@ mod tests {
     }
 
     #[test]
+    fn list_item_sqrt_emits_math_block() {
+        let elements = vec![TexElement::ItemList {
+            ordered: false,
+            labels: vec![],
+            items: vec![vec![TexElement::Text("Root $\\sqrt{x^2+y^2}$".to_string())]],
+        }];
+        let mapped = tex_to_pdfrs_elements(&elements);
+        assert!(
+            mapped.iter().any(|e| matches!(
+                e,
+                Element::MathBlock { expression } if expression.contains("\\sqrt")
+            )),
+            "expected MathBlock for sqrt in list item, got: {mapped:?}"
+        );
+    }
+
+    #[test]
     fn renders_math_inline() {
         let elements = vec![
             TexElement::Text("Angle ".to_string()),
@@ -838,5 +939,32 @@ mod tests {
             mapped.first(),
             Some(Element::Paragraph { text }) if text == "Angle α"
         ));
+    }
+
+    #[test]
+    fn sqrt_in_expression_uses_math_block_with_vinculum() {
+        let elements = vec![TexElement::Text(
+            "Square root: $\\sqrt{x^2 + y^2}$".to_string(),
+        )];
+        let mapped = tex_to_pdfrs_elements(&elements);
+        assert!(
+            mapped.iter().any(|e| matches!(
+                e,
+                Element::MathBlock { expression } if expression.contains("\\sqrt")
+            )),
+            "expected MathBlock with raw sqrt for vinculum layout, got: {mapped:?}"
+        );
+    }
+
+    #[test]
+    fn frac_in_inline_math_uses_math_block() {
+        let elements = vec![TexElement::Text("Formula: $x = \\frac{1}{2}$".to_string())];
+        let mapped = tex_to_pdfrs_elements(&elements);
+        assert!(
+            mapped
+                .iter()
+                .any(|e| matches!(e, Element::MathBlock { .. })),
+            "expected display math block for inline fraction, got: {mapped:?}"
+        );
     }
 }

@@ -1,10 +1,10 @@
 use clap::Parser;
-use std::path::{Path, PathBuf};
-use std::fs;
 use rtex::{
-    ConversionOptions, OutputFormat, StreamingConverter, ConsoleReporter,
-    watch_single, DocumentTemplate,
+    ConsoleReporter, ConversionOptions, DocumentTemplate, OutputFormat, StreamingConverter,
+    watch_single,
 };
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "rtex")]
@@ -16,10 +16,19 @@ struct Cli {
     #[arg(short, long, help = "Output file path")]
     output: Option<PathBuf>,
 
-    #[arg(short, long, value_name = "FORMAT", default_value = "pdf", help = "Output format: pdf, html, docx, epub")]
+    #[arg(
+        short,
+        long,
+        value_name = "FORMAT",
+        default_value = "pdf",
+        help = "Output format: pdf, html, docx, epub"
+    )]
     format: String,
 
-    #[arg(long, help = "Fetch missing LaTeX packages from CTAN before conversion")]
+    #[arg(
+        long,
+        help = "Fetch missing LaTeX packages from CTAN before conversion"
+    )]
     fetch_packages: bool,
 
     #[arg(long, help = "Directory for downloaded LaTeX package cache")]
@@ -31,18 +40,25 @@ struct Cli {
     #[arg(short, long, help = "Path to a TOML template file for styling")]
     template: Option<PathBuf>,
 
-    #[arg(long, help = "Force rebuild even when source and dependencies are unchanged")]
+    #[arg(
+        long,
+        help = "Force rebuild even when source and dependencies are unchanged"
+    )]
     force: bool,
 
     #[arg(long, help = "Disable incremental compilation and always rebuild")]
     no_incremental: bool,
 
-    #[arg(long, help = "Keep intermediate files (.expanded.tex, .ast.json, .meta.json)")]
+    #[arg(
+        long,
+        help = "Keep intermediate files (.expanded.tex, .ast.json, .meta.json)"
+    )]
     keep_intermediate: bool,
 }
 
 fn parse_format(raw: &str) -> anyhow::Result<OutputFormat> {
-    raw.parse().map_err(|e: rtex::LatexError| anyhow::anyhow!(e.to_string()))
+    raw.parse()
+        .map_err(|e: rtex::LatexError| anyhow::anyhow!(e.to_string()))
 }
 
 fn default_output(input: &Path, format: OutputFormat) -> PathBuf {
@@ -65,7 +81,10 @@ fn conversion_options(cli: &Cli, format: OutputFormat) -> ConversionOptions {
     }
 }
 
-fn build_converter(cli: &Cli, options: ConversionOptions) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
+fn build_converter(
+    cli: &Cli,
+    options: ConversionOptions,
+) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
     let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
         .with_options(options)
         .with_incremental(!cli.no_incremental)
@@ -116,26 +135,31 @@ fn main() -> anyhow::Result<()> {
         let keep_intermediate = cli.keep_intermediate;
         let fetch_packages = cli.fetch_packages;
         let package_cache = cli.package_cache.clone();
-        let result: Result<(), anyhow::Error> = watch_single(&input_path, &output, move |inp, out| {
-            let options = ConversionOptions {
-                format,
-                fetch_packages,
-                package_cache: package_cache.clone(),
-                keep_intermediate,
-            };
-            let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
-                .with_options(options)
-                .with_incremental(incremental)
-                .with_force_rebuild(force)
-                .with_keep_intermediate(keep_intermediate);
-            if let Some(path) = &template_path {
-                let template = DocumentTemplate::from_toml(path)?;
-                converter = converter.with_template(template);
-            }
-            converter.convert(inp, out)?;
-            println!("Successfully converted {} to {}", inp.display(), out.display());
-            Ok(())
-        });
+        let result: Result<(), anyhow::Error> =
+            watch_single(&input_path, &output, move |inp, out| {
+                let options = ConversionOptions {
+                    format,
+                    fetch_packages,
+                    package_cache: package_cache.clone(),
+                    keep_intermediate,
+                };
+                let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+                    .with_options(options)
+                    .with_incremental(incremental)
+                    .with_force_rebuild(force)
+                    .with_keep_intermediate(keep_intermediate);
+                if let Some(path) = &template_path {
+                    let template = DocumentTemplate::from_toml(path)?;
+                    converter = converter.with_template(template);
+                }
+                converter.convert(inp, out)?;
+                println!(
+                    "Successfully converted {} to {}",
+                    inp.display(),
+                    out.display()
+                );
+                Ok(())
+            });
         if let Err(e) = result {
             eprintln!("Watch mode error: {}", e);
             std::process::exit(1);
