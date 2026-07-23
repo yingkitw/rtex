@@ -116,10 +116,19 @@ fn stamp_pdf_producer(mut pdf: Vec<u8>, backend: PdfBackend) -> Vec<u8> {
             format!("/Producer ({label})").into_bytes(),
         ),
     ];
+    let mut found = false;
     for (from, to) in replacements {
         if let Some(pos) = find_bytes(&pdf, from) {
             pdf.splice(pos..pos + from.len(), to);
+            found = true;
             break;
+        }
+    }
+    if !found {
+        let producer = format!("/Producer ({label})").into_bytes();
+        if let Some(pos) = find_bytes(&pdf, b"/Size ") {
+            let line_end = pdf[pos..].iter().position(|&b| b == b'\n').unwrap_or(0);
+            pdf.splice(pos + line_end..pos + line_end, producer);
         }
     }
     pdf

@@ -54,10 +54,23 @@ fn rasterize_svg_if_needed(path: &str, base_dir: Option<&std::path::Path>) -> St
         &mut pixmap.as_mut(),
     );
 
-    let png_data = match pixmap.encode_png() {
-        Ok(d) => d,
-        Err(_) => return path.to_string(),
-    };
+    let rgba = pixmap.data();
+    let mut rgb = Vec::with_capacity((width * height * 3) as usize);
+    for chunk in rgba.chunks_exact(4) {
+        let a = chunk[3] as f32 / 255.0;
+        rgb.push((chunk[0] as f32 * a + 255.0 * (1.0 - a)) as u8);
+        rgb.push((chunk[1] as f32 * a + 255.0 * (1.0 - a)) as u8);
+        rgb.push((chunk[2] as f32 * a + 255.0 * (1.0 - a)) as u8);
+    }
+
+    let mut png_buf = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png_buf, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&rgb).unwrap();
+    }
 
     let tmp_path = std::env::temp_dir().join(format!(
         "rtex_svg_{}.png",
@@ -66,7 +79,7 @@ fn rasterize_svg_if_needed(path: &str, base_dir: Option<&std::path::Path>) -> St
             .map(|d| d.as_nanos())
             .unwrap_or(0)
     ));
-    if std::fs::write(&tmp_path, &png_data).is_err() {
+    if std::fs::write(&tmp_path, &png_buf).is_err() {
         return path.to_string();
     }
     tmp_path.to_string_lossy().into_owned()
@@ -219,15 +232,20 @@ pub fn render_pdfrs_element_bytes(
     elements: &[Element],
     options: PdfRenderOptions,
 ) -> Result<Vec<u8>, LatexError> {
-    let mut generator = OptimizedPdfGenerator::new(OptimizationProfile::Archive)
+    let profile = OptimizationProfile::Archive;
+    let profile = if let Some(accessibility) = options.accessibility {
+        let mut settings = profile.settings();
+        settings.tagged_pdf = accessibility.tagged_pdf;
+        OptimizationProfile::Custom(settings)
+    } else {
+        profile
+    };
+    let mut generator = OptimizedPdfGenerator::new(profile)
         .with_layout(options.layout)
         .with_font(&options.font)
         .with_font_size(options.base_font_size);
     if let Some(base) = options.image_base_dir {
         generator = generator.with_image_base_dir(base);
-    }
-    if let Some(accessibility) = options.accessibility {
-        generator = generator.with_accessibility(accessibility);
     }
     generator
         .generate_bytes(elements)
