@@ -5,7 +5,9 @@
 
 use regex::Regex;
 
-use super::text_support::{flatten_math_environments, parse_brace_group, render_math_text};
+use super::text_support::{
+    flatten_math_environments, normalize_math_display, parse_brace_group, render_math_text,
+};
 
 /// A laid-out piece of display mathematics.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,11 +32,31 @@ pub(super) enum MathPiece {
         index: Option<String>,
         radicand: String,
     },
+    /// Matrix / grid with rows and columns, plus optional delimiters.
+    Matrix {
+        rows: Vec<Vec<Vec<MathPiece>>>,
+        left_delim: String,
+        right_delim: String,
+    },
 }
 
-/// Parse a LaTeX-like math expression into display pieces.
+/// Parse a LaTeX-like math expression into display pieces, flattening matrix
+/// environments to readable text (used for accessibility / plain text).
 pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
-    let mut s = flatten_math_environments(expr.trim());
+    parse_display_math_internal(expr, true)
+}
+
+/// Parse for actual PDF layout, keeping matrices as grids.
+pub(super) fn parse_display_math_for_layout(expr: &str) -> Vec<MathPiece> {
+    parse_display_math_internal(expr, false)
+}
+
+fn parse_display_math_internal(expr: &str, flatten_matrices: bool) -> Vec<MathPiece> {
+    let mut s = if flatten_matrices {
+        flatten_math_environments(expr.trim())
+    } else {
+        normalize_math_display(expr.trim())
+    };
     if s.is_empty() {
         return Vec::new();
     }
@@ -84,6 +106,12 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
             continue;
         }
 
+        if let Some((piece, consumed)) = try_parse_matrix(rest) {
+            pieces.push(piece);
+            i += consumed;
+            continue;
+        }
+
         // Ordinary text until next special command or end.
         let next_special = find_next_special(rest);
         let chunk = &rest[..next_special];
@@ -98,7 +126,9 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
             let tok_end = rest
                 .char_indices()
                 .skip(1)
-                .find(|(_, c)| c.is_whitespace() || *c == '\\' || *c == '{' || *c == '^' || *c == '_')
+                .find(|(_, c)| {
+                    c.is_whitespace() || *c == '\\' || *c == '{' || *c == '^' || *c == '_'
+                })
                 .map(|(idx, _)| idx)
                 .unwrap_or(rest.len())
                 .max(1);
@@ -116,20 +146,22 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
 }
 
 fn find_next_special(s: &str) -> usize {
-    let markers = ["\\sum", "\\prod", "\\int", "\\frac", "\\sqrt"];
+    let markers = [
+        "\\sum",
+        "\\prod",
+        "\\int",
+        "\\frac",
+        "\\sqrt",
+        "\\begin{pmatrix}",
+        "\\begin{bmatrix}",
+        "\\begin{vmatrix}",
+        "\\begin{matrix}",
+    ];
     let mut best = s.len();
     for m in markers {
         if let Some(pos) = s.find(m) {
             best = best.min(pos);
         }
-    }
-    // Also stop before a lone backslash that starts a command after content.
-    if let Some(pos) = s.find('\\') {
-        // If the backslash is itself one of the markers, keep that.
-        // Otherwise if it appears before best and is not part of already-handled
-        // content, we still want ordinary render_math_text to handle it — so
-        // only stop at markers for piece boundaries.
-        let _ = pos;
     }
     best
 }
@@ -200,6 +232,73 @@ fn try_parse_sqrt(s: &str) -> Option<(MathPiece, usize)> {
     ))
 }
 
+/// Parse an `align`-style expression (rows split on `\\`, columns on `&`) into a
+/// delimiter-free matrix piece so it can share the matrix rendering path.
+pub(super) fn parse_aligned_grid(expr: &str) -> Option<MathPiece> {
+    let rows: Vec<Vec<Vec<MathPiece>>> = expr
+        .split("\\\\")
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .map(|r| {
+            r.split('&')
+                .map(str::trim)
+                .filter(|c| !c.is_empty())
+                .map(parse_display_math_for_layout)
+                .collect()
+        })
+        .filter(|r: &Vec<Vec<MathPiece>>| !r.is_empty())
+        .collect();
+    if rows.is_empty() {
+        return None;
+    }
+    Some(MathPiece::Matrix {
+        rows,
+        left_delim: String::new(),
+        right_delim: String::new(),
+    })
+}
+
+fn try_parse_matrix(s: &str) -> Option<(MathPiece, usize)> {
+    const ENVS: [(&str, &str, &str); 4] = [
+        ("pmatrix", "(", ")"),
+        ("bmatrix", "[", "]"),
+        ("vmatrix", "|", "|"),
+        ("matrix", "", ""),
+    ];
+    for (env, left, right) in ENVS {
+        let open = format!("\\begin{{{}}}", env);
+        if !s.starts_with(&open) {
+            continue;
+        }
+        let body_start = open.len();
+        let close = format!("\\end{{{}}}", env);
+        let rel_end = s[body_start..].find(&close)?;
+        let body = &s[body_start..body_start + rel_end];
+        let rows: Vec<Vec<Vec<MathPiece>>> = body
+            .split("\\\\")
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+            .map(|r| {
+                r.split('&')
+                    .map(str::trim)
+                    .filter(|c| !c.is_empty())
+                    .map(parse_display_math_for_layout)
+                    .collect()
+            })
+            .collect();
+        let consumed = body_start + rel_end + close.len();
+        return Some((
+            MathPiece::Matrix {
+                rows,
+                left_delim: left.to_string(),
+                right_delim: right.to_string(),
+            },
+            consumed,
+        ));
+    }
+    None
+}
+
 /// Parse `_lower^upper`, `_{lower}^{upper}`, or mixed forms. Returns (lower, upper, bytes_consumed).
 fn parse_limits(s: &str) -> (String, String, usize) {
     let mut idx = 0;
@@ -222,12 +321,18 @@ fn parse_limits(s: &str) -> (String, String, usize) {
                 continue;
             }
         }
-        if let Some(caps) = Regex::new(r"^_([A-Za-z0-9+\-*/=]+)").unwrap().captures(rest) {
+        if let Some(caps) = Regex::new(r"^_([A-Za-z0-9+\-*/=]+)")
+            .unwrap()
+            .captures(rest)
+        {
             lower = caps[1].to_string();
             idx += caps.get(0).unwrap().end();
             continue;
         }
-        if let Some(caps) = Regex::new(r"^\^([A-Za-z0-9+\-*/=]+)").unwrap().captures(rest) {
+        if let Some(caps) = Regex::new(r"^\^([A-Za-z0-9+\-*/=]+)")
+            .unwrap()
+            .captures(rest)
+        {
             upper = caps[1].to_string();
             idx += caps.get(0).unwrap().end();
             continue;
@@ -308,6 +413,38 @@ pub(super) fn piece_width(
                 .unwrap_or(0.0);
             index_w + radical_w + rw + 4.0
         }
+        MathPiece::Matrix {
+            rows,
+            left_delim,
+            right_delim,
+        } => {
+            if rows.is_empty() || rows.iter().all(|r| r.is_empty()) {
+                return measure(left_delim, font_size) + measure(right_delim, font_size);
+            }
+            let script = font_size * 0.85;
+            let col_count = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+            let mut col_widths = vec![0.0f32; col_count];
+            let mut row_heights = Vec::new();
+            for row in rows {
+                let mut row_height = 0.0f32;
+                for (col_idx, cell) in row.iter().enumerate() {
+                    let cell_width: f32 =
+                        cell.iter().map(|p| piece_width(p, script, measure)).sum();
+                    col_widths[col_idx] = col_widths[col_idx].max(cell_width);
+                    let cell_height = line_height_for_pieces(cell, script);
+                    row_height = row_height.max(cell_height);
+                }
+                row_heights.push(row_height);
+            }
+            let cell_pad = 8.0f32;
+            let matrix_width =
+                col_widths.iter().sum::<f32>() + cell_pad * (col_count.saturating_sub(1)) as f32;
+            let matrix_height =
+                row_heights.iter().sum::<f32>() + cell_pad * (rows.len().saturating_sub(1)) as f32;
+            let delim_size = matrix_height.max(font_size);
+            let delim_w = measure(left_delim, delim_size).max(measure(right_delim, delim_size));
+            matrix_width + delim_w * 2.0 + cell_pad * 2.0
+        }
     }
 }
 
@@ -334,6 +471,31 @@ pub(super) fn line_height_for_pieces(pieces: &[MathPiece], font_size: f32) -> f3
             MathPiece::Sqrt { .. } => {
                 ascent = ascent.max(font_size * 1.05);
                 descent = descent.max(font_size * 0.35);
+            }
+            MathPiece::Matrix {
+                rows,
+                left_delim,
+                right_delim,
+            } => {
+                let mut matrix_height = 0.0f32;
+                for row in rows {
+                    let mut row_height = 0.0f32;
+                    for cell in row {
+                        row_height = row_height.max(line_height_for_pieces(cell, font_size * 0.85));
+                    }
+                    matrix_height += row_height + 4.0;
+                }
+                if !rows.is_empty() {
+                    matrix_height -= 4.0;
+                }
+                let delim_height = if left_delim.is_empty() && right_delim.is_empty() {
+                    0.0
+                } else {
+                    font_size * 0.85
+                };
+                let total = matrix_height.max(delim_height);
+                ascent = ascent.max(total * 0.55);
+                descent = descent.max(total * 0.55);
             }
         }
     }
@@ -387,6 +549,25 @@ pub(super) fn pieces_to_plain_text(pieces: &[MathPiece]) -> String {
                     out.push(')');
                 }
             }
+            MathPiece::Matrix {
+                rows,
+                left_delim,
+                right_delim,
+            } => {
+                out.push_str(left_delim);
+                for (row_idx, row) in rows.iter().enumerate() {
+                    if row_idx > 0 {
+                        out.push_str("; ");
+                    }
+                    for (col_idx, cell) in row.iter().enumerate() {
+                        if col_idx > 0 {
+                            out.push(' ');
+                        }
+                        out.push_str(&pieces_to_plain_text(cell));
+                    }
+                }
+                out.push_str(right_delim);
+            }
         }
     }
     out
@@ -424,7 +605,9 @@ mod tests {
     fn parses_integral_fraction_sum() {
         let pieces = parse_display_math(r"\int_{0}^{1} x^{2}\, dx = \frac{1}{3}");
         assert!(
-            pieces.iter().any(|p| matches!(p, MathPiece::Operator { symbol: '∫', .. })),
+            pieces
+                .iter()
+                .any(|p| matches!(p, MathPiece::Operator { symbol: '∫', .. })),
             "{:?}",
             pieces
         );
@@ -461,13 +644,42 @@ mod tests {
 
     #[test]
     fn flattens_bmatrix_environment() {
-        let pieces = parse_display_math(
-            "\\begin{bmatrix}\na & b \\\\\nc & d\n\\end{bmatrix}",
-        );
+        let pieces = parse_display_math("\\begin{bmatrix}\na & b \\\\\nc & d\n\\end{bmatrix}");
         let plain = pieces_to_plain_text(&pieces);
         assert!(plain.contains('[') && plain.contains(']'), "{}", plain);
         assert!(plain.contains('a') && plain.contains('d'), "{}", plain);
         assert!(!plain.contains("begin"), "{}", plain);
+    }
+
+    #[test]
+    fn parses_pmatrix_for_layout() {
+        let pieces =
+            parse_display_math_for_layout("\\begin{pmatrix} a & b \\\\\nc & d \\end{pmatrix}");
+        assert!(
+            pieces.iter().any(|p| matches!(
+                p,
+                MathPiece::Matrix { rows, left_delim, right_delim }
+                if rows.len() == 2 && left_delim == "(" && right_delim == ")"
+            )),
+            "{pieces:?}"
+        );
+    }
+
+    #[test]
+    fn parses_aligned_grid() {
+        let grid = parse_aligned_grid("x &= 1 \\\\\ny &= 2").expect("should parse aligned grid");
+        match grid {
+            MathPiece::Matrix {
+                rows,
+                left_delim,
+                right_delim,
+            } => {
+                assert_eq!(rows.len(), 2);
+                assert!(left_delim.is_empty());
+                assert!(right_delim.is_empty());
+            }
+            _ => panic!("expected Matrix grid piece"),
+        }
     }
 
     #[test]

@@ -18,7 +18,12 @@ struct Cli {
 enum Commands {
     #[command(about = "Generate the bundled comprehensive capability PDF")]
     GenerateComprehensive {
-        #[arg(short, long, help = "Output PDF file", default_value = "comprehensive.pdf")]
+        #[arg(
+            short,
+            long,
+            help = "Output PDF file",
+            default_value = "comprehensive.pdf"
+        )]
         output: String,
         #[arg(long, help = "Use landscape orientation")]
         landscape: bool,
@@ -52,9 +57,17 @@ enum Commands {
         rtl: bool,
         #[arg(long, help = "Number of text columns (1-4)", default_value = "1")]
         columns: u8,
-        #[arg(long, help = "Enable plugins (comma-separated: callouts)", default_value = "")]
+        #[arg(
+            long,
+            help = "Enable plugins (comma-separated: callouts)",
+            default_value = ""
+        )]
         plugins: String,
-        #[arg(long, help = "Optimization profile (web, print, archive, ebook)", default_value = "archive")]
+        #[arg(
+            long,
+            help = "Optimization profile (web, print, archive, ebook)",
+            default_value = "archive"
+        )]
         profile: String,
     },
     #[command(about = "Extract text from PDF")]
@@ -74,7 +87,11 @@ enum Commands {
         font_size: f32,
         #[arg(long, help = "Use landscape orientation")]
         landscape: bool,
-        #[arg(long, help = "Optimization profile (web, print, archive, ebook)", default_value = "archive")]
+        #[arg(
+            long,
+            help = "Optimization profile (web, print, archive, ebook)",
+            default_value = "archive"
+        )]
         profile: String,
     },
     #[command(about = "Create a new PDF with streaming (memory-efficient for large docs)")]
@@ -180,7 +197,10 @@ enum Commands {
         subject: Option<String>,
         #[arg(long, help = "Document keywords")]
         keywords: Option<String>,
-        #[arg(long, help = "Custom metadata fields (key=value pairs, comma-separated)")]
+        #[arg(
+            long,
+            help = "Custom metadata fields (key=value pairs, comma-separated)"
+        )]
         custom: Option<String>,
         #[arg(long, help = "Font family", default_value = "Helvetica")]
         font: String,
@@ -227,7 +247,12 @@ enum Commands {
         input: String,
         #[arg(short, long, help = "Output PDF file")]
         output: String,
-        #[arg(short, long, help = "Optimization profile (web, print, archive, ebook)", default_value = "web")]
+        #[arg(
+            short,
+            long,
+            help = "Optimization profile (web, print, archive, ebook)",
+            default_value = "web"
+        )]
         profile: String,
     },
     #[command(about = "Linearize a PDF for Fast Web View (progressive loading)")]
@@ -281,7 +306,11 @@ enum Commands {
         image: Option<String>,
         #[arg(long, help = "Opacity (0.0-1.0)", default_value = "0.3")]
         opacity: f32,
-        #[arg(long, help = "Position (center, topleft, topright, bottomleft, bottomright, diagonal)", default_value = "diagonal")]
+        #[arg(
+            long,
+            help = "Position (center, topleft, topright, bottomleft, bottomright, diagonal)",
+            default_value = "diagonal"
+        )]
         position: String,
     },
     #[command(about = "Extract tables from a PDF to CSV")]
@@ -295,7 +324,12 @@ enum Commands {
     ExtractImages {
         #[arg(help = "Input PDF file")]
         input: String,
-        #[arg(short, long, help = "Output directory for extracted images", default_value = "extracted_images")]
+        #[arg(
+            short,
+            long,
+            help = "Output directory for extracted images",
+            default_value = "extracted_images"
+        )]
         output: String,
     },
     #[command(about = "Add a digital signature to a PDF")]
@@ -350,7 +384,11 @@ enum Commands {
         user_password: Option<String>,
         #[arg(long, help = "Owner password (controls permissions)")]
         owner_password: Option<String>,
-        #[arg(long, help = "Encryption algorithm (rc4-40, rc4-128, aes-128, aes-256)", default_value = "rc4-128")]
+        #[arg(
+            long,
+            help = "Encryption algorithm (rc4-40, rc4-128, aes-128, aes-256)",
+            default_value = "rc4-128"
+        )]
         algorithm: String,
         #[arg(long, help = "Allow printing")]
         allow_print: bool,
@@ -429,7 +467,12 @@ enum Commands {
         font_size: Option<f32>,
         #[arg(short, long, help = "Page orientation")]
         orientation: Option<String>,
-        #[arg(short, long, help = "Poll interval in milliseconds", default_value = "1000")]
+        #[arg(
+            short,
+            long,
+            help = "Poll interval in milliseconds",
+            default_value = "1000"
+        )]
         interval: u64,
     },
     #[command(about = "Interactive REPL for PDF manipulation")]
@@ -473,7 +516,11 @@ enum Commands {
         output: String,
         #[arg(help = "File to attach")]
         file: String,
-        #[arg(short, long, help = "Attachment name in PDF (defaults to file basename)")]
+        #[arg(
+            short,
+            long,
+            help = "Attachment name in PDF (defaults to file basename)"
+        )]
         name: Option<String>,
     },
     #[command(about = "Create a PDF with an embedded U3D 3D annotation")]
@@ -498,7 +545,10 @@ enum Commands {
 }
 
 // Use the library instead of declaring modules
-use pdfrs::{comprehensive, elements, i18n, image, incremental, linearize, markdown, optimization, parallel, pdf, pdf_generator, pdf_ops, plugin, security, vector};
+use pdfrs::{
+    comprehensive, elements, i18n, image, incremental, linearize, markdown, optimization, parallel,
+    pdf, pdf_generator, pdf_ops, plugin, security, vector,
+};
 
 fn resolve_locale(cli_lang: &Option<String>) -> i18n::Locale {
     cli_lang
@@ -618,7 +668,7 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-        },
+        }
         Commands::Extract { input } => match pdf::extract_text(&input) {
             Ok(text) => println!("Extracted text:\n{}", text),
             Err(e) => eprintln!("Error extracting text: {}", e),
@@ -643,7 +693,9 @@ fn main() {
                     if l.trim().is_empty() {
                         elements::Element::EmptyLine
                     } else {
-                        elements::Element::Paragraph { text: l.to_string() }
+                        elements::Element::Paragraph {
+                            text: l.to_string(),
+                        }
                     }
                 })
                 .collect();
@@ -655,7 +707,7 @@ fn main() {
                 Ok(_) => println!("PDF created successfully: {}", output),
                 Err(e) => eprintln!("Error creating PDF: {}", e),
             }
-        },
+        }
         Commands::CreateStreaming {
             output,
             text,
@@ -687,7 +739,7 @@ fn main() {
                 }
                 Err(e) => eprintln!("Error creating streaming PDF generator: {}", e),
             }
-        },
+        }
         Commands::AddImage {
             pdf_file,
             image_file,
@@ -713,11 +765,19 @@ fn main() {
                 eprintln!("Error: at least one --filter is required");
                 return;
             }
-            let parsed: Result<Vec<_>, _> = filters.iter().map(|f| image::ImageFilter::parse(f)).collect();
+            let parsed: Result<Vec<_>, _> = filters
+                .iter()
+                .map(|f| image::ImageFilter::parse(f))
+                .collect();
             match parsed {
                 Ok(filter_list) => {
-                    match image::create_filtered_image_pdf(&input, &output, &filter_list, width, height)
-                    {
+                    match image::create_filtered_image_pdf(
+                        &input,
+                        &output,
+                        &filter_list,
+                        width,
+                        height,
+                    ) {
                         Ok(_) => println!(
                             "Wrote filtered image PDF {} ({} filter(s))",
                             output,
@@ -728,43 +788,60 @@ fn main() {
                 }
                 Err(e) => eprintln!("Error parsing filters: {}", e),
             }
-        },
+        }
         Commands::Merge { inputs, output } => {
             match parallel::merge_pdfs_parallel(&inputs, output.clone()) {
                 Ok(_) => println!("Successfully merged into {}", output),
                 Err(e) => eprintln!("Error merging PDFs: {}", e),
             }
         }
-        Commands::Split { input, output, start, end } => {
-            match pdf_ops::split_pdf(&input, &output, start, end) {
-                Ok(_) => println!("Successfully split {} into {}", input, output),
-                Err(e) => eprintln!("Error splitting PDF: {}", e),
-            }
-        }
-        Commands::Watermark { input, output, text, size, opacity } => {
-            match pdf_ops::watermark_pdf(&input, &output, &text, size, opacity) {
-                Ok(_) => println!("Successfully watermarked into {}", output),
-                Err(e) => eprintln!("Error adding watermark: {}", e),
-            }
-        }
-        Commands::Reorder { input, output, pages } => {
-            let order: Result<Vec<usize>, _> = pages.split(',').map(|s| s.trim().parse::<usize>()).collect();
+        Commands::Split {
+            input,
+            output,
+            start,
+            end,
+        } => match pdf_ops::split_pdf(&input, &output, start, end) {
+            Ok(_) => println!("Successfully split {} into {}", input, output),
+            Err(e) => eprintln!("Error splitting PDF: {}", e),
+        },
+        Commands::Watermark {
+            input,
+            output,
+            text,
+            size,
+            opacity,
+        } => match pdf_ops::watermark_pdf(&input, &output, &text, size, opacity) {
+            Ok(_) => println!("Successfully watermarked into {}", output),
+            Err(e) => eprintln!("Error adding watermark: {}", e),
+        },
+        Commands::Reorder {
+            input,
+            output,
+            pages,
+        } => {
+            let order: Result<Vec<usize>, _> = pages
+                .split(',')
+                .map(|s| s.trim().parse::<usize>())
+                .collect();
             match order {
-                Ok(page_order) => {
-                    match pdf_ops::reorder_pages(&input, &output, &page_order) {
-                        Ok(_) => println!("Successfully reordered into {}", output),
-                        Err(e) => eprintln!("Error reordering pages: {}", e),
-                    }
-                }
-                Err(e) => eprintln!("Invalid page order format: {}. Use comma-separated numbers like 3,1,2", e),
+                Ok(page_order) => match pdf_ops::reorder_pages(&input, &output, &page_order) {
+                    Ok(_) => println!("Successfully reordered into {}", output),
+                    Err(e) => eprintln!("Error reordering pages: {}", e),
+                },
+                Err(e) => eprintln!(
+                    "Invalid page order format: {}. Use comma-separated numbers like 3,1,2",
+                    e
+                ),
             }
         }
-        Commands::Rotate { input, output, angle } => {
-            match pdf_ops::rotate_pdf(&input, &output, angle) {
-                Ok(_) => println!("Successfully rotated {} into {}", input, output),
-                Err(e) => eprintln!("Error rotating PDF: {}", e),
-            }
-        }
+        Commands::Rotate {
+            input,
+            output,
+            angle,
+        } => match pdf_ops::rotate_pdf(&input, &output, angle) {
+            Ok(_) => println!("Successfully rotated {} into {}", input, output),
+            Err(e) => eprintln!("Error rotating PDF: {}", e),
+        },
         Commands::MdToPdfMeta {
             input,
             output,
@@ -796,14 +873,27 @@ fn main() {
                 for field in custom_fields.split(',') {
                     let parts: Vec<&str> = field.trim().split('=').collect();
                     if parts.len() == 2 {
-                        metadata.add_custom_field(parts[0].trim().to_string(), parts[1].trim().to_string());
+                        metadata.add_custom_field(
+                            parts[0].trim().to_string(),
+                            parts[1].trim().to_string(),
+                        );
                     } else {
-                        eprintln!("Warning: Invalid custom field format: {}. Use key=value", field);
+                        eprintln!(
+                            "Warning: Invalid custom field format: {}. Use key=value",
+                            field
+                        );
                     }
                 }
             }
 
-            match pdf_ops::create_pdf_with_metadata(&input, &output, &font, font_size, orientation, &metadata) {
+            match pdf_ops::create_pdf_with_metadata(
+                &input,
+                &output,
+                &font,
+                font_size,
+                orientation,
+                &metadata,
+            ) {
                 Ok(_) => println!("Successfully created {} with metadata", output),
                 Err(e) => eprintln!("Error creating PDF with metadata: {}", e),
             }
@@ -828,42 +918,57 @@ fn main() {
                 Ok(f) => f,
                 Err(e) => {
                     eprintln!("Error parsing form fields JSON: {}", e);
-                    eprintln!("Expected format: [{{\"name\":\"field1\",\"type\":\"Text\",\"x\":100,\"y\":700,\"width\":200,\"height\":20,\"default_value\":\"\",\"options\":[],\"required\":false}}]");
+                    eprintln!(
+                        "Expected format: [{{\"name\":\"field1\",\"type\":\"Text\",\"x\":100,\"y\":700,\"width\":200,\"height\":20,\"default_value\":\"\",\"options\":[],\"required\":false}}]"
+                    );
                     return;
                 }
             };
 
             match pdf_ops::create_pdf_with_form_fields(&output, &text, &form_fields) {
-                Ok(_) => println!("Successfully created {} with {} form fields", output, form_fields.len()),
+                Ok(_) => println!(
+                    "Successfully created {} with {} form fields",
+                    output,
+                    form_fields.len()
+                ),
                 Err(e) => eprintln!("Error creating PDF with form fields: {}", e),
             }
         }
-        Commands::DetectFormFields { input } => {
-            match pdf_ops::detect_form_fields(&input) {
-                Ok(fields) => {
-                    if fields.is_empty() {
-                        println!("No form fields found in {}", input);
-                    } else {
-                        println!("Found {} form field(s) in {}:", fields.len(), input);
-                        for f in &fields {
-                            let value_str = f.value.as_deref().unwrap_or("(empty)");
-                            let req_str = if f.required { " [required]" } else { "" };
-                            println!("  - {} ({}) = {}{}", f.name, f.field_type, value_str, req_str);
-                            if !f.options.is_empty() {
-                                println!("    options: {}", f.options.join(", "));
-                            }
+        Commands::DetectFormFields { input } => match pdf_ops::detect_form_fields(&input) {
+            Ok(fields) => {
+                if fields.is_empty() {
+                    println!("No form fields found in {}", input);
+                } else {
+                    println!("Found {} form field(s) in {}:", fields.len(), input);
+                    for f in &fields {
+                        let value_str = f.value.as_deref().unwrap_or("(empty)");
+                        let req_str = if f.required { " [required]" } else { "" };
+                        println!(
+                            "  - {} ({}) = {}{}",
+                            f.name, f.field_type, value_str, req_str
+                        );
+                        if !f.options.is_empty() {
+                            println!("    options: {}", f.options.join(", "));
                         }
                     }
                 }
-                Err(e) => eprintln!("Error detecting form fields: {}", e),
             }
-        }
-        Commands::FillFormFields { input, output, values } => {
-            let field_values: std::collections::HashMap<String, String> = match serde_json::from_str(&values) {
+            Err(e) => eprintln!("Error detecting form fields: {}", e),
+        },
+        Commands::FillFormFields {
+            input,
+            output,
+            values,
+        } => {
+            let field_values: std::collections::HashMap<String, String> = match serde_json::from_str(
+                &values,
+            ) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("Error parsing field values JSON: {}", e);
-                    eprintln!("Expected format: {{\"fieldName\":\"value\",\"otherField\":\"otherValue\"}}");
+                    eprintln!(
+                        "Expected format: {{\"fieldName\":\"value\",\"otherField\":\"otherValue\"}}"
+                    );
                     return;
                 }
             };
@@ -873,33 +978,40 @@ fn main() {
                 Err(e) => eprintln!("Error filling form fields: {}", e),
             }
         }
-        Commands::DetectStructure { input } => {
-            match pdf_ops::detect_document_structure(&input) {
-                Ok(structure) => {
-                    if structure.headings.is_empty() {
-                        println!("No headings detected in {}", input);
-                        println!("Estimated pages: {}", structure.estimated_page_count);
-                        println!("Body font size: {}pt", structure.body_font_size);
-                    } else {
-                        println!("Detected {} heading(s) in {} (est. {} pages):", structure.headings.len(), input, structure.estimated_page_count);
-                        for h in &structure.headings {
-                            let indent = "  ".repeat(h.level as usize);
-                            println!("{}{} {}", indent, "#".repeat(h.level as usize), h.text);
-                        }
-                        println!("\nSections:");
-                        for s in &structure.sections {
-                            if let Some(ref title) = s.title {
-                                println!("  - {} ({} content lines)", title, s.content_lines.len());
-                            } else {
-                                println!("  - [untitled] ({} content lines)", s.content_lines.len());
-                            }
+        Commands::DetectStructure { input } => match pdf_ops::detect_document_structure(&input) {
+            Ok(structure) => {
+                if structure.headings.is_empty() {
+                    println!("No headings detected in {}", input);
+                    println!("Estimated pages: {}", structure.estimated_page_count);
+                    println!("Body font size: {}pt", structure.body_font_size);
+                } else {
+                    println!(
+                        "Detected {} heading(s) in {} (est. {} pages):",
+                        structure.headings.len(),
+                        input,
+                        structure.estimated_page_count
+                    );
+                    for h in &structure.headings {
+                        let indent = "  ".repeat(h.level as usize);
+                        println!("{}{} {}", indent, "#".repeat(h.level as usize), h.text);
+                    }
+                    println!("\nSections:");
+                    for s in &structure.sections {
+                        if let Some(ref title) = s.title {
+                            println!("  - {} ({} content lines)", title, s.content_lines.len());
+                        } else {
+                            println!("  - [untitled] ({} content lines)", s.content_lines.len());
                         }
                     }
                 }
-                Err(e) => eprintln!("Error detecting structure: {}", e),
             }
-        }
-        Commands::OptimizePdf { input, output, profile } => {
+            Err(e) => eprintln!("Error detecting structure: {}", e),
+        },
+        Commands::OptimizePdf {
+            input,
+            output,
+            profile,
+        } => {
             let profile = parse_optimization_profile(&profile);
             let settings = profile.settings();
             match optimization::optimize_pdf_file(&input, &output, profile) {
@@ -910,10 +1022,21 @@ fn main() {
                         "Successfully optimized PDF: {} -> {} ({:.1}% of original)",
                         input,
                         output,
-                        if in_size > 0 { (out_size as f64 / in_size as f64) * 100.0 } else { 0.0 }
+                        if in_size > 0 {
+                            (out_size as f64 / in_size as f64) * 100.0
+                        } else {
+                            0.0
+                        }
                     );
-                    println!("Profile: {:?} | compression: {:?} | linearized: {}", profile, settings.compression_level, settings.linearize);
-                    if settings.linearize && std::fs::read(&output).ok().is_some_and(|b| linearize::is_linearized(&b)) {
+                    println!(
+                        "Profile: {:?} | compression: {:?} | linearized: {}",
+                        profile, settings.compression_level, settings.linearize
+                    );
+                    if settings.linearize
+                        && std::fs::read(&output)
+                            .ok()
+                            .is_some_and(|b| linearize::is_linearized(&b))
+                    {
                         println!("Fast Web View: enabled (/Linearized)");
                     }
                 }
@@ -934,58 +1057,56 @@ fn main() {
             title,
             author,
             note,
-        } => {
-            match std::fs::read(&input) {
-                Ok(bytes) => {
-                    let mut updated = bytes;
-                    let mut did = false;
-                    if title.is_some() || author.is_some() {
-                        match incremental::incremental_set_info(
-                            &updated,
-                            title.as_deref(),
-                            author.as_deref(),
-                        ) {
-                            Ok(u) => {
-                                updated = u;
-                                did = true;
-                            }
-                            Err(e) => {
-                                eprintln!("Error updating info: {}", e);
-                                return;
-                            }
+        } => match std::fs::read(&input) {
+            Ok(bytes) => {
+                let mut updated = bytes;
+                let mut did = false;
+                if title.is_some() || author.is_some() {
+                    match incremental::incremental_set_info(
+                        &updated,
+                        title.as_deref(),
+                        author.as_deref(),
+                    ) {
+                        Ok(u) => {
+                            updated = u;
+                            did = true;
                         }
-                    }
-                    if let Some(ref n) = note {
-                        match incremental::incremental_add_text_annotation(
-                            &updated, n, 72.0, 720.0, 24.0, 24.0,
-                        ) {
-                            Ok(u) => {
-                                updated = u;
-                                did = true;
-                            }
-                            Err(e) => {
-                                eprintln!("Error adding note: {}", e);
-                                return;
-                            }
+                        Err(e) => {
+                            eprintln!("Error updating info: {}", e);
+                            return;
                         }
-                    }
-                    if !did {
-                        eprintln!("Provide --title/--author and/or --note");
-                        return;
-                    }
-                    match std::fs::write(&output, &updated) {
-                        Ok(_) => println!(
-                            "Wrote incremental update to {} ({} -> {} bytes)",
-                            output,
-                            std::fs::metadata(&input).map(|m| m.len()).unwrap_or(0),
-                            updated.len()
-                        ),
-                        Err(e) => eprintln!("Error writing output: {}", e),
                     }
                 }
-                Err(e) => eprintln!("Error reading {}: {}", input, e),
+                if let Some(ref n) = note {
+                    match incremental::incremental_add_text_annotation(
+                        &updated, n, 72.0, 720.0, 24.0, 24.0,
+                    ) {
+                        Ok(u) => {
+                            updated = u;
+                            did = true;
+                        }
+                        Err(e) => {
+                            eprintln!("Error adding note: {}", e);
+                            return;
+                        }
+                    }
+                }
+                if !did {
+                    eprintln!("Provide --title/--author and/or --note");
+                    return;
+                }
+                match std::fs::write(&output, &updated) {
+                    Ok(_) => println!(
+                        "Wrote incremental update to {} ({} -> {} bytes)",
+                        output,
+                        std::fs::metadata(&input).map(|m| m.len()).unwrap_or(0),
+                        updated.len()
+                    ),
+                    Err(e) => eprintln!("Error writing output: {}", e),
+                }
             }
-        }
+            Err(e) => eprintln!("Error reading {}: {}", input, e),
+        },
         Commands::OverlayImage {
             input,
             output,
@@ -996,7 +1117,9 @@ fn main() {
             height,
             opacity,
         } => {
-            match pdf_ops::overlay_image_on_pdf(&input, &output, &image, x, y, width, height, opacity) {
+            match pdf_ops::overlay_image_on_pdf(
+                &input, &output, &image, x, y, width, height, opacity,
+            ) {
                 Ok(_) => println!("Successfully overlaid image on {}", output),
                 Err(e) => eprintln!("Error overlaying image: {}", e),
             }
@@ -1028,12 +1151,21 @@ fn main() {
                 "bottomright" => pdf_ops::WatermarkPosition::BottomRight,
                 "diagonal" => pdf_ops::WatermarkPosition::Diagonal,
                 _ => {
-                    eprintln!("Error: Invalid position '{}'. Valid options: center, topleft, topright, bottomleft, bottomright, diagonal", position);
+                    eprintln!(
+                        "Error: Invalid position '{}'. Valid options: center, topleft, topright, bottomleft, bottomright, diagonal",
+                        position
+                    );
                     return;
                 }
             };
 
-            match pdf_ops::watermark_pdf_advanced(&input, &output, watermark_content, opacity, watermark_position) {
+            match pdf_ops::watermark_pdf_advanced(
+                &input,
+                &output,
+                watermark_content,
+                opacity,
+                watermark_position,
+            ) {
                 Ok(_) => println!("Successfully added watermark to {}", output),
                 Err(e) => eprintln!("Error adding watermark: {}", e),
             }
@@ -1066,7 +1198,12 @@ fn main() {
                     if files.is_empty() {
                         println!("No embedded images found in {}", input);
                     } else {
-                        println!("Extracted {} image(s) from {} to {}", files.len(), input, output);
+                        println!(
+                            "Extracted {} image(s) from {} to {}",
+                            files.len(),
+                            input,
+                            output
+                        );
                         for f in &files {
                             println!("  - {}", f);
                         }
@@ -1132,12 +1269,7 @@ fn main() {
             } else {
                 sig
             };
-            match pdf_ops::sign_pdf_with_certificate(
-                &input,
-                &output,
-                &sig,
-                cert.as_ref(),
-            ) {
+            match pdf_ops::sign_pdf_with_certificate(&input, &output, &sig, cert.as_ref()) {
                 Ok(_) => {
                     println!("Successfully signed {} -> {}", input, output);
                     if let Some(c) = &cert {
@@ -1147,71 +1279,70 @@ fn main() {
                 Err(e) => eprintln!("Error signing PDF: {}", e),
             }
         }
-        Commands::ImportCertificate { id, file, subject, store } => {
-            match security::CertificateStore::open(&store) {
-                Ok(cert_store) => match cert_store.import(&id, &file, subject.as_deref()) {
-                    Ok(cert) => {
-                        println!("Imported certificate '{}' into {}", id, store);
-                        println!("  Subject: {}", cert.subject);
-                        println!("  Fingerprint (SHA-256): {}", cert.fingerprint_sha256);
-                    }
-                    Err(e) => eprintln!("Error importing certificate: {}", e),
-                },
-                Err(e) => eprintln!("Error opening certificate store: {}", e),
-            }
-        }
-        Commands::ListCertificates { store } => {
-            match security::CertificateStore::open(&store) {
-                Ok(cert_store) => match cert_store.list() {
-                    Ok(certs) => {
-                        if certs.is_empty() {
-                            println!("No certificates in {}", store);
-                        } else {
-                            println!("Certificates in {}:", store);
-                            for cert in certs {
-                                println!(
-                                    "  {} — {} [{}]",
-                                    cert.id, cert.subject, cert.fingerprint_sha256
-                                );
-                            }
-                        }
-                    }
-                    Err(e) => eprintln!("Error listing certificates: {}", e),
-                },
-                Err(e) => eprintln!("Error opening certificate store: {}", e),
-            }
-        }
-        Commands::VerifySignature { input } => {
-            match pdf_ops::verify_pdf_signature(&input) {
-                Ok(sigs) => {
-                    if sigs.is_empty() {
-                        println!("No digital signatures found in {}", input);
+        Commands::ImportCertificate {
+            id,
+            file,
+            subject,
+            store,
+        } => match security::CertificateStore::open(&store) {
+            Ok(cert_store) => match cert_store.import(&id, &file, subject.as_deref()) {
+                Ok(cert) => {
+                    println!("Imported certificate '{}' into {}", id, store);
+                    println!("  Subject: {}", cert.subject);
+                    println!("  Fingerprint (SHA-256): {}", cert.fingerprint_sha256);
+                }
+                Err(e) => eprintln!("Error importing certificate: {}", e),
+            },
+            Err(e) => eprintln!("Error opening certificate store: {}", e),
+        },
+        Commands::ListCertificates { store } => match security::CertificateStore::open(&store) {
+            Ok(cert_store) => match cert_store.list() {
+                Ok(certs) => {
+                    if certs.is_empty() {
+                        println!("No certificates in {}", store);
                     } else {
-                        println!("Found {} signature(s) in {}:", sigs.len(), input);
-                        for (i, sig) in sigs.iter().enumerate() {
-                            println!("  Signature #{}:", i + 1);
-                            println!("    Signer: {}", sig.signer_name);
-                            if let Some(ref reason) = sig.reason {
-                                println!("    Reason: {}", reason);
-                            }
-                            if let Some(ref location) = sig.location {
-                                println!("    Location: {}", location);
-                            }
-                            if let Some(ref date) = sig.date {
-                                println!("    Date: {}", date);
-                            }
-                            if let Some(ref subject) = sig.certificate_subject {
-                                println!("    Certificate subject: {}", subject);
-                            }
-                            if let Some(ref fp) = sig.certificate_fingerprint {
-                                println!("    Certificate fingerprint: {}", fp);
-                            }
+                        println!("Certificates in {}:", store);
+                        for cert in certs {
+                            println!(
+                                "  {} — {} [{}]",
+                                cert.id, cert.subject, cert.fingerprint_sha256
+                            );
                         }
                     }
                 }
-                Err(e) => eprintln!("Error verifying signatures: {}", e),
+                Err(e) => eprintln!("Error listing certificates: {}", e),
+            },
+            Err(e) => eprintln!("Error opening certificate store: {}", e),
+        },
+        Commands::VerifySignature { input } => match pdf_ops::verify_pdf_signature(&input) {
+            Ok(sigs) => {
+                if sigs.is_empty() {
+                    println!("No digital signatures found in {}", input);
+                } else {
+                    println!("Found {} signature(s) in {}:", sigs.len(), input);
+                    for (i, sig) in sigs.iter().enumerate() {
+                        println!("  Signature #{}:", i + 1);
+                        println!("    Signer: {}", sig.signer_name);
+                        if let Some(ref reason) = sig.reason {
+                            println!("    Reason: {}", reason);
+                        }
+                        if let Some(ref location) = sig.location {
+                            println!("    Location: {}", location);
+                        }
+                        if let Some(ref date) = sig.date {
+                            println!("    Date: {}", date);
+                        }
+                        if let Some(ref subject) = sig.certificate_subject {
+                            println!("    Certificate subject: {}", subject);
+                        }
+                        if let Some(ref fp) = sig.certificate_fingerprint {
+                            println!("    Certificate fingerprint: {}", fp);
+                        }
+                    }
+                }
             }
-        }
+            Err(e) => eprintln!("Error verifying signatures: {}", e),
+        },
         Commands::Protect {
             input,
             output,
@@ -1230,7 +1361,9 @@ fn main() {
         } => {
             // Check if at least one password is provided
             if user_password.is_none() && owner_password.is_none() {
-                eprintln!("Error: At least one of --user-password or --owner-password must be specified");
+                eprintln!(
+                    "Error: At least one of --user-password or --owner-password must be specified"
+                );
                 return;
             }
 
@@ -1241,7 +1374,10 @@ fn main() {
                 "aes-128" => security::EncryptionAlgorithm::Aes128,
                 "aes-256" => security::EncryptionAlgorithm::Aes256,
                 _ => {
-                    eprintln!("Error: Invalid algorithm '{}'. Valid options: rc4-40, rc4-128, aes-128, aes-256", algorithm);
+                    eprintln!(
+                        "Error: Invalid algorithm '{}'. Valid options: rc4-40, rc4-128, aes-128, aes-256",
+                        algorithm
+                    );
                     return;
                 }
             };
@@ -1285,75 +1421,70 @@ fn main() {
                 Err(e) => eprintln!("Error protecting PDF: {}", e),
             }
         }
-        Commands::Validate { input } => {
-            match pdf::validate_pdf(&input) {
-                Ok(result) => {
-                    let result = i18n::localize_validation(locale, &result);
-                    println!("{}", i18n::tf(locale, i18n::MsgId::ValidationResultFor, &[&input]));
-                    let yes_no = if result.valid {
-                        i18n::t(locale, i18n::MsgId::Yes)
-                    } else {
-                        i18n::t(locale, i18n::MsgId::No)
-                    };
-                    println!(
-                        "  {}: {}",
-                        i18n::t(locale, i18n::MsgId::ValidLabel),
-                        yes_no
-                    );
-                    println!(
-                        "  {}: {}",
-                        i18n::t(locale, i18n::MsgId::PagesLabel),
-                        i18n::format_integer(locale, result.page_count as u64)
-                    );
-                    println!(
-                        "  {}: {}",
-                        i18n::t(locale, i18n::MsgId::ObjectsLabel),
-                        i18n::format_integer(locale, result.object_count as u64)
-                    );
-                    if !result.errors.is_empty() {
-                        println!("  {}:", i18n::t(locale, i18n::MsgId::ErrorsLabel));
-                        for e in &result.errors {
-                            println!("    - {}", e);
-                        }
-                    }
-                    if !result.warnings.is_empty() {
-                        println!("  {}:", i18n::t(locale, i18n::MsgId::WarningsLabel));
-                        for w in &result.warnings {
-                            println!("    - {}", w);
-                        }
-                    }
-                }
-                Err(e) => eprintln!(
+        Commands::Validate { input } => match pdf::validate_pdf(&input) {
+            Ok(result) => {
+                let result = i18n::localize_validation(locale, &result);
+                println!(
                     "{}",
-                    i18n::tf(locale, i18n::MsgId::ErrorValidatingPdf, &[&e.to_string()])
-                ),
-            }
-        }
-        Commands::ValidatePdfa { input } => {
-            match pdf::validate_pdf_a(&input) {
-                Ok(result) => {
-                    println!("PDF/A validation result for {}:", input);
-                    println!("  Level: {}", result.level);
-                    println!("  Compliant: {}", result.compliant);
-                    println!("  Embedded fonts: {}", result.embedded_fonts);
-                    println!("  Has XMP metadata: {}", result.has_xmp);
-                    println!("  Has encryption: {}", result.has_encryption);
-                    if !result.errors.is_empty() {
-                        println!("  Errors:");
-                        for e in &result.errors {
-                            println!("    - {}", e);
-                        }
-                    }
-                    if !result.warnings.is_empty() {
-                        println!("  Warnings:");
-                        for w in &result.warnings {
-                            println!("    - {}", w);
-                        }
+                    i18n::tf(locale, i18n::MsgId::ValidationResultFor, &[&input])
+                );
+                let yes_no = if result.valid {
+                    i18n::t(locale, i18n::MsgId::Yes)
+                } else {
+                    i18n::t(locale, i18n::MsgId::No)
+                };
+                println!("  {}: {}", i18n::t(locale, i18n::MsgId::ValidLabel), yes_no);
+                println!(
+                    "  {}: {}",
+                    i18n::t(locale, i18n::MsgId::PagesLabel),
+                    i18n::format_integer(locale, result.page_count as u64)
+                );
+                println!(
+                    "  {}: {}",
+                    i18n::t(locale, i18n::MsgId::ObjectsLabel),
+                    i18n::format_integer(locale, result.object_count as u64)
+                );
+                if !result.errors.is_empty() {
+                    println!("  {}:", i18n::t(locale, i18n::MsgId::ErrorsLabel));
+                    for e in &result.errors {
+                        println!("    - {}", e);
                     }
                 }
-                Err(e) => eprintln!("Error validating PDF/A: {}", e),
+                if !result.warnings.is_empty() {
+                    println!("  {}:", i18n::t(locale, i18n::MsgId::WarningsLabel));
+                    for w in &result.warnings {
+                        println!("    - {}", w);
+                    }
+                }
             }
-        }
+            Err(e) => eprintln!(
+                "{}",
+                i18n::tf(locale, i18n::MsgId::ErrorValidatingPdf, &[&e.to_string()])
+            ),
+        },
+        Commands::ValidatePdfa { input } => match pdf::validate_pdf_a(&input) {
+            Ok(result) => {
+                println!("PDF/A validation result for {}:", input);
+                println!("  Level: {}", result.level);
+                println!("  Compliant: {}", result.compliant);
+                println!("  Embedded fonts: {}", result.embedded_fonts);
+                println!("  Has XMP metadata: {}", result.has_xmp);
+                println!("  Has encryption: {}", result.has_encryption);
+                if !result.errors.is_empty() {
+                    println!("  Errors:");
+                    for e in &result.errors {
+                        println!("    - {}", e);
+                    }
+                }
+                if !result.warnings.is_empty() {
+                    println!("  Warnings:");
+                    for w in &result.warnings {
+                        println!("    - {}", w);
+                    }
+                }
+            }
+            Err(e) => eprintln!("Error validating PDF/A: {}", e),
+        },
         Commands::DrawVector { output, landscape } => {
             let layout = if landscape {
                 pdf_generator::PageLayout::landscape()
@@ -1385,23 +1516,14 @@ fn main() {
                 None
             };
             let result = match (&path, &file) {
-                (Some(d), _) => match vector::svg_path_to_pdf_bytes(
-                    d,
-                    layout,
-                    stroke,
-                    fill_color,
-                    line_width,
-                ) {
-                    Ok(bytes) => std::fs::write(&output, bytes).map_err(|e| e.to_string()),
-                    Err(e) => Err(e.to_string()),
-                },
+                (Some(d), _) => {
+                    match vector::svg_path_to_pdf_bytes(d, layout, stroke, fill_color, line_width) {
+                        Ok(bytes) => std::fs::write(&output, bytes).map_err(|e| e.to_string()),
+                        Err(e) => Err(e.to_string()),
+                    }
+                }
                 (None, Some(svg_file)) => vector::svg_file_to_pdf(
-                    svg_file,
-                    &output,
-                    layout,
-                    stroke,
-                    fill_color,
-                    line_width,
+                    svg_file, &output, layout, stroke, fill_color, line_width,
                 )
                 .map_err(|e| e.to_string()),
                 (None, None) => Err("Provide --path \"M...\" or --file icon.svg".to_string()),
@@ -1411,7 +1533,12 @@ fn main() {
                 Err(e) => eprintln!("Error rendering SVG path: {}", e),
             }
         }
-        Commands::AttachFile { input, output, file, name } => {
+        Commands::AttachFile {
+            input,
+            output,
+            file,
+            name,
+        } => {
             let attachment_name = name.as_deref().unwrap_or_else(|| {
                 std::path::Path::new(&file)
                     .file_name()
@@ -1429,12 +1556,13 @@ fn main() {
                         }
                     };
                     match doc.embed_file(attachment_name, &data) {
-                        Ok(_) => {
-                            match std::fs::write(&output, doc.to_bytes()) {
-                                Ok(_) => println!("Attached '{}' to {} as '{}'", file, input, attachment_name),
-                                Err(e) => eprintln!("Error writing output PDF: {}", e),
-                            }
-                        }
+                        Ok(_) => match std::fs::write(&output, doc.to_bytes()) {
+                            Ok(_) => println!(
+                                "Attached '{}' to {} as '{}'",
+                                file, input, attachment_name
+                            ),
+                            Err(e) => eprintln!("Error writing output PDF: {}", e),
+                        },
                         Err(e) => eprintln!("Error embedding file: {}", e),
                     }
                 }
@@ -1450,134 +1578,126 @@ fn main() {
             width,
             height,
             activate_on_open,
-        } => {
-            match std::fs::read(&model) {
-                Ok(u3d_data) => {
-                    let annot = pdf_ops::ThreeDAnnotation {
-                        x,
-                        y,
-                        width,
-                        height,
-                        contents: label.clone(),
-                        activate_on_open,
-                    };
-                    match pdf_ops::create_pdf_with_3d_annotation(&output, &label, &u3d_data, &annot) {
-                        Ok(_) => println!("Created 3D PDF {} from {}", output, model),
-                        Err(e) => eprintln!("Error creating 3D PDF: {}", e),
-                    }
+        } => match std::fs::read(&model) {
+            Ok(u3d_data) => {
+                let annot = pdf_ops::ThreeDAnnotation {
+                    x,
+                    y,
+                    width,
+                    height,
+                    contents: label.clone(),
+                    activate_on_open,
+                };
+                match pdf_ops::create_pdf_with_3d_annotation(&output, &label, &u3d_data, &annot) {
+                    Ok(_) => println!("Created 3D PDF {} from {}", output, model),
+                    Err(e) => eprintln!("Error creating 3D PDF: {}", e),
                 }
-                Err(e) => eprintln!("Error reading U3D model {}: {}", model, e),
             }
-        }
-        Commands::DiffPdfs { old, new } => {
-            match (std::fs::read(&old), std::fs::read(&new)) {
-                (Ok(old_bytes), Ok(new_bytes)) => {
-                    match pdf::diff_pdf_bytes(&old_bytes, &new_bytes) {
-                        Ok(diff) => {
-                            println!("PDF diff: {} -> {}", old, new);
-                            println!("  Objects: {} -> {}", diff.object_count_old, diff.object_count_new);
-                            println!("  Pages: {} -> {}", diff.pages_old, diff.pages_new);
-                            println!("  Text similarity: {:.1}%", diff.text_similarity * 100.0);
-                            println!("  Added objects: {:?}", diff.added_objects);
-                            println!("  Removed objects: {:?}", diff.removed_objects);
-                            println!("  Modified objects: {:?}", diff.modified_objects);
-                            println!("  Metadata changed: {}", diff.metadata_changed);
-                            println!("  Embedded files (old): {}", diff.has_embedded_files_old);
-                            println!("  Embedded files (new): {}", diff.has_embedded_files_new);
+            Err(e) => eprintln!("Error reading U3D model {}: {}", model, e),
+        },
+        Commands::DiffPdfs { old, new } => match (std::fs::read(&old), std::fs::read(&new)) {
+            (Ok(old_bytes), Ok(new_bytes)) => match pdf::diff_pdf_bytes(&old_bytes, &new_bytes) {
+                Ok(diff) => {
+                    println!("PDF diff: {} -> {}", old, new);
+                    println!(
+                        "  Objects: {} -> {}",
+                        diff.object_count_old, diff.object_count_new
+                    );
+                    println!("  Pages: {} -> {}", diff.pages_old, diff.pages_new);
+                    println!("  Text similarity: {:.1}%", diff.text_similarity * 100.0);
+                    println!("  Added objects: {:?}", diff.added_objects);
+                    println!("  Removed objects: {:?}", diff.removed_objects);
+                    println!("  Modified objects: {:?}", diff.modified_objects);
+                    println!("  Metadata changed: {}", diff.metadata_changed);
+                    println!("  Embedded files (old): {}", diff.has_embedded_files_old);
+                    println!("  Embedded files (new): {}", diff.has_embedded_files_new);
+                }
+                Err(e) => eprintln!("Error diffing PDFs: {}", e),
+            },
+            _ => eprintln!("Error reading one or both PDF files"),
+        },
+        Commands::SanitizePdf { input, output } => match pdf::PdfDocument::load_from_file(&input) {
+            Ok(mut doc) => {
+                doc.sanitize();
+                match std::fs::write(&output, doc.to_bytes()) {
+                    Ok(_) => println!("Sanitized PDF written to {}", output),
+                    Err(e) => eprintln!("Error writing sanitized PDF: {}", e),
+                }
+            }
+            Err(e) => eprintln!("Error loading PDF: {}", e),
+        },
+        Commands::SandboxPdf { input, output } => match std::fs::read(&input) {
+            Ok(bytes) => match pdf::sandbox_pdf_bytes(&bytes) {
+                Ok((output_bytes, report)) => match std::fs::write(&output, output_bytes) {
+                    Ok(_) => {
+                        println!("Sandboxed PDF written to {}", output);
+                        println!("  Actions found: {}", report.actions_found.len());
+                        println!("  Actions removed: {}", report.actions_removed);
+                        println!("  Clean: {}", report.clean);
+                        for action in &report.actions_found {
+                            let id = action
+                                .object_id
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "?".to_string());
+                            println!(
+                                "    [{}] object {} — {}",
+                                action.kind, id, action.description
+                            );
                         }
-                        Err(e) => eprintln!("Error diffing PDFs: {}", e),
                     }
-                }
-                _ => eprintln!("Error reading one or both PDF files"),
-            }
-        }
-        Commands::SanitizePdf { input, output } => {
-            match pdf::PdfDocument::load_from_file(&input) {
-                Ok(mut doc) => {
-                    doc.sanitize();
-                    match std::fs::write(&output, doc.to_bytes()) {
-                        Ok(_) => println!("Sanitized PDF written to {}", output),
-                        Err(e) => eprintln!("Error writing sanitized PDF: {}", e),
-                    }
-                }
-                Err(e) => eprintln!("Error loading PDF: {}", e),
-            }
-        }
-        Commands::SandboxPdf { input, output } => {
-            match std::fs::read(&input) {
-                Ok(bytes) => match pdf::sandbox_pdf_bytes(&bytes) {
-                    Ok((output_bytes, report)) => match std::fs::write(&output, output_bytes) {
-                        Ok(_) => {
-                            println!("Sandboxed PDF written to {}", output);
-                            println!("  Actions found: {}", report.actions_found.len());
-                            println!("  Actions removed: {}", report.actions_removed);
-                            println!("  Clean: {}", report.clean);
-                            for action in &report.actions_found {
-                                let id = action
-                                    .object_id
-                                    .map(|n| n.to_string())
-                                    .unwrap_or_else(|| "?".to_string());
-                                println!("    [{}] object {} — {}", action.kind, id, action.description);
-                            }
-                        }
-                        Err(e) => eprintln!("Error writing sandboxed PDF: {}", e),
-                    },
-                    Err(e) => eprintln!("Error sandboxing PDF: {}", e),
+                    Err(e) => eprintln!("Error writing sandboxed PDF: {}", e),
                 },
-                Err(e) => eprintln!("Error reading PDF: {}", e),
-            }
-        }
-        Commands::ValidatePdfa3 { input } => {
-            match pdf::validate_pdf_a3(&input) {
-                Ok(result) => {
-                    println!("PDF/A-3b validation result for {}:", input);
-                    println!("  Level: {}", result.level);
-                    println!("  Compliant: {}", result.compliant);
-                    println!("  Embedded fonts: {}", result.embedded_fonts);
-                    println!("  Has XMP metadata: {}", result.has_xmp);
-                    println!("  Has encryption: {}", result.has_encryption);
-                    if !result.errors.is_empty() {
-                        println!("  Errors:");
-                        for e in &result.errors {
-                            println!("    - {}", e);
-                        }
-                    }
-                    if !result.warnings.is_empty() {
-                        println!("  Warnings:");
-                        for w in &result.warnings {
-                            println!("    - {}", w);
-                        }
+                Err(e) => eprintln!("Error sandboxing PDF: {}", e),
+            },
+            Err(e) => eprintln!("Error reading PDF: {}", e),
+        },
+        Commands::ValidatePdfa3 { input } => match pdf::validate_pdf_a3(&input) {
+            Ok(result) => {
+                println!("PDF/A-3b validation result for {}:", input);
+                println!("  Level: {}", result.level);
+                println!("  Compliant: {}", result.compliant);
+                println!("  Embedded fonts: {}", result.embedded_fonts);
+                println!("  Has XMP metadata: {}", result.has_xmp);
+                println!("  Has encryption: {}", result.has_encryption);
+                if !result.errors.is_empty() {
+                    println!("  Errors:");
+                    for e in &result.errors {
+                        println!("    - {}", e);
                     }
                 }
-                Err(e) => eprintln!("Error validating PDF/A-3b: {}", e),
-            }
-        }
-        Commands::ValidatePdfua { input } => {
-            match pdf::validate_pdf_ua(&input) {
-                Ok(result) => {
-                    println!("PDF/UA validation result for {}:", input);
-                    println!("  Compliant: {}", result.compliant);
-                    println!("  MarkInfo: {}", result.has_mark_info);
-                    println!("  StructTreeRoot: {}", result.has_struct_tree);
-                    println!("  Lang: {}", result.has_lang);
-                    println!("  Title: {}", result.has_title);
-                    println!("  Fonts embedded: {}", result.fonts_embedded);
-                    if !result.errors.is_empty() {
-                        println!("  Errors:");
-                        for e in &result.errors {
-                            println!("    - {}", e);
-                        }
-                    }
-                    if !result.warnings.is_empty() {
-                        println!("  Warnings:");
-                        for w in &result.warnings {
-                            println!("    - {}", w);
-                        }
+                if !result.warnings.is_empty() {
+                    println!("  Warnings:");
+                    for w in &result.warnings {
+                        println!("    - {}", w);
                     }
                 }
-                Err(e) => eprintln!("Error validating PDF/UA: {}", e),
             }
-        }
+            Err(e) => eprintln!("Error validating PDF/A-3b: {}", e),
+        },
+        Commands::ValidatePdfua { input } => match pdf::validate_pdf_ua(&input) {
+            Ok(result) => {
+                println!("PDF/UA validation result for {}:", input);
+                println!("  Compliant: {}", result.compliant);
+                println!("  MarkInfo: {}", result.has_mark_info);
+                println!("  StructTreeRoot: {}", result.has_struct_tree);
+                println!("  Lang: {}", result.has_lang);
+                println!("  Title: {}", result.has_title);
+                println!("  Fonts embedded: {}", result.fonts_embedded);
+                if !result.errors.is_empty() {
+                    println!("  Errors:");
+                    for e in &result.errors {
+                        println!("    - {}", e);
+                    }
+                }
+                if !result.warnings.is_empty() {
+                    println!("  Warnings:");
+                    for w in &result.warnings {
+                        println!("    - {}", w);
+                    }
+                }
+            }
+            Err(e) => eprintln!("Error validating PDF/UA: {}", e),
+        },
         Commands::CheckScreenReader { input } => {
             match pdf::check_screen_reader_compliance(&input) {
                 Ok(report) => {
@@ -1607,12 +1727,17 @@ fn main() {
                 Err(e) => eprintln!("Error checking screen reader compliance: {}", e),
             }
         }
-        Commands::CreatePortfolio { output, files, title } => {
+        Commands::CreatePortfolio {
+            output,
+            files,
+            title,
+        } => {
             if files.is_empty() {
                 eprintln!("Error: no files provided for portfolio");
                 return;
             }
-            let file_tuples: Vec<(String, String)> = files.iter()
+            let file_tuples: Vec<(String, String)> = files
+                .iter()
                 .map(|f| {
                     let desc = std::path::Path::new(f)
                         .file_name()
@@ -1623,18 +1748,36 @@ fn main() {
                 })
                 .collect();
             match pdf_ops::create_portfolio_pdf(&output, &file_tuples, title.as_deref()) {
-                Ok(_) => println!("Created portfolio PDF with {} file(s): {}", files.len(), output),
+                Ok(_) => println!(
+                    "Created portfolio PDF with {} file(s): {}",
+                    files.len(),
+                    output
+                ),
                 Err(e) => eprintln!("Error creating portfolio: {}", e),
             }
         }
-        Commands::WatchMarkdown { input, output, font, font_size, orientation, interval } => {
+        Commands::WatchMarkdown {
+            input,
+            output,
+            font,
+            font_size,
+            orientation,
+            interval,
+        } => {
             let font = font.unwrap_or_else(|| "Helvetica".to_string());
             let font_size = font_size.unwrap_or(12.0);
             let orientation = match orientation.as_deref() {
                 Some("landscape") => pdf_generator::PageOrientation::Landscape,
                 _ => pdf_generator::PageOrientation::Portrait,
             };
-            match markdown::watch_markdown_to_pdf(&input, &output, &font, font_size, orientation, Some(interval)) {
+            match markdown::watch_markdown_to_pdf(
+                &input,
+                &output,
+                &font,
+                font_size,
+                orientation,
+                Some(interval),
+            ) {
                 Ok(_) => {}
                 Err(e) => eprintln!("Error watching markdown: {}", e),
             }
@@ -1644,4 +1787,3 @@ fn main() {
         }
     }
 }
-

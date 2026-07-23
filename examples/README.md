@@ -41,11 +41,10 @@ cargo run --bin rtex -- examples/minimal.tex
 cargo run --bin rtex -- examples/advanced_math.tex -o output/advanced_math.pdf --force
 ```
 
-Force a PDF backend:
+All PDF output uses the vendored [pdfrs](https://crates.io/crates/pdfrs) engine.
 
 ```bash
-RTEX_PDF_BACKEND=pdfrs cargo run --bin rtex -- examples/math.tex -o output/math.pdf --force
-RTEX_PDF_BACKEND=native cargo run --bin rtex -- examples/math.tex -o output/math.pdf --force
+cargo run --bin rtex -- examples/math.tex -o output/math.pdf --force
 ```
 
 ## Testing

@@ -28,7 +28,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - `NativeTexConverter`: Pure Rust implementation
   - Reads TeX files directly
   - Parses LaTeX syntax using custom parser
-  - Generates PDF using native PDF builder
+  - Generates PDF via the vendored pdfrs engine
   - No external process calls
 
 ### TeX Parser (`src/parser/`)
@@ -150,22 +150,17 @@ TexParser → Parse LaTeX → TexElement[]
     ↓
 output::render_elements_in_dir
     ↓
-PDF: pdfrs (primary) → stamp Producer rtex/pdfrs
-         ↓ on error / oversize / RTEX_PDF_BACKEND=native
-     native PdfBuilder → Producer rtex/native
+PDF: pdfrs → stamp Producer rtex/pdfrs
 HTML / DOCX / EPUB: format-specific renderers
     ↓
 Output file
 ```
 
-### PDF backends
+### PDF backend
 
 | Backend | When used | Module |
 |---------|-----------|--------|
-| **pdfrs** (primary) | Default for documents under size/element limits | `src/output/pdfrs_pdf.rs` → `vendor/pdfrs` |
-| **native** (fallback) | pdfrs error, output > 5 MB, or `RTEX_PDF_BACKEND=native` | `src/pdf/builder.rs` |
-
-Force a backend for tests/CI: `RTEX_PDF_BACKEND=pdfrs` or `RTEX_PDF_BACKEND=native` (fails if that backend cannot produce output).
+| **pdfrs** | All PDF output | `src/output/pdfrs_pdf.rs` → `vendor/pdfrs` |
 
 Math policy on the pdfrs path: simple symbols → Unicode via `MathFormatter`; `\frac` / `\sqrt` → display math layout (stacked fractions, vinculum).
 
@@ -184,7 +179,7 @@ rtex targets `wasm32-unknown-unknown` for zero-infrastructure browser preview:
 - **`convert_tex_string_to_pdf_bytes(tex)`** — parses and renders entirely in memory (no file I/O)
 - **`src/fonts.rs`** — embeds DejaVu Sans at compile time via `include_bytes!`
 - **`src/wasm.rs`** — optional `wasm` feature exports `convertTexToPdf` via `wasm-bindgen`
-- **`PdfBuilder::build_to_bytes`** — returns raw PDF bytes; `build()` writes them to disk on native targets
+- **`pdfrs_pdf::render_pdf_bytes`** — renders parsed elements to PDF bytes entirely in memory
 
 Build: `cargo build --target wasm32-unknown-unknown --features wasm --release`
 
@@ -194,7 +189,7 @@ The `src/output/` module renders the same parsed `TexElement` AST to multiple fo
 
 | Format | Module | Notes |
 |--------|--------|-------|
-| PDF | `output/pdfrs_pdf.rs` + `pdf/builder.rs` | pdfrs primary; native fallback |
+| PDF | `output/pdfrs_pdf.rs` → `vendor/pdfrs` | pdfrs only |
 | HTML | `output/html.rs` | Semantic HTML with embedded CSS |
 | DOCX | `output/docx.rs` | Minimal OOXML packaged as ZIP |
 | EPUB | `output/epub.rs` | EPUB 3 package with XHTML chapter |

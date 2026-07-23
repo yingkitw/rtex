@@ -1,5 +1,7 @@
 # Phase 1 Completion Summary
 
+> **Historical document.** References to `printpdf` and `lopdf` are outdated — all PDF generation now uses the vendored [pdfrs](https://crates.io/crates/pdfrs) engine. This file is kept for reference only.
+
 ## Date: January 12, 2026
 
 ## Overview

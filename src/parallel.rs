@@ -44,7 +44,11 @@ impl ParallelConverter {
             return Vec::new();
         }
 
-        let worker_count = self.workers.unwrap_or_else(num_cpus::get);
+        let worker_count = self.workers.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+        });
         let worker_count = worker_count.min(jobs.len()).max(1);
 
         // Channel to send work to threads
@@ -115,7 +119,12 @@ pub fn convert_dir(inputs: &Path, outputs: &Path, workers: Option<usize>) -> Vec
             }
         }
     }
-    ParallelConverter::with_workers(workers.unwrap_or_else(num_cpus::get)).convert_batch(&jobs)
+    ParallelConverter::with_workers(workers.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+    }))
+    .convert_batch(&jobs)
 }
 
 #[cfg(test)]

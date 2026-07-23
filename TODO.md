@@ -21,10 +21,10 @@
 - [x] Create integration test for generating all examples
 - [x] Create helper script for generating examples
 - [x] **Implement native TeX parser (no pdflatex dependency!)**
-- [x] **Implement native PDF builder using printpdf**
+- [x] **Implement native PDF builder (historical; now replaced by pdfrs)**
 - [x] **Replace PdfLatexConverter with NativeTexConverter**
 - [x] Update all tests to use native converter
-- [x] Update documentation for native implementation
+- [x] Update documentation for pdfrs-only PDF backend
 - [x] Improve text element quality validation before PDF output (normalize whitespace/control chars, preserve unmatched inline-math delimiter, robust wrapping for long tokens)
 - [x] Run core example PDF tests by default (unignore minimal/math/table/lists tests)
 - [x] Harden parser against unknown-command hangs (forward-progress guard + unknown command consumption + regression tests)
@@ -262,7 +262,7 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 
 - [x] **Language Server Protocol (LSP)** — `src/lsp/` diagnostics, completion, symbols, hover; `rtex-lsp` binary (`--features lsp`)
 - [x] **`description` environment** — `(term, body)` pairs in `TexElement::DescriptionList`; PDF renders term then body; HTML uses `<dl>/<dt>/<dd>`
-- [x] **Multi-line math environments** — `align`, `align*`, `gather`, `gather*`, `multline`, `multline*`, `cases` parsed into `TexElement::MathLines { lines, kind }` and rendered as centered line blocks (alignment markers stripped)
+- [x] **Multi-line math environments** — `align`, `align*`, `gather`, `gather*`, `multline`, `multline*`, `cases` parsed into `TexElement::MathLines { lines, kind }`. `gather`/`multline` render as centered line blocks; `align` preserves `&` markers and is rendered as aligned columns in the pdfrs backend
 - [x] **`\href{url}{text}`** — hyperref-style link command parsed; HTML emits `<a href>`; PDF renders the visible text (PDF link annotations not yet emitted)
 - [x] **Rich inline rendering** — `flatten_inline` helper now preserves math, formatting commands, nested lists, and `\href` text inside `Center`/`Quote`/`Abstract`/`ItemList` instead of dropping non-Text children
 - [x] **Theorem-like environments** — `theorem`, `lemma`, `proof`, `definition`, `corollary`, `proposition`, `remark`, `example` parsed into `TexElement::Theorem { kind, title, body }` and rendered with bold heading + indented body
@@ -278,21 +278,21 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 
 ### Current Status
 - Tests: 400+ (see `cargo test`)
-- PDF: pdfrs primary (`vendor/pdfrs`), native fallback (`src/pdf/`); `/Producer` stamps `rtex/pdfrs` or `rtex/native`
-- Math: Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum)
+- PDF: pdfrs sole backend (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
+- Math: Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - Math symbols: 566
 - LaTeX commands: ~250+
-- Documentation: ARCHITECTURE/SPEC/README aligned with dual PDF backends
+- Documentation: ARCHITECTURE/SPEC/README aligned with pdfrs-only PDF backend
 - File size: ~750 bytes for ASCII-only PDFs; subsetted Unicode/math via pdfrs Archive profile
 
 ### Audit follow-ups (2026-07-23)
 - [x] Free disk / ignore nested `vendor/pdfrs/target`
-- [x] Document pdfrs-primary + `RTEX_PDF_BACKEND` + Producer stamp
+- [x] Document pdfrs as sole PDF backend + Producer stamp
 - [x] Stabilize path dep on `vendor/pdfrs`; track `Cargo.lock`; gate debug bins behind `dev-bins`
 - [x] Unify list-item math routing (`\frac`/`\sqrt` → MathBlock)
 - [x] Expand `integration_test` to all 10 examples (fail on error)
 - [x] Fix native MediaBox to use page layout dimensions
-- [x] Remove duplicate PdfBuilder pdfrs try-path (single fallback in `output/mod.rs`)
+- [x] Remove duplicate PdfBuilder pdfrs try-path (pdfrs only in `output/mod.rs`)
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)

@@ -10,8 +10,7 @@ pub mod pdfrs_pdf;
 
 use crate::error::LatexError;
 use crate::parser::TexElement;
-use crate::pdf::builder::PdfBuilder;
-pub use pdfrs_pdf::{PDFRS_MAX_BYTES, PdfBackend, PdfRenderOptions, render_pdf_bytes};
+pub use pdfrs_pdf::{PdfBackend, PdfRenderOptions, render_pdf_bytes};
 
 pub use common::DocumentMeta;
 
@@ -80,57 +79,24 @@ pub fn render_elements_in_dir(
     image_base: Option<&std::path::Path>,
 ) -> Result<Vec<u8>, LatexError> {
     match format {
-        OutputFormat::Pdf => render_pdf_with_fallback(elements, image_base),
+        OutputFormat::Pdf => render_pdf(elements, image_base),
         OutputFormat::Html => html::render(&elements),
         OutputFormat::Docx => docx::render(&elements),
         OutputFormat::Epub => epub::render(&elements),
     }
 }
 
-/// Render PDF via pdfrs; fall back to the native engine only on failure or oversize output.
-///
-/// Override with `RTEX_PDF_BACKEND=pdfrs|native` (fail if forced backend cannot run).
-fn render_pdf_with_fallback(
+/// Render PDF using the pdfrs backend.
+fn render_pdf(
     elements: Vec<TexElement>,
     image_base: Option<&std::path::Path>,
 ) -> Result<Vec<u8>, LatexError> {
-    let forced = PdfBackend::from_env();
     let options = PdfRenderOptions {
         image_base_dir: image_base.map(std::path::Path::to_path_buf),
         ..Default::default()
     };
-
-    if forced != Some(PdfBackend::Native) {
-        match render_pdf_bytes(&elements, options) {
-            Ok(bytes) if bytes.len() <= PDFRS_MAX_BYTES => {
-                return Ok(stamp_pdf_producer(bytes, PdfBackend::Pdfrs));
-            }
-            Ok(_) if forced == Some(PdfBackend::Pdfrs) => {
-                return Err(LatexError::PdfError {
-                    message: "RTEX_PDF_BACKEND=pdfrs but output exceeds PDFRS_MAX_BYTES".into(),
-                    context: None,
-                });
-            }
-            Err(e) if forced == Some(PdfBackend::Pdfrs) => return Err(e),
-            _ => {}
-        }
-    }
-
-    if forced == Some(PdfBackend::Pdfrs) {
-        return Err(LatexError::PdfError {
-            message: "RTEX_PDF_BACKEND=pdfrs but pdfrs rendering failed".into(),
-            context: None,
-        });
-    }
-
-    let mut builder = PdfBuilder::new();
-    let bytes = builder
-        .emit_native_pdf(elements)
-        .map_err(|message| LatexError::PdfError {
-            message,
-            context: None,
-        })?;
-    Ok(stamp_pdf_producer(bytes, PdfBackend::Native))
+    let bytes = render_pdf_bytes(&elements, options)?;
+    Ok(stamp_pdf_producer(bytes, PdfBackend::Pdfrs))
 }
 
 /// Stamp `/Producer` so PDF metadata identifies which backend ran.
@@ -228,7 +194,7 @@ Hello \textbf{world} and $x^2$.
     }
 
     #[test]
-    fn pdf_backend_env_native_stamps_native_producer() {
+    fn pdf_backend_env_native_is_ignored_and_uses_pdfrs() {
         // SAFETY: test-only; serial test process, restored immediately after.
         unsafe {
             std::env::set_var("RTEX_PDF_BACKEND", "native");
@@ -239,8 +205,8 @@ Hello \textbf{world} and $x^2$.
         }
         let text = String::from_utf8_lossy(&bytes);
         assert!(
-            text.contains("rtex/native"),
-            "expected /Producer rtex/native when forced"
+            text.contains("rtex/pdfrs"),
+            "expected /Producer rtex/pdfrs even when RTEX_PDF_BACKEND=native is set"
         );
     }
 }

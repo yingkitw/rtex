@@ -36,12 +36,14 @@ use crate::image::{self, ImageInfo};
 use crate::pdf_ops::escape_pdf_meta;
 use crate::table_renderer::{PdfTableHelper, TableStyle};
 use crate::thesis::{
-    build_bibliography_elements, collect_citation_defs, expand_toc, format_folio, CitationRegistry,
+    CitationRegistry, build_bibliography_elements, collect_citation_defs, expand_toc, format_folio,
 };
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+#[path = "pdf_generator/accessibility.rs"]
+mod accessibility;
 #[path = "pdf_generator/code_highlight.rs"]
 mod code_highlight;
 #[path = "pdf_generator/math_layout.rs"]
@@ -50,18 +52,17 @@ mod math_layout;
 mod text_support;
 #[path = "pdf_generator/unicode_support.rs"]
 mod unicode_support;
-#[path = "pdf_generator/accessibility.rs"]
-mod accessibility;
 
 use code_highlight::highlight_code;
 use math_layout::{
-    line_height_for_pieces, parse_display_math, piece_width, pieces_to_plain_text, MathPiece,
+    MathPiece, line_height_for_pieces, parse_aligned_grid, parse_display_math,
+    parse_display_math_for_layout, piece_width, pieces_to_plain_text,
 };
 use text_support::{encode_pdf_text, use_base14_normalization};
 pub(crate) use text_support::{escape_pdf_string, render_math_text};
-use unicode_support::{prepare_unicode_font_support_with_subsetting, UnicodeFontEncoder};
 #[cfg(test)]
 use unicode_support::prepare_unicode_font_support;
+use unicode_support::{UnicodeFontEncoder, prepare_unicode_font_support_with_subsetting};
 
 // --- Page orientation and layout ---
 
@@ -114,8 +115,7 @@ fn document_requires_unicode(elements: &[Element]) -> bool {
         | Element::TaskListItem { text, .. }
         | Element::BlockQuote { text, .. }
         | Element::InlineCode { code: text }
-        | Element::StyledText { text, .. }
-        => text_requires_unicode(text),
+        | Element::StyledText { text, .. } => text_requires_unicode(text),
         // Math often starts as ASCII LaTeX and may render to unicode symbols.
         // Enable unicode path only when rendered output actually needs it.
         Element::MathBlock { expression } | Element::MathInline { expression } => {
@@ -128,12 +128,8 @@ fn document_requires_unicode(elements: &[Element]) -> bool {
         Element::Footnote { label, text } => {
             text_requires_unicode(label) || text_requires_unicode(text)
         }
-        Element::Link { text, url } => {
-            text_requires_unicode(text) || text_requires_unicode(url)
-        }
-        Element::Image { alt, path } => {
-            text_requires_unicode(alt) || text_requires_unicode(path)
-        }
+        Element::Link { text, url } => text_requires_unicode(text) || text_requires_unicode(url),
+        Element::Image { alt, path } => text_requires_unicode(alt) || text_requires_unicode(path),
         Element::Chart { title, points, .. } => {
             title.as_ref().is_some_and(|t| text_requires_unicode(t))
                 || points.iter().any(|(l, _)| text_requires_unicode(l))
@@ -145,15 +141,17 @@ fn document_requires_unicode(elements: &[Element]) -> bool {
             | TextSegment::Italic(t)
             | TextSegment::BoldItalic(t)
             | TextSegment::Code(t)
-            | TextSegment::Strikethrough(t)
-            => text_requires_unicode(t),
+            | TextSegment::Strikethrough(t) => text_requires_unicode(t),
             TextSegment::MathInline(expr) => text_requires_unicode(&render_math_text(expr)),
             TextSegment::Link { text, url } => {
                 text_requires_unicode(text) || text_requires_unicode(url)
             }
             TextSegment::Citation { key } => text_requires_unicode(key),
         }),
-        Element::HorizontalRule | Element::EmptyLine | Element::PageBreak | Element::Columns { .. }
+        Element::HorizontalRule
+        | Element::EmptyLine
+        | Element::PageBreak
+        | Element::Columns { .. }
         | Element::PageNumberMode { .. }
         | Element::RunningHeaderMode { .. }
         | Element::Toc
@@ -174,8 +172,9 @@ fn collect_unicode_chars(elements: &[Element]) -> std::collections::BTreeSet<cha
             | Element::TaskListItem { text, .. }
             | Element::BlockQuote { text, .. }
             | Element::InlineCode { code: text }
-            | Element::StyledText { text, .. }
-            => { chars.extend(text.chars()); }
+            | Element::StyledText { text, .. } => {
+                chars.extend(text.chars());
+            }
             Element::MathBlock { expression } | Element::MathInline { expression } => {
                 chars.extend(render_math_text(expression).chars());
                 let pieces = parse_display_math(expression);
@@ -206,10 +205,23 @@ fn collect_unicode_chars(elements: &[Element]) -> std::collections::BTreeSet<cha
                             chars.extend(lower.chars());
                             chars.extend(upper.chars());
                         }
+                        MathPiece::Matrix { rows, .. } => {
+                            for row in rows {
+                                for cell in row {
+                                    for cell_piece in cell {
+                                        if let MathPiece::Text(t) = cell_piece {
+                                            chars.extend(t.chars());
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
-            Element::CodeBlock { code, .. } => { chars.extend(code.chars()); }
+            Element::CodeBlock { code, .. } => {
+                chars.extend(code.chars());
+            }
             Element::DefinitionItem { term, definition } => {
                 chars.extend(term.chars());
                 chars.extend(definition.chars());
@@ -247,8 +259,9 @@ fn collect_unicode_chars(elements: &[Element]) -> std::collections::BTreeSet<cha
                         | TextSegment::Italic(t)
                         | TextSegment::BoldItalic(t)
                         | TextSegment::Code(t)
-                        | TextSegment::Strikethrough(t)
-                        => { chars.extend(t.chars()); }
+                        | TextSegment::Strikethrough(t) => {
+                            chars.extend(t.chars());
+                        }
                         TextSegment::MathInline(expr) => {
                             chars.extend(render_math_text(expr).chars());
                         }
@@ -262,7 +275,10 @@ fn collect_unicode_chars(elements: &[Element]) -> std::collections::BTreeSet<cha
                     }
                 }
             }
-            Element::HorizontalRule | Element::EmptyLine | Element::PageBreak | Element::Columns { .. }
+            Element::HorizontalRule
+            | Element::EmptyLine
+            | Element::PageBreak
+            | Element::Columns { .. }
             | Element::PageNumberMode { .. }
             | Element::RunningHeaderMode { .. }
             | Element::Toc
@@ -591,11 +607,12 @@ impl PdfGenerator {
             pdf.extend_from_slice(obj.content.as_bytes());
 
             if obj.is_stream
-                && let Some(data) = &obj.stream_data {
-                    pdf.extend_from_slice(b"stream\n");
-                    pdf.extend_from_slice(data);
-                    pdf.extend_from_slice(b"\nendstream\n");
-                }
+                && let Some(data) = &obj.stream_data
+            {
+                pdf.extend_from_slice(b"stream\n");
+                pdf.extend_from_slice(data);
+                pdf.extend_from_slice(b"\nendstream\n");
+            }
 
             pdf.extend_from_slice(b"endobj\n");
             current_offset = pdf.len() as u32;
@@ -640,11 +657,37 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn black() -> Self { Color { r: 0.0, g: 0.0, b: 0.0 } }
-    pub fn red() -> Self { Color { r: 1.0, g: 0.0, b: 0.0 } }
-    pub fn blue() -> Self { Color { r: 0.0, g: 0.0, b: 1.0 } }
-    pub fn gray() -> Self { Color { r: 0.5, g: 0.5, b: 0.5 } }
-    pub fn rgb(r: f32, g: f32, b: f32) -> Self { Color { r, g, b } }
+    pub fn black() -> Self {
+        Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+        }
+    }
+    pub fn red() -> Self {
+        Color {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+        }
+    }
+    pub fn blue() -> Self {
+        Color {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+        }
+    }
+    pub fn gray() -> Self {
+        Color {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+        }
+    }
+    pub fn rgb(r: f32, g: f32, b: f32) -> Self {
+        Color { r, g, b }
+    }
 }
 
 /// Text alignment for line rendering
@@ -667,7 +710,7 @@ struct ContentStreamBuilder {
     show_page_numbers: bool,
     layout: PageLayout,
     // Font state
-    current_font: String,  // Font name (e.g., "Helvetica", "Helvetica-Bold")
+    current_font: String, // Font name (e.g., "Helvetica", "Helvetica-Bold")
     current_font_bold: bool,
     current_font_italic: bool,
     unicode_font_encoder: Option<UnicodeFontEncoder>,
@@ -722,7 +765,7 @@ const FONT_HELVETICA: &str = "Helvetica";
 const FONT_HELVETICA_BOLD: &str = "Helvetica-Bold";
 const FONT_HELVETICA_OBLIQUE: &str = "Helvetica-Oblique";
 const FONT_HELVETICA_BOLD_OBLIQUE: &str = "Helvetica-BoldOblique";
-const FONT_COURIER: &str = "Courier";  // Monospace for code
+const FONT_COURIER: &str = "Courier"; // Monospace for code
 
 impl ContentStreamBuilder {
     fn new(
@@ -813,7 +856,8 @@ impl ContentStreamBuilder {
         // Thin rule under header
         self.current.extend_from_slice(b"ET\n");
         let x2 = self.layout.margin_left + self.layout.full_content_width();
-        self.current.extend_from_slice(b"0.75 0.75 0.75 RG\n0.4 w\n");
+        self.current
+            .extend_from_slice(b"0.75 0.75 0.75 RG\n0.4 w\n");
         self.current.extend_from_slice(
             format!(
                 "{:.2} {:.2} m {:.2} {:.2} l S\n",
@@ -842,13 +886,11 @@ impl ContentStreamBuilder {
         self.current.extend_from_slice(b"ET\n");
         for i in 1..n {
             let x = self.layout.column_left(i) - self.layout.column_gap / 2.0;
-            self.current.extend_from_slice(
-                format!("{} {} {} RG\n", color.r, color.g, color.b).as_bytes(),
-            );
+            self.current
+                .extend_from_slice(format!("{} {} {} RG\n", color.r, color.g, color.b).as_bytes());
             self.current.extend_from_slice(b"0.4 w\n");
-            self.current.extend_from_slice(
-                format!("{} {} m {} {} l S\n", x, bottom, x, top).as_bytes(),
-            );
+            self.current
+                .extend_from_slice(format!("{} {} m {} {} l S\n", x, bottom, x, top).as_bytes());
         }
         self.current.extend_from_slice(b"BT\n");
         self.set_font_with_style(self.base_font_size, false, false);
@@ -992,22 +1034,20 @@ impl ContentStreamBuilder {
 
         // Set fill color
         self.current.extend_from_slice(
-            format!("{} {} {} rg\n", fill_color.r, fill_color.g, fill_color.b).as_bytes()
+            format!("{} {} {} rg\n", fill_color.r, fill_color.g, fill_color.b).as_bytes(),
         );
 
         // Draw and fill rectangle
-        self.current.extend_from_slice(
-            format!("{} {} {} {} re f\n", x, y, width, height).as_bytes()
-        );
+        self.current
+            .extend_from_slice(format!("{} {} {} {} re f\n", x, y, width, height).as_bytes());
 
         // Resume text block
         self.current.extend_from_slice(b"BT\n");
         self.set_font(self.current_font_size);
         // Always reset to black text after drawing rectangle
         self.current_color = Color::black();
-        self.current.extend_from_slice(
-            "0 0 0 rg\n".to_string().as_bytes()
-        );
+        self.current
+            .extend_from_slice("0 0 0 rg\n".to_string().as_bytes());
     }
 
     fn draw_line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, line_width: f32, color: Color) {
@@ -1015,29 +1055,35 @@ impl ContentStreamBuilder {
         self.current.extend_from_slice(b"ET\n");
 
         // Set stroke color and line width
-        self.current.extend_from_slice(
-            format!("{} {} {} RG\n", color.r, color.g, color.b).as_bytes()
-        );
-        self.current.extend_from_slice(
-            format!("{} w\n", line_width).as_bytes()
-        );
+        self.current
+            .extend_from_slice(format!("{} {} {} RG\n", color.r, color.g, color.b).as_bytes());
+        self.current
+            .extend_from_slice(format!("{} w\n", line_width).as_bytes());
 
         // Draw line
-        self.current.extend_from_slice(
-            format!("{} {} m {} {} l S\n", x1, y1, x2, y2).as_bytes()
-        );
+        self.current
+            .extend_from_slice(format!("{} {} m {} {} l S\n", x1, y1, x2, y2).as_bytes());
 
         // Resume text block
         self.current.extend_from_slice(b"BT\n");
         self.set_font(self.current_font_size);
         // Reset to current text color
         self.current.extend_from_slice(
-            format!("{} {} {} rg\n", self.current_color.r, self.current_color.g, self.current_color.b).as_bytes()
+            format!(
+                "{} {} {} rg\n",
+                self.current_color.r, self.current_color.g, self.current_color.b
+            )
+            .as_bytes(),
         );
     }
 
     /// Render a complete table with borders, text wrapping, and alignment
-    fn render_table(&mut self, rows: &[Vec<String>], base_font_size: f32, alignments: Option<&[crate::elements::TableAlignment]>) {
+    fn render_table(
+        &mut self,
+        rows: &[Vec<String>],
+        base_font_size: f32,
+        alignments: Option<&[crate::elements::TableAlignment]>,
+    ) {
         if rows.is_empty() {
             return;
         }
@@ -1061,12 +1107,13 @@ impl ContentStreamBuilder {
         }
 
         let line_h = line_height(base_font_size);
-        let approx_char_width = if self.unicode_font_encoder.is_some() && !use_base14_normalization() {
-            // Prefer measured average from a typical Latin sample when CID fonts are active.
-            self.estimate_text_width("abcdefghijklmnopqrstuvwxyz", base_font_size) / 26.0
-        } else {
-            base_font_size * 0.5
-        };
+        let approx_char_width =
+            if self.unicode_font_encoder.is_some() && !use_base14_normalization() {
+                // Prefer measured average from a typical Latin sample when CID fonts are active.
+                self.estimate_text_width("abcdefghijklmnopqrstuvwxyz", base_font_size) / 26.0
+            } else {
+                base_font_size * 0.5
+            };
 
         // Add margin above table
         self.y -= style.margin_top;
@@ -1083,23 +1130,49 @@ impl ContentStreamBuilder {
         // Draw outer border
         self.current.extend_from_slice(b"ET\n");
         let (br, bg, bb) = style.border_color;
+        self.current
+            .extend_from_slice(format!("{} {} {} RG\n", br, bg, bb).as_bytes());
+        self.current
+            .extend_from_slice(format!("{} w\n", style.border_width).as_bytes());
         self.current.extend_from_slice(
-            format!("{} {} {} RG\n", br, bg, bb).as_bytes()
+            format!(
+                "{} {} m {} {} l S\n",
+                start_x,
+                start_y,
+                start_x + dims.total_width,
+                start_y
+            )
+            .as_bytes(),
         );
         self.current.extend_from_slice(
-            format!("{} w\n", style.border_width).as_bytes()
+            format!(
+                "{} {} m {} {} l S\n",
+                start_x,
+                start_y - dims.total_height,
+                start_x + dims.total_width,
+                start_y - dims.total_height
+            )
+            .as_bytes(),
         );
         self.current.extend_from_slice(
-            format!("{} {} m {} {} l S\n", start_x, start_y, start_x + dims.total_width, start_y).as_bytes()
+            format!(
+                "{} {} m {} {} l S\n",
+                start_x,
+                start_y,
+                start_x,
+                start_y - dims.total_height
+            )
+            .as_bytes(),
         );
         self.current.extend_from_slice(
-            format!("{} {} m {} {} l S\n", start_x, start_y - dims.total_height, start_x + dims.total_width, start_y - dims.total_height).as_bytes()
-        );
-        self.current.extend_from_slice(
-            format!("{} {} m {} {} l S\n", start_x, start_y, start_x, start_y - dims.total_height).as_bytes()
-        );
-        self.current.extend_from_slice(
-            format!("{} {} m {} {} l S\n", start_x + dims.total_width, start_y, start_x + dims.total_width, start_y - dims.total_height).as_bytes()
+            format!(
+                "{} {} m {} {} l S\n",
+                start_x + dims.total_width,
+                start_y,
+                start_x + dims.total_width,
+                start_y - dims.total_height
+            )
+            .as_bytes(),
         );
 
         // Draw horizontal grid lines
@@ -1107,14 +1180,19 @@ impl ContentStreamBuilder {
         for (i, &row_h) in dims.row_heights.iter().enumerate() {
             if i > 0 {
                 let (gr, gg, gb) = style.grid_color;
+                self.current
+                    .extend_from_slice(format!("{} {} {} RG\n", gr, gg, gb).as_bytes());
+                self.current
+                    .extend_from_slice(format!("{} w\n", style.grid_line_width).as_bytes());
                 self.current.extend_from_slice(
-                    format!("{} {} {} RG\n", gr, gg, gb).as_bytes()
-                );
-                self.current.extend_from_slice(
-                    format!("{} w\n", style.grid_line_width).as_bytes()
-                );
-                self.current.extend_from_slice(
-                    format!("{} {} m {} {} l S\n", start_x, current_y, start_x + dims.total_width, current_y).as_bytes()
+                    format!(
+                        "{} {} m {} {} l S\n",
+                        start_x,
+                        current_y,
+                        start_x + dims.total_width,
+                        current_y
+                    )
+                    .as_bytes(),
                 );
             }
             current_y -= row_h;
@@ -1125,14 +1203,19 @@ impl ContentStreamBuilder {
         for i in 1..dims.num_cols {
             current_x += dims.column_widths[i - 1];
             let (gr, gg, gb) = style.grid_color;
+            self.current
+                .extend_from_slice(format!("{} {} {} RG\n", gr, gg, gb).as_bytes());
+            self.current
+                .extend_from_slice(format!("{} w\n", style.grid_line_width).as_bytes());
             self.current.extend_from_slice(
-                format!("{} {} {} RG\n", gr, gg, gb).as_bytes()
-            );
-            self.current.extend_from_slice(
-                format!("{} w\n", style.grid_line_width).as_bytes()
-            );
-            self.current.extend_from_slice(
-                format!("{} {} m {} {} l S\n", current_x, start_y, current_x, start_y - dims.total_height).as_bytes()
+                format!(
+                    "{} {} m {} {} l S\n",
+                    current_x,
+                    start_y,
+                    current_x,
+                    start_y - dims.total_height
+                )
+                .as_bytes(),
             );
         }
 
@@ -1146,10 +1229,14 @@ impl ContentStreamBuilder {
         for (row_idx, row) in table_rows.iter().enumerate() {
             let mut col_x = start_x;
             for (col_idx, cell) in row.cells.iter().enumerate() {
-                if col_idx >= dims.num_cols { break; }
+                if col_idx >= dims.num_cols {
+                    break;
+                }
                 let cell_width = dims.column_widths[col_idx];
                 let cell_height = dims.row_heights[row_idx];
-                let max_chars = ((cell_width - style.cell_padding * 2.0) / approx_char_width).floor().max(1.0) as usize;
+                let max_chars = ((cell_width - style.cell_padding * 2.0) / approx_char_width)
+                    .floor()
+                    .max(1.0) as usize;
 
                 // Wrap text into lines using the table helper
                 let wrapped = table_helper.renderer().wrap_text(&cell.content, max_chars);
@@ -1173,11 +1260,10 @@ impl ContentStreamBuilder {
 
                     let y = start_y_pos - (line_idx as f32 * line_h);
 
+                    self.current
+                        .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, y).as_bytes());
                     self.current.extend_from_slice(
-                        format!("1 0 0 1 {} {} Tm\n", x, y).as_bytes()
-                    );
-                    self.current.extend_from_slice(
-                        format!("{} Tj\n", self.encode_text_for_current_font(line)).as_bytes()
+                        format!("{} Tj\n", self.encode_text_for_current_font(line)).as_bytes(),
                     );
                 }
 
@@ -1219,13 +1305,13 @@ impl ContentStreamBuilder {
             return;
         }
 
-        let approx_char_width = if self.unicode_font_encoder.is_some() && !use_base14_normalization()
-        {
-            // Average Latin advance under Identity-H ≈ 0.5em once real `/W` is used.
-            font_size * 0.5
-        } else {
-            font_size * 0.5
-        };
+        let approx_char_width =
+            if self.unicode_font_encoder.is_some() && !use_base14_normalization() {
+                // Average Latin advance under Identity-H ≈ 0.5em once real `/W` is used.
+                font_size * 0.5
+            } else {
+                font_size * 0.5
+            };
         let max_chars = (max_width / approx_char_width).floor().max(1.0) as usize;
 
         let words: Vec<String> = text
@@ -1456,14 +1542,7 @@ impl ContentStreamBuilder {
                 let w = measure(builder, &tok.text, tok.mono);
                 if tok.strike {
                     let strike_y = builder.y + font_size * 0.3;
-                    builder.draw_line(
-                        x,
-                        strike_y,
-                        x + w,
-                        strike_y,
-                        0.7,
-                        Color::black(),
-                    );
+                    builder.draw_line(x, strike_y, x + w, strike_y, 0.7, Color::black());
                 }
                 x += w;
             }
@@ -1515,9 +1594,8 @@ impl ContentStreamBuilder {
         match piece {
             MathPiece::Text(text) => {
                 self.set_font_with_style(math_size, false, true);
-                self.current.extend_from_slice(
-                    format!("1 0 0 1 {} {} Tm\n", x, axis_y).as_bytes(),
-                );
+                self.current
+                    .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, axis_y).as_bytes());
                 let enc = self.encode_text_for_current_font(text);
                 self.current
                     .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
@@ -1526,7 +1604,7 @@ impl ContentStreamBuilder {
             MathPiece::Sqrt { index, radicand } => {
                 let script = math_size * 0.85;
                 let rw = self.measure_math_text(radicand, script);
-                let radical_w = math_size * 0.45;
+                let radical_w = math_size * 0.55;
                 let index_w = index
                     .as_ref()
                     .map(|i| {
@@ -1534,40 +1612,35 @@ impl ContentStreamBuilder {
                         self.measure_math_text(&rendered, math_size * 0.55)
                     })
                     .unwrap_or(0.0);
-                let vinculum_y = axis_y + script * 0.72;
+                let vinculum_y = axis_y + script * 0.80;
+                let bottom_y = axis_y - script * 0.25;
                 let tail_x = x + index_w + 1.0;
-                let radicand_x = x + index_w + radical_w;
+                let hook_end = tail_x + radical_w * 0.25;
+                let stem_top = tail_x + radical_w * 0.55;
+                let radicand_x = stem_top + 1.5;
 
                 if let Some(idx) = index {
                     let rendered_idx = render_math_text(idx);
                     self.set_font_with_style(math_size * 0.55, false, false);
                     self.current.extend_from_slice(
-                        format!(
-                            "1 0 0 1 {} {} Tm\n",
-                            x,
-                            axis_y + script * 0.45
-                        )
-                        .as_bytes(),
+                        format!("1 0 0 1 {} {} Tm\n", x, axis_y + script * 0.45).as_bytes(),
                     );
                     let enc = self.encode_text_for_current_font(&rendered_idx);
                     self.current
                         .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
                 }
 
+                // Bottom hook of the radical sign.
+                self.draw_line(tail_x, bottom_y, hook_end, bottom_y, 0.9, stroke);
+                // Diagonal stem rising from the hook to the vinculum.
+                self.draw_line(hook_end, bottom_y, stem_top, vinculum_y, 1.0, stroke);
+                // Horizontal vinculum over the radicand.
                 self.draw_line(
-                    tail_x,
-                    axis_y - script * 0.25,
-                    tail_x + radical_w * 0.22,
+                    stem_top,
                     vinculum_y,
-                    0.85,
-                    stroke,
-                );
-                self.draw_line(
-                    tail_x + radical_w * 0.18,
+                    radicand_x + rw + 3.0,
                     vinculum_y,
-                    radicand_x + rw + 2.0,
-                    vinculum_y,
-                    0.85,
+                    0.9,
                     stroke,
                 );
 
@@ -1579,7 +1652,107 @@ impl ContentStreamBuilder {
                 self.current
                     .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
 
-                index_w + radical_w + rw + 4.0
+                index_w + radical_w + rw + 5.5
+            }
+            MathPiece::Matrix {
+                rows,
+                left_delim,
+                right_delim,
+            } => {
+                if rows.is_empty() || rows.iter().all(|r| r.is_empty()) {
+                    return 0.0;
+                }
+                let cell_size = math_size;
+                let cell_pad = 4.0;
+                let delim_pad = 3.0;
+                let col_count = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+
+                let mut col_widths = vec![0.0f32; col_count];
+                let mut row_heights = Vec::new();
+                for row in rows {
+                    let mut row_height = 0.0f32;
+                    for (col_idx, cell) in row.iter().enumerate() {
+                        let cell_width: f32 = cell
+                            .iter()
+                            .map(|p| {
+                                piece_width(p, cell_size, &|t, s| self.measure_math_text(t, s))
+                            })
+                            .sum();
+                        col_widths[col_idx] = col_widths[col_idx].max(cell_width);
+                        row_height = row_height.max(line_height_for_pieces(cell, cell_size));
+                    }
+                    row_heights.push(row_height);
+                }
+
+                let matrix_width = col_widths.iter().sum::<f32>()
+                    + cell_pad * (col_count.saturating_sub(1)) as f32;
+                let matrix_height = row_heights.iter().sum::<f32>()
+                    + cell_pad * (rows.len().saturating_sub(1)) as f32;
+
+                let delim_size = matrix_height.max(cell_size * 0.8);
+                let delim_baseline_y = axis_y - delim_size * 0.35;
+                let left_delim_w = if left_delim.is_empty() {
+                    0.0
+                } else {
+                    self.measure_math_text(left_delim, delim_size)
+                };
+                let right_delim_w = if right_delim.is_empty() {
+                    0.0
+                } else {
+                    self.measure_math_text(right_delim, delim_size)
+                };
+
+                if !left_delim.is_empty() {
+                    self.set_font_with_style(delim_size, false, false);
+                    self.current.extend_from_slice(
+                        format!(
+                            "1 0 0 1 {} {} Tm\n",
+                            x + left_delim_w / 2.0,
+                            delim_baseline_y
+                        )
+                        .as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(left_delim);
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                }
+
+                let start_x = x + left_delim_w + delim_pad;
+                let top_y = axis_y + matrix_height / 2.0 - row_heights[0] / 2.0;
+                let mut current_y = top_y;
+                for (row_idx, row) in rows.iter().enumerate() {
+                    let mut current_x = start_x;
+                    for (col_idx, cell) in row.iter().enumerate() {
+                        let cell_w = col_widths[col_idx];
+                        let cell_width_actual: f32 = cell
+                            .iter()
+                            .map(|p| {
+                                piece_width(p, cell_size, &|t, s| self.measure_math_text(t, s))
+                            })
+                            .sum();
+                        let cell_x = current_x + (cell_w - cell_width_actual) / 2.0;
+                        let mut piece_x = cell_x;
+                        for piece in cell {
+                            piece_x +=
+                                self.emit_math_piece_at(piece, piece_x, current_y, cell_size);
+                        }
+                        current_x += cell_w + cell_pad;
+                    }
+                    current_y -= row_heights[row_idx] + cell_pad;
+                }
+
+                if !right_delim.is_empty() {
+                    let right_x = start_x + matrix_width + delim_pad + right_delim_w / 2.0;
+                    self.set_font_with_style(delim_size, false, false);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", right_x, delim_baseline_y).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(right_delim);
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                }
+
+                left_delim_w + matrix_width + right_delim_w + delim_pad * 2.0
             }
             MathPiece::Operator {
                 symbol,
@@ -1635,12 +1808,8 @@ impl ContentStreamBuilder {
                         let uw = self.measure_math_text(upper, script);
                         self.set_font_with_style(script, false, false);
                         self.current.extend_from_slice(
-                            format!(
-                                "1 0 0 1 {} {} Tm\n",
-                                cx - uw / 2.0,
-                                axis_y + op_size * 0.62
-                            )
-                            .as_bytes(),
+                            format!("1 0 0 1 {} {} Tm\n", cx - uw / 2.0, axis_y + op_size * 0.62)
+                                .as_bytes(),
                         );
                         let enc = self.encode_text_for_current_font(upper);
                         self.current
@@ -1664,12 +1833,8 @@ impl ContentStreamBuilder {
                         let lw = self.measure_math_text(lower, script);
                         self.set_font_with_style(script, false, false);
                         self.current.extend_from_slice(
-                            format!(
-                                "1 0 0 1 {} {} Tm\n",
-                                cx - lw / 2.0,
-                                axis_y - op_size * 0.78
-                            )
-                            .as_bytes(),
+                            format!("1 0 0 1 {} {} Tm\n", cx - lw / 2.0, axis_y - op_size * 0.78)
+                                .as_bytes(),
                         );
                         let enc = self.encode_text_for_current_font(lower);
                         self.current
@@ -1687,15 +1852,11 @@ impl ContentStreamBuilder {
                 let den_pieces = parse_display_math(denominator);
                 let nw: f32 = num_pieces
                     .iter()
-                    .map(|p| {
-                        piece_width(p, script, &|t, s| self.measure_math_text(t, s))
-                    })
+                    .map(|p| piece_width(p, script, &|t, s| self.measure_math_text(t, s)))
                     .sum();
                 let dw: f32 = den_pieces
                     .iter()
-                    .map(|p| {
-                        piece_width(p, script, &|t, s| self.measure_math_text(t, s))
-                    })
+                    .map(|p| piece_width(p, script, &|t, s| self.measure_math_text(t, s)))
                     .sum();
                 let w = nw.max(dw) + 6.0;
                 let cx = x + w / 2.0;
@@ -1728,18 +1889,51 @@ impl ContentStreamBuilder {
     fn emit_display_math(&mut self, expression: &str, base_font_size: f32) {
         let math_size = base_font_size * 1.28;
         let padding = 10.0;
-        // Flatten multi-line matrix environments first, then split remaining rows.
-        let flattened = text_support::flatten_math_environments(expression);
-        let lines: Vec<&str> = flattened
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .collect();
-        if lines.is_empty() {
+        // Normalize spacing but keep matrix environments intact so they can be
+        // laid out as grids.  Individual rows are still split on newlines.
+        let normalized = text_support::normalize_math_display(expression);
+        let contains_matrix = ["pmatrix", "bmatrix", "vmatrix", "matrix"]
+            .iter()
+            .any(|env| normalized.contains(&format!("\\begin{{{}}}", env)));
+        let contains_align = normalized.contains('&');
+
+        // Split display math into rows. Matrices keep their internal \\
+        // separators, so only split them on newlines; other multi-line math
+        // splits on both \\
+        // and newlines.
+        let rows: Vec<&str> = if contains_matrix {
+            normalized
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect()
+        } else {
+            normalized
+                .split("\\\\")
+                .flat_map(|segment| segment.lines())
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect()
+        };
+        if rows.is_empty() {
             return;
         }
 
-        let parsed: Vec<Vec<MathPiece>> = lines.iter().map(|l| parse_display_math(l)).collect();
+        let parsed: Vec<Vec<MathPiece>> = if contains_matrix {
+            // Matrices may span source lines; join them so the matrix parser can
+            // see each \begin{...}...\end{...} as a single logical unit.
+            vec![parse_display_math_for_layout(&rows.join(" "))]
+        } else if contains_align {
+            if let Some(grid) = parse_aligned_grid(&rows.join(" \\\\ ")) {
+                vec![vec![grid]]
+            } else {
+                vec![parse_display_math_for_layout(&rows.join(" "))]
+            }
+        } else {
+            rows.iter()
+                .map(|r| parse_display_math_for_layout(r))
+                .collect()
+        };
         let row_heights: Vec<f32> = parsed
             .iter()
             .map(|pieces| line_height_for_pieces(pieces, math_size))
@@ -1756,7 +1950,14 @@ impl ContentStreamBuilder {
         self.draw_rectangle(rect_x, rect_y, rect_width, block_height, bg_color);
 
         let accent_color = Color::rgb(0.3, 0.4, 0.8);
-        self.draw_line(rect_x, rect_y, rect_x, rect_y + block_height, 2.0, accent_color);
+        self.draw_line(
+            rect_x,
+            rect_y,
+            rect_x,
+            rect_y + block_height,
+            2.0,
+            accent_color,
+        );
 
         self.set_color(Color::rgb(0.08, 0.1, 0.28));
 
@@ -1771,8 +1972,7 @@ impl ContentStreamBuilder {
                 .iter()
                 .map(|p| piece_width(p, math_size, &|t, s| measure(self, t, s)))
                 .sum();
-            let mut x = self.content_left()
-                + ((self.content_width() - total_w) / 2.0).max(4.0);
+            let mut x = self.content_left() + ((self.content_width() - total_w) / 2.0).max(4.0);
 
             for piece in pieces {
                 x += self.emit_math_piece_at(piece, x, axis_y, math_size);
@@ -1789,9 +1989,8 @@ impl ContentStreamBuilder {
 
     fn set_color(&mut self, color: Color) {
         self.current_color = color;
-        self.current.extend_from_slice(
-            format!("{} {} {} rg\n", color.r, color.g, color.b).as_bytes(),
-        );
+        self.current
+            .extend_from_slice(format!("{} {} {} rg\n", color.r, color.g, color.b).as_bytes());
     }
 
     fn reset_color(&mut self) {
@@ -1877,8 +2076,9 @@ impl ContentStreamBuilder {
 
         self.current
             .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, self.y).as_bytes());
-        self.current
-            .extend_from_slice(format!("{} Tj\n", self.encode_text_for_current_font(&display)).as_bytes());
+        self.current.extend_from_slice(
+            format!("{} Tj\n", self.encode_text_for_current_font(&display)).as_bytes(),
+        );
         self.y -= lh;
         self.mark_content_placed();
     }
@@ -1892,12 +2092,12 @@ impl ContentStreamBuilder {
         self.ensure_space(lh);
         self.set_font(font_size);
         let approx_width = self.estimate_text_width(text, font_size);
-        let x = self.layout.margin_left
-            + (self.layout.full_content_width() - approx_width) / 2.0;
+        let x = self.layout.margin_left + (self.layout.full_content_width() - approx_width) / 2.0;
         self.current
             .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, self.y).as_bytes());
-        self.current
-            .extend_from_slice(format!("{} Tj\n", self.encode_text_for_current_font(text)).as_bytes());
+        self.current.extend_from_slice(
+            format!("{} Tj\n", self.encode_text_for_current_font(text)).as_bytes(),
+        );
         self.y -= lh;
         self.column_top_y = self.y;
         self.mark_content_placed();
@@ -1906,9 +2106,10 @@ impl ContentStreamBuilder {
     fn encode_text_for_current_font(&self, text: &str) -> String {
         if self.current_font != FONT_COURIER
             && let Some(encoder) = &self.unicode_font_encoder
-                && !use_base14_normalization() {
-                    return encoder.encode_text_as_glyph_ids(text);
-                }
+            && !use_base14_normalization()
+        {
+            return encoder.encode_text_as_glyph_ids(text);
+        }
         encode_pdf_text(text)
     }
 
@@ -1973,7 +2174,8 @@ impl ContentStreamBuilder {
         let Ok(info) = loaded else {
             self.image_errors.push(format!(
                 "failed to load image '{}' ({})",
-                alt, resolved.display()
+                alt,
+                resolved.display()
             ));
             return;
         };
@@ -2023,12 +2225,7 @@ impl ContentStreamBuilder {
     }
 
     /// Draw a bar / line / pie chart from labeled numeric points.
-    fn emit_chart(
-        &mut self,
-        kind: ChartKind,
-        title: &Option<String>,
-        points: &[(String, f32)],
-    ) {
+    fn emit_chart(&mut self, kind: ChartKind, title: &Option<String>, points: &[(String, f32)]) {
         if points.is_empty() {
             return;
         }
@@ -2131,8 +2328,11 @@ impl ContentStreamBuilder {
             let x = plot_x + i as f32 * slot + (slot - bar_w) / 2.0;
             let y = plot_y0;
             self.current.extend_from_slice(
-                format!("{} {} {} rg\n{:.2} {:.2} {:.2} {:.2} re f\n", r, g, b, x, y, bar_w, h)
-                    .as_bytes(),
+                format!(
+                    "{} {} {} rg\n{:.2} {:.2} {:.2} {:.2} re f\n",
+                    r, g, b, x, y, bar_w, h
+                )
+                .as_bytes(),
             );
             // Label under bar (short)
             let short = truncate_label(label, 8);
@@ -2158,10 +2358,7 @@ impl ContentStreamBuilder {
             .iter()
             .map(|(_, v)| *v)
             .fold(f32::NEG_INFINITY, f32::max);
-        let min_v = points
-            .iter()
-            .map(|(_, v)| *v)
-            .fold(f32::INFINITY, f32::min);
+        let min_v = points.iter().map(|(_, v)| *v).fold(f32::INFINITY, f32::min);
         let span = (max_v - min_v).abs().max(1.0);
         let axis = Color::rgb(0.35, 0.35, 0.35);
         let pad_l = 28.0;
@@ -2254,19 +2451,15 @@ impl ContentStreamBuilder {
         }
     }
 
-    fn append_pie_slice(
-        &mut self,
-        cx: f32,
-        cy: f32,
-        radius: f32,
-        a0: f32,
-        a1: f32,
-        fill: Color,
-    ) {
+    fn append_pie_slice(&mut self, cx: f32, cy: f32, radius: f32, a0: f32, a1: f32, fill: Color) {
         // Approximate arc with line segments.
         let steps = ((a1 - a0).abs() / 0.2).ceil().max(2.0) as usize;
         self.current.extend_from_slice(
-            format!("{} {} {} rg\n{:.2} {:.2} m\n", fill.r, fill.g, fill.b, cx, cy).as_bytes(),
+            format!(
+                "{} {} {} rg\n{:.2} {:.2} m\n",
+                fill.r, fill.g, fill.b, cx, cy
+            )
+            .as_bytes(),
         );
         for i in 0..=steps {
             let t = i as f32 / steps as f32;
@@ -2342,7 +2535,11 @@ fn truncate_label(label: &str, max_chars: usize) -> String {
     if count <= max_chars {
         return label.to_string();
     }
-    label.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
+    label
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>()
+        + "…"
 }
 
 fn format_chart_value(v: f32) -> String {
@@ -2388,7 +2585,13 @@ pub fn create_pdf_from_elements(
     font: &str,
     base_font_size: f32,
 ) -> Result<()> {
-    create_pdf_from_elements_with_layout(filename, elements, font, base_font_size, PageLayout::portrait())
+    create_pdf_from_elements_with_layout(
+        filename,
+        elements,
+        font,
+        base_font_size,
+        PageLayout::portrait(),
+    )
 }
 
 /// Rich element-based pipeline with configurable page layout (orientation)
@@ -2463,13 +2666,22 @@ fn prepare_elements_for_render(
 }
 
 /// Render elements into a ContentStreamBuilder (shared by file and bytes APIs)
-fn render_elements_to_builder(builder: &mut ContentStreamBuilder, elements: &[Element], base_font_size: f32) {
+fn render_elements_to_builder(
+    builder: &mut ContentStreamBuilder,
+    elements: &[Element],
+    base_font_size: f32,
+) {
     let mut table_rows: Vec<Vec<String>> = Vec::new();
     let mut table_alignments: Option<Vec<crate::elements::TableAlignment>> = None;
 
     for elem in elements {
         // Handle table rows specially - accumulate them
-        if let Element::TableRow { cells, is_separator, alignments } = elem {
+        if let Element::TableRow {
+            cells,
+            is_separator,
+            alignments,
+        } = elem
+        {
             if *is_separator {
                 // Store alignments from separator row
                 table_alignments = Some(alignments.clone());
@@ -2532,7 +2744,11 @@ fn render_elements_to_builder(builder: &mut ContentStreamBuilder, elements: &[El
                 let line = format!("{}- {}", indent, text);
                 builder.emit_wrapped_text(&line, base_font_size);
             }
-            Element::OrderedListItem { number, text, depth } => {
+            Element::OrderedListItem {
+                number,
+                text,
+                depth,
+            } => {
                 let indent = "  ".repeat(*depth as usize);
                 let line = format!("{}{}. {}", indent, number, text);
                 builder.emit_wrapped_text(&line, base_font_size);
@@ -2544,7 +2760,7 @@ fn render_elements_to_builder(builder: &mut ContentStreamBuilder, elements: &[El
             }
             Element::CodeBlock { code, language } => {
                 let code_size = base_font_size * 0.85;
-                let padding = 8.0;
+                let padding = 12.0;
                 let line_h = line_height(code_size);
                 let max_code_width = builder.content_width();
                 let all_lines: Vec<&str> = code.lines().collect();
@@ -2576,10 +2792,38 @@ fn render_elements_to_builder(builder: &mut ContentStreamBuilder, elements: &[El
                     builder.draw_rectangle(rect_x, rect_y, rect_width, rect_height, bg_color);
 
                     let border_color = Color::rgb(0.75, 0.75, 0.75);
-                    builder.draw_line(rect_x, rect_y, rect_x + rect_width, rect_y, 0.5, border_color);
-                    builder.draw_line(rect_x, rect_y + rect_height, rect_x + rect_width, rect_y + rect_height, 0.5, border_color);
-                    builder.draw_line(rect_x, rect_y, rect_x, rect_y + rect_height, 0.5, border_color);
-                    builder.draw_line(rect_x + rect_width, rect_y, rect_x + rect_width, rect_y + rect_height, 0.5, border_color);
+                    builder.draw_line(
+                        rect_x,
+                        rect_y,
+                        rect_x + rect_width,
+                        rect_y,
+                        0.5,
+                        border_color,
+                    );
+                    builder.draw_line(
+                        rect_x,
+                        rect_y + rect_height,
+                        rect_x + rect_width,
+                        rect_y + rect_height,
+                        0.5,
+                        border_color,
+                    );
+                    builder.draw_line(
+                        rect_x,
+                        rect_y,
+                        rect_x,
+                        rect_y + rect_height,
+                        0.5,
+                        border_color,
+                    );
+                    builder.draw_line(
+                        rect_x + rect_width,
+                        rect_y,
+                        rect_x + rect_width,
+                        rect_y + rect_height,
+                        0.5,
+                        border_color,
+                    );
 
                     builder.set_monospace_font(code_size);
 
@@ -2588,30 +2832,39 @@ fn render_elements_to_builder(builder: &mut ContentStreamBuilder, elements: &[El
 
                         if line_tokens.is_empty() || line_tokens.iter().all(|t| t.text.is_empty()) {
                             builder.current.extend_from_slice(
-                                format!("{} {} {} rg\n", 0.15, 0.15, 0.15).as_bytes()
+                                format!("{} {} {} rg\n", 0.15, 0.15, 0.15).as_bytes(),
                             );
                             builder.current.extend_from_slice(
-                                format!("1 0 0 1 {} {} Tm\n", builder.content_left(), builder.y).as_bytes()
+                                format!("1 0 0 1 {} {} Tm\n", builder.content_left(), builder.y)
+                                    .as_bytes(),
                             );
                             builder.current.extend_from_slice(
-                                format!("{} Tj\n", builder.encode_text_for_current_font(code_line)).as_bytes()
+                                format!("{} Tj\n", builder.encode_text_for_current_font(code_line))
+                                    .as_bytes(),
                             );
                         } else {
                             // Position once, then emit sequential Tj so extractors keep identifiers contiguous.
                             builder.current.extend_from_slice(
-                                format!("1 0 0 1 {} {} Tm\n", builder.content_left(), builder.y).as_bytes()
+                                format!("1 0 0 1 {} {} Tm\n", builder.content_left(), builder.y)
+                                    .as_bytes(),
                             );
                             for token in &line_tokens {
                                 if token.text.is_empty() {
                                     continue;
                                 }
                                 builder.current.extend_from_slice(
-                                    format!("{} {} {} rg\n", token.color.r, token.color.g, token.color.b)
-                                        .as_bytes(),
+                                    format!(
+                                        "{} {} {} rg\n",
+                                        token.color.r, token.color.g, token.color.b
+                                    )
+                                    .as_bytes(),
                                 );
                                 builder.current.extend_from_slice(
-                                    format!("{} Tj\n", builder.encode_text_for_current_font(&token.text))
-                                        .as_bytes(),
+                                    format!(
+                                        "{} Tj\n",
+                                        builder.encode_text_for_current_font(&token.text)
+                                    )
+                                    .as_bytes(),
                                 );
                             }
                         }
@@ -2654,7 +2907,11 @@ fn render_elements_to_builder(builder: &mut ContentStreamBuilder, elements: &[El
             Element::Image { alt, path } => {
                 builder.emit_image(alt, path);
             }
-            Element::Chart { kind, title, points } => {
+            Element::Chart {
+                kind,
+                title,
+                points,
+            } => {
                 builder.emit_chart(*kind, title, points);
             }
             Element::StyledText { text, bold, italic } => {
@@ -2754,13 +3011,15 @@ struct FontResourceIds {
 
 fn add_shared_font_resources(
     generator: &mut PdfGenerator,
-    unicode_font: Option<(&[u8], &UnicodeFontEncoder, &std::collections::BTreeSet<char>)>,
+    unicode_font: Option<(
+        &[u8],
+        &UnicodeFontEncoder,
+        &std::collections::BTreeSet<char>,
+    )>,
 ) -> FontResourceIds {
     let helvetica_id = if let Some((bytes, encoder, chars)) = unicode_font {
-        let font_file_id = generator.add_stream_object(
-            format!("<< /Length {} >>\n", bytes.len()),
-            bytes.to_vec(),
-        );
+        let font_file_id =
+            generator.add_stream_object(format!("<< /Length {} >>\n", bytes.len()), bytes.to_vec());
 
         let descriptor_id = generator.add_object(format!(
             "<< /Type /FontDescriptor\n/FontName /UnicodeTT\n/Flags 4\n/FontBBox [0 -200 1000 900]\n/ItalicAngle 0\n/Ascent 800\n/Descent -200\n/CapHeight 700\n/StemV 80\n/MissingWidth 500\n/FontFile2 {} 0 R\n>>\n",
@@ -2774,10 +3033,8 @@ fn add_shared_font_resources(
         ));
 
         let tounicode = encoder.build_tounicode_cmap(chars);
-        let tounicode_id = generator.add_stream_object(
-            format!("<< /Length {} >>\n", tounicode.len()),
-            tounicode,
-        );
+        let tounicode_id =
+            generator.add_stream_object(format!("<< /Length {} >>\n", tounicode.len()), tounicode);
 
         generator.add_object(format!(
             "<< /Type /Font\n/Subtype /Type0\n/BaseFont /UnicodeTT\n/Encoding /Identity-H\n/DescendantFonts [{} 0 R]\n/ToUnicode {} 0 R\n>>\n",
@@ -2958,7 +3215,15 @@ pub fn generate_pdf_bytes_with_compression(
     layout: PageLayout,
     compression_level: Option<u8>,
 ) -> Result<Vec<u8>> {
-    generate_pdf_bytes_internal(elements, font, base_font_size, layout, compression_level, false, None)
+    generate_pdf_bytes_internal(
+        elements,
+        font,
+        base_font_size,
+        layout,
+        compression_level,
+        false,
+        None,
+    )
 }
 
 /// Generate a tagged/accessible PDF with PDF/UA structural support.
@@ -2987,7 +3252,15 @@ pub fn generate_tagged_pdf_bytes(
     layout: PageLayout,
     options: AccessibilityOptions,
 ) -> Result<Vec<u8>> {
-    generate_pdf_bytes_internal(elements, font, base_font_size, layout, None, false, Some(&options))
+    generate_pdf_bytes_internal(
+        elements,
+        font,
+        base_font_size,
+        layout,
+        None,
+        false,
+        Some(&options),
+    )
 }
 
 /// Render only a specific page range from elements into a standalone PDF.
@@ -3082,7 +3355,11 @@ fn assemble_pdf_bytes(
     page_streams: &[Vec<u8>],
     _font: &str,
     layout: &PageLayout,
-    unicode_font: Option<(&[u8], &UnicodeFontEncoder, &std::collections::BTreeSet<char>)>,
+    unicode_font: Option<(
+        &[u8],
+        &UnicodeFontEncoder,
+        &std::collections::BTreeSet<char>,
+    )>,
     compression_level: Option<u8>,
     accessibility: Option<&AccessibilityOptions>,
     outlines: &[OutlineDest],
@@ -3124,13 +3401,20 @@ fn assemble_pdf_bytes(
     for page_stream in page_streams {
         let (dict, data) = if let Some(level) = compression_level {
             match crate::compression::compress_deflate_with_level(page_stream, level) {
-                Ok(compressed) if compressed.len() < page_stream.len() => {
-                    (format!("<< /Length {} /Filter /FlateDecode >>\n", compressed.len()), compressed)
-                }
-                _ => (format!("<< /Length {} >>\n", page_stream.len()), page_stream.clone()),
+                Ok(compressed) if compressed.len() < page_stream.len() => (
+                    format!("<< /Length {} /Filter /FlateDecode >>\n", compressed.len()),
+                    compressed,
+                ),
+                _ => (
+                    format!("<< /Length {} >>\n", page_stream.len()),
+                    page_stream.clone(),
+                ),
             }
         } else {
-            (format!("<< /Length {} >>\n", page_stream.len()), page_stream.clone())
+            (
+                format!("<< /Length {} >>\n", page_stream.len()),
+                page_stream.clone(),
+            )
         };
         let content_id = generator.add_stream_object(dict, data);
 
@@ -3151,11 +3435,16 @@ fn assemble_pdf_bytes(
             layout.width,
             layout.height,
             content_id,
-            FONT_HELVETICA, font_ids.helvetica,
-            FONT_HELVETICA_BOLD, font_ids.helvetica_bold,
-            FONT_HELVETICA_OBLIQUE, font_ids.helvetica_oblique,
-            FONT_HELVETICA_BOLD_OBLIQUE, font_ids.helvetica_bold_oblique,
-            FONT_COURIER, font_ids.courier,
+            FONT_HELVETICA,
+            font_ids.helvetica,
+            FONT_HELVETICA_BOLD,
+            font_ids.helvetica_bold,
+            FONT_HELVETICA_OBLIQUE,
+            font_ids.helvetica_oblique,
+            FONT_HELVETICA_BOLD_OBLIQUE,
+            font_ids.helvetica_bold_oblique,
+            FONT_COURIER,
+            font_ids.courier,
             xobject_resource,
         );
         let page_id = generator.add_object(page_dict);
@@ -3204,13 +3493,14 @@ fn assemble_pdf_bytes(
     // Build catalog with optional tagged PDF entries and outlines
     let mut catalog_entries = format!("/Pages {} 0 R\n", actual_pages_id);
     if let Some(opts) = accessibility
-        && opts.tagged_pdf {
-            catalog_entries.push_str("/MarkInfo << /Marked true >>\n");
-            catalog_entries.push_str(&format!("/Lang ({})\n", escape_pdf_meta(&opts.language)));
-            if let Some(st_id) = struct_tree_id {
-                catalog_entries.push_str(&format!("/StructTreeRoot {} 0 R\n", st_id));
-            }
+        && opts.tagged_pdf
+    {
+        catalog_entries.push_str("/MarkInfo << /Marked true >>\n");
+        catalog_entries.push_str(&format!("/Lang ({})\n", escape_pdf_meta(&opts.language)));
+        if let Some(st_id) = struct_tree_id {
+            catalog_entries.push_str(&format!("/StructTreeRoot {} 0 R\n", st_id));
         }
+    }
 
     if let Some(outlines_id) = add_outline_tree(&mut generator, &page_ids, outlines) {
         catalog_entries.push_str(&format!("/Outlines {} 0 R\n", outlines_id));
@@ -3273,10 +3563,9 @@ fn add_outline_tree(
     Some(actual_root)
 }
 
-
-
-pub use accessibility::{AccessibilityOptions, StructureElement, StructureType, element_to_structure};
-
+pub use accessibility::{
+    AccessibilityOptions, StructureElement, StructureType, element_to_structure,
+};
 
 #[cfg(test)]
 mod accessibility_tests {
@@ -3318,7 +3607,10 @@ mod accessibility_tests {
 
         assert_eq!(elem.struct_type, StructureType::P);
         assert_eq!(elem.alt_text, Some("A paragraph".to_string()));
-        assert_eq!(elem.actual_text, Some("This is the actual text".to_string()));
+        assert_eq!(
+            elem.actual_text,
+            Some("This is the actual text".to_string())
+        );
     }
 
     #[test]
@@ -3332,7 +3624,10 @@ mod accessibility_tests {
 
     #[test]
     fn test_element_to_structure_heading() {
-        let elem = Element::Heading { level: 1, text: "Hello".into() };
+        let elem = Element::Heading {
+            level: 1,
+            text: "Hello".into(),
+        };
         let struct_elem = element_to_structure(&elem);
 
         assert_eq!(struct_elem.struct_type, StructureType::H1);
@@ -3341,7 +3636,9 @@ mod accessibility_tests {
 
     #[test]
     fn test_element_to_structure_paragraph() {
-        let elem = Element::Paragraph { text: "Test paragraph".into() };
+        let elem = Element::Paragraph {
+            text: "Test paragraph".into(),
+        };
         let struct_elem = element_to_structure(&elem);
 
         assert_eq!(struct_elem.struct_type, StructureType::P);
@@ -3350,7 +3647,10 @@ mod accessibility_tests {
 
     #[test]
     fn test_element_to_structure_code() {
-        let elem = Element::CodeBlock { language: "rust".into(), code: "fn main() {}".into() };
+        let elem = Element::CodeBlock {
+            language: "rust".into(),
+            code: "fn main() {}".into(),
+        };
         let struct_elem = element_to_structure(&elem);
 
         assert_eq!(struct_elem.struct_type, StructureType::Code);
@@ -3373,9 +3673,7 @@ mod accessibility_tests {
             quadratic
         );
 
-        let gaussian = render_math_text(
-            r"\exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)",
-        );
+        let gaussian = render_math_text(r"\exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)");
         assert!(
             !gaussian.contains("≤ft") && !gaussian.contains("\\left"),
             "\\le must not eat \\left: {}",
@@ -3386,16 +3684,12 @@ mod accessibility_tests {
 
     #[test]
     fn test_render_math_text_matrices() {
-        let m = render_math_text(
-            r"\begin{bmatrix} a & b \\ c & d \end{bmatrix}",
-        );
+        let m = render_math_text(r"\begin{bmatrix} a & b \\ c & d \end{bmatrix}");
         assert!(m.contains('[') && m.contains(']'), "rendered: {}", m);
         assert!(m.contains('a') && m.contains('d'), "rendered: {}", m);
         assert!(!m.contains("begin"), "rendered: {}", m);
 
-        let v = render_math_text(
-            r"\begin{vmatrix} \hat{i} & \hat{j} \\ a_1 & a_2 \end{vmatrix}",
-        );
+        let v = render_math_text(r"\begin{vmatrix} \hat{i} & \hat{j} \\ a_1 & a_2 \end{vmatrix}");
         assert!(v.contains('|'), "rendered: {}", v);
         assert!(!v.contains("begin"), "rendered: {}", v);
     }
@@ -3413,10 +3707,26 @@ mod accessibility_tests {
     #[test]
     fn test_render_math_text_handles_unbraced_limits() {
         let rendered = render_math_text(r"\int_0^1 x^2 dx + \sum_i^n a_i");
-        assert!(rendered.contains("∫₀¹") || rendered.contains("∫[0→1]"), "rendered: {}", rendered);
-        assert!(rendered.contains("∑ᵢⁿ") || rendered.contains("∑[i→n]"), "rendered: {}", rendered);
-        assert!(rendered.contains("x²") || rendered.contains("x^(2)"), "rendered: {}", rendered);
-        assert!(rendered.contains("aᵢ") || rendered.contains("a_(i)"), "rendered: {}", rendered);
+        assert!(
+            rendered.contains("∫₀¹") || rendered.contains("∫[0→1]"),
+            "rendered: {}",
+            rendered
+        );
+        assert!(
+            rendered.contains("∑ᵢⁿ") || rendered.contains("∑[i→n]"),
+            "rendered: {}",
+            rendered
+        );
+        assert!(
+            rendered.contains("x²") || rendered.contains("x^(2)"),
+            "rendered: {}",
+            rendered
+        );
+        assert!(
+            rendered.contains("aᵢ") || rendered.contains("a_(i)"),
+            "rendered: {}",
+            rendered
+        );
     }
 
     #[test]
@@ -3456,7 +3766,11 @@ mod accessibility_tests {
     #[test]
     fn test_render_math_text_complex_expressions_with_unicode() {
         let expr1 = render_math_text(r"\int_0^1 x^2 dx + \sum_{i=1}^{n} a_i");
-        assert!(expr1.contains("∫₀¹"), "Should render integral with subscript/superscript: {}", expr1);
+        assert!(
+            expr1.contains("∫₀¹"),
+            "Should render integral with subscript/superscript: {}",
+            expr1
+        );
         assert!(expr1.contains("∑"), "Should contain sum symbol: {}", expr1);
         assert!(
             expr1.contains("∑[i=1→n]") || expr1.contains("∑ᵢ"),
@@ -3464,9 +3778,13 @@ mod accessibility_tests {
             expr1
         );
         assert!(expr1.contains("x²"), "Should render x squared: {}", expr1);
-        
+
         let expr2 = render_math_text(r"\prod_{k=1}^{m} b_k");
-        assert!(expr2.contains("∏"), "Should contain product symbol: {}", expr2);
+        assert!(
+            expr2.contains("∏"),
+            "Should contain product symbol: {}",
+            expr2
+        );
         assert!(
             expr2.contains("∏[k=1→m]") || expr2.contains("∏ₖ"),
             "Product limits should be readable: {}",
@@ -3477,12 +3795,22 @@ mod accessibility_tests {
             "Should render b subscript k: {}",
             expr2
         );
-        
-        let expr3 = render_math_text(r"\forall x \in \mathbb{R}, x \geq 0 \Rightarrow \sqrt{x} \in \mathbb{R}");
+
+        let expr3 = render_math_text(
+            r"\forall x \in \mathbb{R}, x \geq 0 \Rightarrow \sqrt{x} \in \mathbb{R}",
+        );
         assert!(expr3.contains("∀"), "Should contain forall: {}", expr3);
         assert!(expr3.contains("∈"), "Should contain element of: {}", expr3);
-        assert!(expr3.contains("ℝ"), "Should contain real numbers: {}", expr3);
-        assert!(expr3.contains("≥"), "Should contain greater or equal: {}", expr3);
+        assert!(
+            expr3.contains("ℝ"),
+            "Should contain real numbers: {}",
+            expr3
+        );
+        assert!(
+            expr3.contains("≥"),
+            "Should contain greater or equal: {}",
+            expr3
+        );
         assert!(expr3.contains("⇒"), "Should contain implies: {}", expr3);
         assert!(expr3.contains("√"), "Should contain square root: {}", expr3);
     }
@@ -3549,9 +3877,16 @@ Single column again.
                 code: "// 中文注释\nfn hi() { println!(\"こんにちは\"); }\n// 한국어".into(),
             },
         ];
-        let bytes =
-            generate_pdf_bytes_internal(&elements, "Helvetica", 11.0, PageLayout::portrait(), None, true, None)
-                .unwrap();
+        let bytes = generate_pdf_bytes_internal(
+            &elements,
+            "Helvetica",
+            11.0,
+            PageLayout::portrait(),
+            None,
+            true,
+            None,
+        )
+        .unwrap();
         assert!(bytes.starts_with(b"%PDF"));
         let raw = String::from_utf8_lossy(&bytes);
         assert!(raw.contains("/ToUnicode"));
@@ -3561,7 +3896,13 @@ Single column again.
         let extracted = crate::pdf::extract_text(path.to_str().unwrap()).unwrap();
         assert!(extracted.contains("你好"), "got: {}", extracted);
         assert!(extracted.contains("こんにちは"), "got: {}", extracted);
-        assert!(extracted.contains("한국어") || extracted.contains("중文") || extracted.contains("中文"), "got: {}", extracted);
+        assert!(
+            extracted.contains("한국어")
+                || extracted.contains("중文")
+                || extracted.contains("中文"),
+            "got: {}",
+            extracted
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -3577,7 +3918,10 @@ Single column again.
         let expected = format!("<{:04X}>", gid);
 
         assert_eq!(encoded, expected);
-        assert_ne!(encoded, "<4F60>", "must not use unicode code point as CID directly");
+        assert_ne!(
+            encoded, "<4F60>",
+            "must not use unicode code point as CID directly"
+        );
     }
 
     #[test]
@@ -3634,17 +3978,26 @@ mod page_range_tests {
     #[test]
     fn test_render_page_range_extracts_subset() {
         let elements = vec![
-            Element::Paragraph { text: "First page content".into() },
+            Element::Paragraph {
+                text: "First page content".into(),
+            },
             Element::PageBreak,
-            Element::Paragraph { text: "Second page content".into() },
+            Element::Paragraph {
+                text: "Second page content".into(),
+            },
             Element::PageBreak,
-            Element::Paragraph { text: "Third page content".into() },
+            Element::Paragraph {
+                text: "Third page content".into(),
+            },
         ];
         let layout = PageLayout::portrait();
 
         // Extract pages 1..3 (second and third pages, 0-indexed)
         let bytes = render_page_range(&elements, "Helvetica", 12.0, layout, 1..3).unwrap();
-        assert!(!bytes.is_empty(), "Rendered page range should produce non-empty PDF");
+        assert!(
+            !bytes.is_empty(),
+            "Rendered page range should produce non-empty PDF"
+        );
 
         // Verify it's a valid PDF
         let content = String::from_utf8_lossy(&bytes);
@@ -3672,35 +4025,47 @@ mod page_range_tests {
 
     #[test]
     fn test_render_page_range_single_page() {
-        let elements = vec![
-            Element::Paragraph { text: "Only page".into() },
-        ];
+        let elements = vec![Element::Paragraph {
+            text: "Only page".into(),
+        }];
         let layout = PageLayout::portrait();
 
         let bytes = render_page_range(&elements, "Helvetica", 12.0, layout, 0..1).unwrap();
         let doc = crate::pdf::PdfDocument::load_from_bytes(&bytes).unwrap();
         let text = doc.get_text().unwrap();
-        assert!(text.contains("Only page"), "Single page extraction should work: {}", text);
+        assert!(
+            text.contains("Only page"),
+            "Single page extraction should work: {}",
+            text
+        );
     }
 
     #[test]
     fn test_render_page_range_out_of_bounds() {
-        let elements = vec![
-            Element::Paragraph { text: "One page".into() },
-        ];
+        let elements = vec![Element::Paragraph {
+            text: "One page".into(),
+        }];
         let layout = PageLayout::portrait();
 
         let result = render_page_range(&elements, "Helvetica", 12.0, layout, 5..10);
-        assert!(result.is_err(), "Out-of-bounds range should return an error");
+        assert!(
+            result.is_err(),
+            "Out-of-bounds range should return an error"
+        );
     }
 
     #[test]
     fn test_generate_tagged_pdf_bytes() {
-        use crate::pdf::{validate_pdf_ua_bytes, validate_pdf_bytes};
+        use crate::pdf::{validate_pdf_bytes, validate_pdf_ua_bytes};
 
         let elements = vec![
-            Element::Heading { level: 1, text: "Tagged Document".into() },
-            Element::Paragraph { text: "This is an accessible PDF.".into() },
+            Element::Heading {
+                level: 1,
+                text: "Tagged Document".into(),
+            },
+            Element::Paragraph {
+                text: "This is an accessible PDF.".into(),
+            },
         ];
         let layout = PageLayout::portrait();
         let opts = AccessibilityOptions::new()
@@ -3715,15 +4080,25 @@ mod page_range_tests {
 
         // Should contain tagged PDF markers
         assert!(content.contains("/MarkInfo"), "Should contain /MarkInfo");
-        assert!(content.contains("/Marked true"), "Should contain /Marked true");
-        assert!(content.contains("/StructTreeRoot"), "Should contain /StructTreeRoot");
+        assert!(
+            content.contains("/Marked true"),
+            "Should contain /Marked true"
+        );
+        assert!(
+            content.contains("/StructTreeRoot"),
+            "Should contain /StructTreeRoot"
+        );
         assert!(content.contains("/Lang"), "Should contain /Lang");
         assert!(content.contains("en-US"), "Should contain language");
         assert!(content.contains("Test Tagged PDF"), "Should contain title");
 
         // Should be structurally valid
         let validation = validate_pdf_bytes(&bytes);
-        assert!(validation.valid, "Tagged PDF should be structurally valid: {:?}", validation.errors);
+        assert!(
+            validation.valid,
+            "Tagged PDF should be structurally valid: {:?}",
+            validation.errors
+        );
 
         // Should pass PDF/UA structural checks
         let ua = validate_pdf_ua_bytes(&bytes);
@@ -3731,14 +4106,18 @@ mod page_range_tests {
         assert!(ua.has_struct_tree, "Should have StructTreeRoot");
         assert!(ua.has_lang, "Should have Lang");
         assert!(ua.has_title, "Should have Title");
-        assert!(ua.compliant, "Tagged PDF should be PDF/UA compliant: {:?}", ua.errors);
+        assert!(
+            ua.compliant,
+            "Tagged PDF should be PDF/UA compliant: {:?}",
+            ua.errors
+        );
     }
 
     #[test]
     fn test_generate_tagged_pdf_bytes_disabled() {
-        let elements = vec![
-            Element::Paragraph { text: "Untagged".into() },
-        ];
+        let elements = vec![Element::Paragraph {
+            text: "Untagged".into(),
+        }];
         let layout = PageLayout::portrait();
         let opts = AccessibilityOptions::new().with_tagged_pdf(false);
 
@@ -3746,8 +4125,14 @@ mod page_range_tests {
         let content = String::from_utf8_lossy(&bytes);
 
         // When tagged_pdf is false, should NOT contain tagged markers
-        assert!(!content.contains("/MarkInfo"), "Should not contain /MarkInfo when disabled");
-        assert!(!content.contains("/StructTreeRoot"), "Should not contain /StructTreeRoot when disabled");
+        assert!(
+            !content.contains("/MarkInfo"),
+            "Should not contain /MarkInfo when disabled"
+        );
+        assert!(
+            !content.contains("/StructTreeRoot"),
+            "Should not contain /StructTreeRoot when disabled"
+        );
     }
 
     #[test]
@@ -3801,7 +4186,8 @@ More text.\n\n\
 [@alpha]: Alpha, A. (2020). First.\n\
 [@beta]: Beta, B. (2021). Second.\n";
         let elements = crate::elements::parse_markdown(md);
-        let bytes = generate_pdf_bytes(&elements, "Helvetica", 11.0, PageLayout::portrait()).unwrap();
+        let bytes =
+            generate_pdf_bytes(&elements, "Helvetica", 11.0, PageLayout::portrait()).unwrap();
         assert!(bytes.starts_with(b"%PDF"));
         let validation = crate::pdf::validate_pdf_bytes(&bytes);
         assert!(validation.valid, "{:?}", validation.errors);
@@ -3810,7 +4196,10 @@ More text.\n\n\
         let tmp = std::env::temp_dir().join("pdfrs_thesis_test.pdf");
         std::fs::write(&tmp, &bytes).unwrap();
         let extracted = crate::pdf::extract_text(tmp.to_str().unwrap()).unwrap();
-        assert!(extracted.contains("Contents"), "missing TOC heading: {extracted}");
+        assert!(
+            extracted.contains("Contents"),
+            "missing TOC heading: {extracted}"
+        );
         assert!(extracted.contains("Chapter One"), "{extracted}");
         assert!(extracted.contains("Bibliography"), "{extracted}");
         assert!(

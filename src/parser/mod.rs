@@ -1120,6 +1120,7 @@ impl TexParser {
             }
             let formatted = match kind {
                 MathLineKind::Cases => Self::format_cases_line(line),
+                MathLineKind::Align => line.replace('&', " & "),
                 _ => line.replace('&', "  "),
             };
             lines.push(formatted);
@@ -2641,8 +2642,8 @@ Visit \url{https://example.com}.
         assert_eq!(lines.len(), 2);
         assert!(matches!(kind, super::MathLineKind::Align));
         assert!(
-            !lines[0].contains('&'),
-            "& should be stripped from align lines"
+            lines[0].contains('&'),
+            "& should be preserved as an alignment marker for the PDF backend"
         );
     }
 

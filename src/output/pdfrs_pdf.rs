@@ -10,40 +10,81 @@ use crate::error::LatexError;
 use crate::parser::TexElement;
 use crate::table::{Align, Table};
 
-/// Maximum pdfrs output size before falling back to the native engine.
-pub const PDFRS_MAX_BYTES: usize = 5_000_000;
+/// Rasterize an SVG file to a PNG temp file and return the temp path.
+/// Returns the original path unchanged if it is not an SVG.
+fn rasterize_svg_if_needed(path: &str, base_dir: Option<&std::path::Path>) -> String {
+    let resolved = if std::path::Path::new(path).is_absolute() {
+        PathBuf::from(path)
+    } else if let Some(base) = base_dir {
+        base.join(path)
+    } else {
+        PathBuf::from(path)
+    };
 
-/// Maximum mapped element count before falling back to the native engine.
+    let is_svg = resolved
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+
+    if !is_svg {
+        return path.to_string();
+    }
+
+    let svg_data = match std::fs::read(&resolved) {
+        Ok(d) => d,
+        Err(_) => return path.to_string(),
+    };
+
+    let opt = usvg::Options::default();
+    let tree = match usvg::Tree::from_data(&svg_data, &opt) {
+        Ok(t) => t,
+        Err(_) => return path.to_string(),
+    };
+    let size = tree.size();
+    let width = size.width().ceil().max(1.0) as u32;
+    let height = size.height().ceil().max(1.0) as u32;
+
+    let mut pixmap = match resvg::tiny_skia::Pixmap::new(width, height) {
+        Some(p) => p,
+        None => return path.to_string(),
+    };
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::default(),
+        &mut pixmap.as_mut(),
+    );
+
+    let png_data = match pixmap.encode_png() {
+        Ok(d) => d,
+        Err(_) => return path.to_string(),
+    };
+
+    let tmp_path = std::env::temp_dir().join(format!(
+        "rtex_svg_{}.png",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    if std::fs::write(&tmp_path, &png_data).is_err() {
+        return path.to_string();
+    }
+    tmp_path.to_string_lossy().into_owned()
+}
+
+/// Maximum mapped element count allowed by the pdfrs renderer.
 pub const PDFRS_MAX_ELEMENTS: usize = 5_000;
 
-/// Which PDF engine produced (or should produce) the document.
+/// Identifies the pdfrs PDF engine as the only PDF backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PdfBackend {
-    /// Vendored [pdfrs](https://crates.io/crates/pdfrs) layout engine (primary).
+    /// Vendored [pdfrs](https://crates.io/crates/pdfrs) layout engine.
     Pdfrs,
-    /// Native `src/pdf/` builder (fallback).
-    Native,
 }
 
 impl PdfBackend {
-    /// Read `RTEX_PDF_BACKEND=pdfrs|native` when set.
-    pub fn from_env() -> Option<Self> {
-        match std::env::var("RTEX_PDF_BACKEND")
-            .ok()?
-            .to_ascii_lowercase()
-            .as_str()
-        {
-            "pdfrs" => Some(Self::Pdfrs),
-            "native" => Some(Self::Native),
-            _ => None,
-        }
-    }
-
     pub fn producer_label(self) -> &'static str {
-        match self {
-            Self::Pdfrs => "rtex/pdfrs",
-            Self::Native => "rtex/native",
-        }
+        "rtex/pdfrs"
     }
 }
 
@@ -72,18 +113,30 @@ pub fn extract_document_meta(elements: &[TexElement]) -> DocumentPdfMeta {
 }
 
 /// Map a LaTeX element tree to pdfrs document elements.
-pub fn tex_to_pdfrs_elements(elements: &[TexElement]) -> Vec<Element> {
+pub fn tex_to_pdfrs_elements(
+    elements: &[TexElement],
+    image_base_dir: Option<&std::path::Path>,
+) -> Vec<Element> {
     let mut writer = ElementWriter::new();
     for element in elements {
-        push_tex_element(element, &mut writer, 0);
+        push_tex_element(element, &mut writer, 0, image_base_dir);
     }
     writer.finish()
 }
 
 /// Map elements and prepend title-page metadata for pdfrs.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn tex_to_pdfrs_document(elements: &[TexElement]) -> Vec<Element> {
+    tex_to_pdfrs_document_with_base(elements, None)
+}
+
+/// Like [`tex_to_pdfrs_document`] but resolves/rasterizes SVG images using `image_base_dir`.
+pub fn tex_to_pdfrs_document_with_base(
+    elements: &[TexElement],
+    image_base_dir: Option<&std::path::Path>,
+) -> Vec<Element> {
     let meta = extract_document_meta(elements);
-    let mut out = tex_to_pdfrs_elements(elements);
+    let mut out = tex_to_pdfrs_elements(elements, image_base_dir);
     prepend_document_meta(&mut out, &meta);
     out
 }
@@ -147,7 +200,8 @@ pub fn render_pdf_bytes(
     if let Some(title) = meta.title {
         options.accessibility = Some(options.accessibility.unwrap_or_default().with_title(title));
     }
-    let pdfrs_elements = tex_to_pdfrs_document(elements);
+    let pdfrs_elements =
+        tex_to_pdfrs_document_with_base(elements, options.image_base_dir.as_deref());
     if pdfrs_elements.len() > PDFRS_MAX_ELEMENTS {
         return Err(LatexError::PdfError {
             message: format!(
@@ -264,7 +318,12 @@ fn merge_plain_segments(segments: Vec<TextSegment>) -> Vec<TextSegment> {
     merged
 }
 
-fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth: u8) {
+fn push_tex_element(
+    element: &TexElement,
+    writer: &mut ElementWriter,
+    list_depth: u8,
+    image_base_dir: Option<&std::path::Path>,
+) {
     match element {
         TexElement::Text(text) => push_text_with_inline_math(writer, text),
         TexElement::Paragraph => writer.empty_line(),
@@ -337,7 +396,7 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
                 }
 
                 for nested_list in nested {
-                    push_tex_element(nested_list, writer, list_depth + 1);
+                    push_tex_element(nested_list, writer, list_depth + 1, image_base_dir);
                 }
             }
         }
@@ -359,7 +418,7 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
                 level: 4,
                 text: heading,
             });
-            push_children(body, writer, list_depth);
+            push_children(body, writer, list_depth, image_base_dir);
         }
         TexElement::CodeBlock(code) => {
             writer.push_block(Element::CodeBlock {
@@ -368,9 +427,10 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
             });
         }
         TexElement::Image { path, .. } => {
+            let resolved_path = rasterize_svg_if_needed(path, image_base_dir);
             writer.push_block(Element::Image {
                 alt: String::new(),
-                path: path.clone(),
+                path: resolved_path,
             });
         }
         TexElement::Table(table) => {
@@ -413,7 +473,7 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
                         });
                     }
                 } else {
-                    push_tex_element(child, writer, list_depth);
+                    push_tex_element(child, writer, list_depth, image_base_dir);
                 }
             }
         }
@@ -476,9 +536,14 @@ fn push_tex_element(element: &TexElement, writer: &mut ElementWriter, list_depth
     }
 }
 
-fn push_children(children: &[TexElement], writer: &mut ElementWriter, depth: u8) {
+fn push_children(
+    children: &[TexElement],
+    writer: &mut ElementWriter,
+    depth: u8,
+    image_base_dir: Option<&std::path::Path>,
+) {
     for child in children {
-        push_tex_element(child, writer, depth);
+        push_tex_element(child, writer, depth, image_base_dir);
     }
 }
 
@@ -685,7 +750,7 @@ mod tests {
             level: 1,
             title: "Intro".to_string(),
         }];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(matches!(
             mapped.first(),
             Some(Element::Heading { level: 1, text }) if text == "Intro"
@@ -701,7 +766,7 @@ mod tests {
             TexElement::Text("Next".to_string()),
             TexElement::Text("line".to_string()),
         ];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert_eq!(mapped.len(), 3);
         assert!(matches!(
             mapped[0],
@@ -879,7 +944,7 @@ mod tests {
             },
             TexElement::Text(" for equations.".to_string()),
         ];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(matches!(
             mapped.first(),
             Some(Element::RichParagraph { segments })
@@ -918,7 +983,7 @@ mod tests {
             labels: vec![],
             items: vec![vec![TexElement::Text("Root $\\sqrt{x^2+y^2}$".to_string())]],
         }];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(
             mapped.iter().any(|e| matches!(
                 e,
@@ -934,7 +999,7 @@ mod tests {
             TexElement::Text("Angle ".to_string()),
             TexElement::MathInline("\\alpha".to_string()),
         ];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(matches!(
             mapped.first(),
             Some(Element::Paragraph { text }) if text == "Angle α"
@@ -946,7 +1011,7 @@ mod tests {
         let elements = vec![TexElement::Text(
             "Square root: $\\sqrt{x^2 + y^2}$".to_string(),
         )];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(
             mapped.iter().any(|e| matches!(
                 e,
@@ -959,7 +1024,7 @@ mod tests {
     #[test]
     fn frac_in_inline_math_uses_math_block() {
         let elements = vec![TexElement::Text("Formula: $x = \\frac{1}{2}$".to_string())];
-        let mapped = tex_to_pdfrs_elements(&elements);
+        let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(
             mapped
                 .iter()

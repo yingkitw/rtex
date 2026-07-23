@@ -18,8 +18,14 @@ pub enum PaintMode {
 /// A single path construction command.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathOp {
-    MoveTo { x: f32, y: f32 },
-    LineTo { x: f32, y: f32 },
+    MoveTo {
+        x: f32,
+        y: f32,
+    },
+    LineTo {
+        x: f32,
+        y: f32,
+    },
     CurveTo {
         x1: f32,
         y1: f32,
@@ -220,10 +226,7 @@ impl VectorCanvas {
         );
         let page_id = generator.add_object(page_dict);
 
-        let pages_dict = format!(
-            "<< /Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n",
-            page_id
-        );
+        let pages_dict = format!("<< /Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n", page_id);
         let actual_pages_id = generator.add_object(pages_dict);
         assert_eq!(actual_pages_id, pages_id);
 
@@ -264,7 +267,7 @@ pub fn parse_svg_path(d: &str) -> Result<Vec<PathOp>> {
                     _ => {
                         return Err(anyhow::anyhow!(
                             "SVG path number without a preceding command near token {i}"
-                        ))
+                        ));
                     }
                 }
             }
@@ -390,7 +393,11 @@ pub fn parse_svg_path(d: &str) -> Result<Vec<PathOp>> {
             }
             'T' => {
                 let (x3, y3) = read_pair(&tokens, &mut i)?;
-                let (x3, y3) = if relative { (cx + x3, cy + y3) } else { (x3, y3) };
+                let (x3, y3) = if relative {
+                    (cx + x3, cy + y3)
+                } else {
+                    (x3, y3)
+                };
                 let (qx, qy) = match (last_cmd.to_ascii_uppercase(), last_ctrl) {
                     ('Q' | 'T', Some((px, py))) => (2.0 * cx - px, 2.0 * cy - py),
                     _ => (cx, cy),
@@ -547,14 +554,7 @@ fn read_pair(tokens: &[SvgToken], i: &mut usize) -> Result<(f32, f32)> {
     Ok((x, y))
 }
 
-fn quad_to_cubic(
-    x0: f32,
-    y0: f32,
-    qx: f32,
-    qy: f32,
-    x3: f32,
-    y3: f32,
-) -> (f32, f32, f32, f32) {
+fn quad_to_cubic(x0: f32, y0: f32, qx: f32, qy: f32, x3: f32, y3: f32) -> (f32, f32, f32, f32) {
     let x1 = x0 + 2.0 / 3.0 * (qx - x0);
     let y1 = y0 + 2.0 / 3.0 * (qy - y0);
     let x2 = x3 + 2.0 / 3.0 * (qx - x3);
@@ -759,10 +759,7 @@ fn ellipse_path_ops(cx: f32, cy: f32, rx: f32, ry: f32) -> Vec<PathOp> {
     let kx = rx * K;
     let ky = ry * K;
     vec![
-        PathOp::MoveTo {
-            x: cx + rx,
-            y: cy,
-        },
+        PathOp::MoveTo { x: cx + rx, y: cy },
         PathOp::CurveTo {
             x1: cx + rx,
             y1: cy + ky,
@@ -842,15 +839,8 @@ mod tests {
 
     #[test]
     fn test_ellipse_uses_curves() {
-        let canvas = VectorCanvas::new().ellipse(
-            100.0,
-            100.0,
-            40.0,
-            20.0,
-            Some(Color::blue()),
-            None,
-            1.0,
-        );
+        let canvas =
+            VectorCanvas::new().ellipse(100.0, 100.0, 40.0, 20.0, Some(Color::blue()), None, 1.0);
         let stream = canvas.to_content_stream();
         assert!(stream.contains(" c\n"));
         assert!(stream.contains("S\n"));
@@ -871,9 +861,7 @@ mod tests {
 
     #[test]
     fn test_demo_pdf_valid() {
-        let bytes = demo_canvas()
-            .to_pdf_bytes(PageLayout::portrait())
-            .unwrap();
+        let bytes = demo_canvas().to_pdf_bytes(PageLayout::portrait()).unwrap();
         let validation = validate_pdf_bytes(&bytes);
         assert!(validation.valid, "{:?}", validation.errors);
         assert!(validation.page_count >= 1);

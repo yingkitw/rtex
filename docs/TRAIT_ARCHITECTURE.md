@@ -205,9 +205,8 @@ fn process_with_any_formatter(formatter: &dyn MathFormatter, math: &str) -> Stri
 - `StrictTexParser` - Strict LaTeX compliance
 - `MarkdownTexParser` - Markdown with LaTeX math
 
-#### PdfBuilder
-- `LopdfBuilder` - Current implementation
-- `PrintpdfBuilder` - Alternative backend
+#### PDF Rendering
+- `pdfrs_pdf::render_pdf_bytes` - Current implementation (vendored pdfrs engine)
 - `HtmlBuilder` - HTML output
 
 #### Cache

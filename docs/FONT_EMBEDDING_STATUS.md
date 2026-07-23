@@ -1,5 +1,7 @@
 # Font Embedding Status
 
+> **Historical document.** The `printpdf`/`lopdf` backends described here have been replaced by the vendored [pdfrs](https://crates.io/crates/pdfrs) engine, which handles all PDF generation including Unicode font embedding. This file is kept for reference only.
+
 ## Current Implementation
 
 ### What Was Done

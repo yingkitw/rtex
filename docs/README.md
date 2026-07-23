@@ -19,7 +19,7 @@ Generate rustdoc locally:
 cargo doc --open --no-deps
 ```
 
-Key public types: `NativeTexConverter`, `OutputFormat`, `ConversionOptions`, `PackageFetcher`, `TexParser`, `TexElement`, `PdfBuilder`.
+Key public types: `NativeTexConverter`, `OutputFormat`, `ConversionOptions`, `PackageFetcher`, `TexParser`, `TexElement`, `PdfBackend`.
 
 ## Historical Notes
 

@@ -8,7 +8,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 
 - CLI conversion of `.tex` files to PDF, HTML, DOCX, or EPUB
 - Library API for in-process and WASM embedding
-- 228+ LaTeX commands, 566 math symbols, native PDF generation
+- 228+ LaTeX commands, 566 math symbols, PDF generation via vendored pdfrs engine
 - Bibliography, cross-references, tables, graphics, macros, templates
 - Incremental compilation, watch mode, parallel batch conversion, LSP editor support
 - On-demand CTAN package fetching for missing `.sty`/`.cls` files
@@ -33,7 +33,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 |-------|------------|
 | Language | Rust 2024 (MSRV 1.85) |
 | CLI | clap 4 |
-| PDF | [pdfrs](https://crates.io/crates/pdfrs) (vendored) primary + native `src/pdf/` fallback |
+| PDF | [pdfrs](https://crates.io/crates/pdfrs) (vendored) — sole backend |
 | Math | Unicode mapping (`src/math/`) + pdfrs display layout (`\frac`, `\sqrt` vinculum) |
 | Alt formats | HTML/DOCX/EPUB (`src/output/`) |
 | HTTP (packages) | ureq + rustls |
@@ -47,7 +47,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 - Public APIs documented with rustdoc
 - User-facing docs in `README.md`, `docs/USER_GUIDE.md`, `ARCHITECTURE.md`
 - Surgical changes: no speculative features beyond `TODO.md`
-- PDF backend identifiable via `/Producer` (`rtex/pdfrs` or `rtex/native`); force with `RTEX_PDF_BACKEND`
+- PDF backend identifiable via `/Producer` (`rtex/pdfrs`)
 
 ## Success Criteria
 

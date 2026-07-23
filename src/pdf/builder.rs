@@ -163,9 +163,8 @@ impl PdfBuilder {
 
     /// Build a PDF from `elements` and return the raw bytes.
     ///
-    /// Uses [pdfrs](https://crates.io/crates/pdfrs) when the mapped document fits
-    /// size limits; falls back to the native PDF engine otherwise.
-    /// Override with `RTEX_PDF_BACKEND=pdfrs|native`.
+    /// All PDF output now goes through the vendored [pdfrs](https://crates.io/crates/pdfrs)
+    /// engine.
     pub fn build_to_bytes(&mut self, elements: Vec<TexElement>) -> Result<Vec<u8>, String> {
         let elements = self.prepare_elements(elements);
         crate::output::render_elements_in_dir(elements, crate::output::OutputFormat::Pdf, None)

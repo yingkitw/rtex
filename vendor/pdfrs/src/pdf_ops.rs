@@ -3,9 +3,9 @@
 //! This module provides high-level operations for manipulating PDF documents,
 //! including merging, splitting, rotating, watermarking, and annotations.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
+use serde::{Deserialize, Serialize};
 use std::fs;
-use serde::{Serialize, Deserialize};
 
 /// Merge multiple PDF files into a single output PDF.
 ///
@@ -364,10 +364,12 @@ fn extract_page_streams(doc: &crate::pdf::PdfDocument) -> Vec<Vec<u8>> {
         .iter()
         .filter_map(|(id, obj)| {
             if let crate::pdf::PdfObject::Dictionary(dict) = obj
-                && let Some(crate::pdf::PdfValue::Object(crate::pdf::PdfObject::String(kind))) = dict.get("Type")
-                    && kind == "/Page" {
-                        return Some(*id);
-                    }
+                && let Some(crate::pdf::PdfValue::Object(crate::pdf::PdfObject::String(kind))) =
+                    dict.get("Type")
+                && kind == "/Page"
+            {
+                return Some(*id);
+            }
             None
         })
         .collect();
@@ -375,11 +377,14 @@ fn extract_page_streams(doc: &crate::pdf::PdfDocument) -> Vec<Vec<u8>> {
 
     for page_id in page_ids {
         if let Some(crate::pdf::PdfObject::Dictionary(dict)) = doc.objects.get(&page_id)
-            && let Some(crate::pdf::PdfValue::Object(crate::pdf::PdfObject::String(contents_id_raw))) = dict.get("Contents")
-                && let Ok(contents_id) = contents_id_raw.parse::<u32>()
-                    && let Some(crate::pdf::PdfObject::Stream { data, .. }) = doc.objects.get(&contents_id) {
-                        streams.push(decompress_if_needed(data));
-                    }
+            && let Some(crate::pdf::PdfValue::Object(crate::pdf::PdfObject::String(
+                contents_id_raw,
+            ))) = dict.get("Contents")
+            && let Ok(contents_id) = contents_id_raw.parse::<u32>()
+            && let Some(crate::pdf::PdfObject::Stream { data, .. }) = doc.objects.get(&contents_id)
+        {
+            streams.push(decompress_if_needed(data));
+        }
     }
 
     // Fallback for malformed/simple PDFs where /Page dictionaries are not parsed as expected.
@@ -404,7 +409,10 @@ fn extract_page_streams(doc: &crate::pdf::PdfDocument) -> Vec<Vec<u8>> {
 
 fn decompress_if_needed(data: &[u8]) -> Vec<u8> {
     // Valid zlib header: CMF=0x78 and (CMF*256 + FLG) % 31 == 0
-    if data.len() > 2 && data[0] == 0x78 && ((data[0] as u16) * 256 + (data[1] as u16)).is_multiple_of(31) {
+    if data.len() > 2
+        && data[0] == 0x78
+        && ((data[0] as u16) * 256 + (data[1] as u16)).is_multiple_of(31)
+    {
         match crate::compression::decompress_deflate(data) {
             Ok(d) => d,
             Err(_) => data.to_vec(),
@@ -492,10 +500,7 @@ fn assemble_pdf_with_metadata(
         let page_id = generator.add_object(page_dict);
         page_ids.push(page_id);
 
-        let font_dict = format!(
-            "<< /Type /Font\n/Subtype /Type1\n/BaseFont /{}\n>>\n",
-            font
-        );
+        let font_dict = format!("<< /Type /Font\n/Subtype /Type1\n/BaseFont /{}\n>>\n", font);
         generator.add_object(font_dict);
     }
 
@@ -598,10 +603,7 @@ fn assemble_rotated_pdf(
         );
         let page_id = generator.add_object(page_dict);
         page_ids.push(page_id);
-        let font_dict = format!(
-            "<< /Type /Font\n/Subtype /Type1\n/BaseFont /{}\n>>\n",
-            font
-        );
+        let font_dict = format!("<< /Type /Font\n/Subtype /Type1\n/BaseFont /{}\n>>\n", font);
         generator.add_object(font_dict);
     }
 
@@ -614,10 +616,7 @@ fn assemble_rotated_pdf(
     let actual_pages_id = generator.add_object(pages_dict);
     assert_eq!(actual_pages_id, pages_obj_id);
 
-    let catalog_dict = format!(
-        "<< /Type /Catalog\n/Pages {} 0 R\n>>\n",
-        actual_pages_id
-    );
+    let catalog_dict = format!("<< /Type /Catalog\n/Pages {} 0 R\n>>\n", actual_pages_id);
     generator.add_object(catalog_dict);
 
     let pdf_data = generator.generate();
@@ -637,25 +636,30 @@ pub fn extract_metadata_from_pdf(doc: &crate::pdf::PdfDocument) -> Result<PdfMet
             // Convert dictionary to a string representation for parsing
             let dict_str = dict_to_string(data);
             if dict_str.contains("/Title")
-                && let Some(title) = extract_pdf_string_field(&dict_str, "/Title") {
-                    metadata.title = Some(title);
-                }
+                && let Some(title) = extract_pdf_string_field(&dict_str, "/Title")
+            {
+                metadata.title = Some(title);
+            }
             if dict_str.contains("/Author")
-                && let Some(author) = extract_pdf_string_field(&dict_str, "/Author") {
-                    metadata.author = Some(author);
-                }
+                && let Some(author) = extract_pdf_string_field(&dict_str, "/Author")
+            {
+                metadata.author = Some(author);
+            }
             if dict_str.contains("/Subject")
-                && let Some(subject) = extract_pdf_string_field(&dict_str, "/Subject") {
-                    metadata.subject = Some(subject);
-                }
+                && let Some(subject) = extract_pdf_string_field(&dict_str, "/Subject")
+            {
+                metadata.subject = Some(subject);
+            }
             if dict_str.contains("/Keywords")
-                && let Some(keywords) = extract_pdf_string_field(&dict_str, "/Keywords") {
-                    metadata.keywords = Some(keywords);
-                }
+                && let Some(keywords) = extract_pdf_string_field(&dict_str, "/Keywords")
+            {
+                metadata.keywords = Some(keywords);
+            }
             if dict_str.contains("/Creator")
-                && let Some(creator) = extract_pdf_string_field(&dict_str, "/Creator") {
-                    metadata.creator = Some(creator);
-                }
+                && let Some(creator) = extract_pdf_string_field(&dict_str, "/Creator")
+            {
+                metadata.creator = Some(creator);
+            }
         }
     }
 
@@ -683,23 +687,23 @@ fn value_to_string(value: &crate::pdf::PdfValue) -> String {
 fn object_to_string(obj: &crate::pdf::PdfObject) -> String {
     match obj {
         crate::pdf::PdfObject::Dictionary(dict) => {
-            let entries: Vec<String> = dict.iter()
+            let entries: Vec<String> = dict
+                .iter()
                 .map(|(k, v)| format!("/{} {}", k, value_to_string(v)))
                 .collect();
             format!("<< {} >>", entries.join(" "))
         }
-        crate::pdf::PdfObject::Stream { dictionary: _, data: _ } => {
-            "<< stream >>".to_string()
-        }
+        crate::pdf::PdfObject::Stream {
+            dictionary: _,
+            data: _,
+        } => "<< stream >>".to_string(),
         crate::pdf::PdfObject::Array(arr) => {
             let elems: Vec<String> = arr.iter().map(value_to_string).collect();
             format!("[{}]", elems.join(" "))
         }
         crate::pdf::PdfObject::String(s) => format!("({})", escape_pdf_meta(s)),
         crate::pdf::PdfObject::Number(n) => n.to_string(),
-        crate::pdf::PdfObject::Boolean(b) => {
-            if *b { "true" } else { "false" }.to_string()
-        }
+        crate::pdf::PdfObject::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
         crate::pdf::PdfObject::Null => "null".to_string(),
         crate::pdf::PdfObject::Reference(id, generation) => format!("{} {} R", id, generation),
         crate::pdf::PdfObject::Name(n) => format!("/{}", n),
@@ -768,15 +772,17 @@ fn unescape_pdf_string(s: &str) -> String {
                         // Octal escape sequence (up to 3 digits)
                         let mut octal = String::from(next);
                         if let Some(&c) = chars.peek()
-                            && ('0'..='7').contains(&c) {
+                            && ('0'..='7').contains(&c)
+                        {
+                            chars.next();
+                            octal.push(c);
+                            if let Some(&c) = chars.peek()
+                                && ('0'..='7').contains(&c)
+                            {
                                 chars.next();
                                 octal.push(c);
-                                if let Some(&c) = chars.peek()
-                                    && ('0'..='7').contains(&c) {
-                                        chars.next();
-                                        octal.push(c);
-                                    }
                             }
+                        }
                         if let Ok(code) = u8::from_str_radix(&octal, 8) {
                             result.push(code as char);
                         }
@@ -975,10 +981,7 @@ pub fn create_pdf_with_3d_annotation_bytes(
     let actual_page_id = generator.add_object(page_dict);
     assert_eq!(actual_page_id, page_id);
 
-    let pages_dict = format!(
-        "<< /Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n",
-        page_id
-    );
+    let pages_dict = format!("<< /Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n", page_id);
     let actual_pages_id = generator.add_object(pages_dict);
     assert_eq!(actual_pages_id, pages_id);
     generator.add_object(format!(
@@ -1016,8 +1019,12 @@ pub fn create_pdf_with_all_annotations(
     for annot in annotations {
         let annot_dict = format!(
             "<< /Type /Annot\n/Subtype /Text\n/Rect [{} {} {} {}]\n/Contents ({})\n/T ({})\n/Open false\n>>\n",
-            annot.x, annot.y, annot.x + annot.width, annot.y + annot.height,
-            escape_pdf_meta(&annot.content), escape_pdf_meta(&annot.title),
+            annot.x,
+            annot.y,
+            annot.x + annot.width,
+            annot.y + annot.height,
+            escape_pdf_meta(&annot.content),
+            escape_pdf_meta(&annot.title),
         );
         annot_ids.push(generator.add_object(annot_dict));
     }
@@ -1025,7 +1032,10 @@ pub fn create_pdf_with_all_annotations(
     for link in links {
         let link_dict = format!(
             "<< /Type /Annot\n/Subtype /Link\n/Rect [{} {} {} {}]\n/Border [0 0 0]\n/A << /Type /Action\n/S /URI\n/URI ({}) >>\n>>\n",
-            link.x, link.y, link.x + link.width, link.y + link.height,
+            link.x,
+            link.y,
+            link.x + link.width,
+            link.y + link.height,
             escape_pdf_meta(&link.url),
         );
         annot_ids.push(generator.add_object(link_dict));
@@ -1034,10 +1044,21 @@ pub fn create_pdf_with_all_annotations(
     for hl in highlights {
         let hl_dict = format!(
             "<< /Type /Annot\n/Subtype /Highlight\n/Rect [{} {} {} {}]\n/C [{} {} {}]\n/QuadPoints [{} {} {} {} {} {} {} {}]\n>>\n",
-            hl.x, hl.y, hl.x + hl.width, hl.y + hl.height,
-            hl.color_r, hl.color_g, hl.color_b,
-            hl.x, hl.y + hl.height, hl.x + hl.width, hl.y + hl.height,
-            hl.x, hl.y, hl.x + hl.width, hl.y,
+            hl.x,
+            hl.y,
+            hl.x + hl.width,
+            hl.y + hl.height,
+            hl.color_r,
+            hl.color_g,
+            hl.color_b,
+            hl.x,
+            hl.y + hl.height,
+            hl.x + hl.width,
+            hl.y + hl.height,
+            hl.x,
+            hl.y,
+            hl.x + hl.width,
+            hl.y,
         );
         annot_ids.push(generator.add_object(hl_dict));
     }
@@ -1064,21 +1085,32 @@ pub fn create_pdf_with_all_annotations(
         );
         let page_id = generator.add_object(page_dict);
         page_ids.push(page_id);
-        generator.add_object("<< /Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n>>\n".to_string());
+        generator
+            .add_object("<< /Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n>>\n".to_string());
     }
 
     let kids: Vec<String> = page_ids.iter().map(|id| format!("{} 0 R", id)).collect();
-    let pages_dict = format!("<< /Type /Pages\n/Kids [{}]\n/Count {}\n>>\n", kids.join(" "), page_ids.len());
+    let pages_dict = format!(
+        "<< /Type /Pages\n/Kids [{}]\n/Count {}\n>>\n",
+        kids.join(" "),
+        page_ids.len()
+    );
     let actual_pages_id = generator.add_object(pages_dict);
     assert_eq!(actual_pages_id, pages_obj_id);
-    generator.add_object(format!("<< /Type /Catalog\n/Pages {} 0 R\n>>\n", actual_pages_id));
+    generator.add_object(format!(
+        "<< /Type /Catalog\n/Pages {} 0 R\n>>\n",
+        actual_pages_id
+    ));
 
     let pdf_data = generator.generate();
     let mut file = std::fs::File::create(output_file)?;
     std::io::Write::write_all(&mut file, &pdf_data)?;
     println!(
         "[annotate] Created {} with {} text, {} link, {} highlight annotations",
-        output_file, annotations.len(), links.len(), highlights.len()
+        output_file,
+        annotations.len(),
+        links.len(),
+        highlights.len()
     );
     Ok(())
 }
@@ -1188,10 +1220,7 @@ pub fn create_pdf_with_annotations(
     let actual_pages_id = generator.add_object(pages_dict);
     assert_eq!(actual_pages_id, pages_obj_id);
 
-    let catalog_dict = format!(
-        "<< /Type /Catalog\n/Pages {} 0 R\n>>\n",
-        actual_pages_id
-    );
+    let catalog_dict = format!("<< /Type /Catalog\n/Pages {} 0 R\n>>\n", actual_pages_id);
     generator.add_object(catalog_dict);
 
     let pdf_data = generator.generate();
@@ -1236,10 +1265,8 @@ pub fn create_pdf_with_images(
         content.extend_from_slice(b"Q\n");
     }
 
-    let content_id = generator.add_stream_object(
-        format!("<< /Length {} >>\n", content.len()),
-        content,
-    );
+    let content_id =
+        generator.add_stream_object(format!("<< /Length {} >>\n", content.len()), content);
 
     // Build XObject resource dictionary
     let xobj_entries: Vec<String> = image_refs
@@ -1259,10 +1286,7 @@ pub fn create_pdf_with_images(
     );
     let page_id = generator.add_object(page_dict);
 
-    let pages_dict = format!(
-        "<< /Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n",
-        page_id
-    );
+    let pages_dict = format!("<< /Type /Pages\n/Kids [{} 0 R]\n/Count 1\n>>\n", page_id);
     let pages_id = generator.add_object(pages_dict);
 
     let catalog = format!("<< /Type /Catalog\n/Pages {} 0 R\n>>\n", pages_id);
@@ -1345,7 +1369,12 @@ pub fn watermark_pdf(
 }
 
 /// Build a content stream snippet that renders a diagonal watermark
-fn build_watermark_stream(text: &str, font_size: f32, opacity: f32, layout: &crate::pdf_generator::PageLayout) -> Vec<u8> {
+fn build_watermark_stream(
+    text: &str,
+    font_size: f32,
+    opacity: f32,
+    layout: &crate::pdf_generator::PageLayout,
+) -> Vec<u8> {
     let escaped = escape_pdf_meta(text);
     // Center of page
     let cx = layout.width / 2.0;
@@ -1364,7 +1393,12 @@ fn build_watermark_stream(text: &str, font_size: f32, opacity: f32, layout: &cra
     stream.extend_from_slice(
         format!(
             "{} {} {} {} {} {} Tm\n",
-            cos45, sin45, -sin45, cos45, cx - 100.0, cy - 50.0
+            cos45,
+            sin45,
+            -sin45,
+            cos45,
+            cx - 100.0,
+            cy - 50.0
         )
         .as_bytes(),
     );
@@ -1462,10 +1496,7 @@ pub fn create_pdf_with_form_fields(
 
     // Create AcroForm dictionary
     let kids_refs: Vec<String> = field_ids.iter().map(|id| format!("{} 0 R", id)).collect();
-    let acroform_dict = format!(
-        "<< /Fields [{}]\n>>\n",
-        kids_refs.join(" ")
-    );
+    let acroform_dict = format!("<< /Fields [{}]\n>>\n", kids_refs.join(" "));
     let acroform_id = generator.add_object(acroform_dict);
 
     let field_offset = field_ids.len() as u32;
@@ -1499,11 +1530,16 @@ pub fn create_pdf_with_form_fields(
         );
         let page_id = generator.add_object(page_dict);
         page_ids.push(page_id);
-        generator.add_object("<< /Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n>>\n".to_string());
+        generator
+            .add_object("<< /Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n>>\n".to_string());
     }
 
     let kids: Vec<String> = page_ids.iter().map(|id| format!("{} 0 R", id)).collect();
-    let pages_dict = format!("<< /Type /Pages\n/Kids [{}]\n/Count {}\n>>\n", kids.join(" "), page_ids.len());
+    let pages_dict = format!(
+        "<< /Type /Pages\n/Kids [{}]\n/Count {}\n>>\n",
+        kids.join(" "),
+        page_ids.len()
+    );
     let actual_pages_id = generator.add_object(pages_dict);
 
     let catalog_dict = format!(
@@ -1565,7 +1601,11 @@ fn create_form_field_dict(field: &FormField) -> String {
         }
         FormFieldType::Radio => {
             if !field.options.is_empty() {
-                let opts: Vec<String> = field.options.iter().map(|o| format!("({})", escape_pdf_meta(o))).collect();
+                let opts: Vec<String> = field
+                    .options
+                    .iter()
+                    .map(|o| format!("({})", escape_pdf_meta(o)))
+                    .collect();
                 dict.push_str(&format!("/Opt [{}]\n", opts.join(" ")));
             }
             dict.push_str(&format!(
@@ -1575,7 +1615,11 @@ fn create_form_field_dict(field: &FormField) -> String {
         }
         FormFieldType::Dropdown => {
             if !field.options.is_empty() {
-                let opts: Vec<String> = field.options.iter().map(|o| format!("({})", escape_pdf_meta(o))).collect();
+                let opts: Vec<String> = field
+                    .options
+                    .iter()
+                    .map(|o| format!("({})", escape_pdf_meta(o)))
+                    .collect();
                 dict.push_str(&format!("/Opt [{}]\n", opts.join(" ")));
             }
             dict.push_str(&format!(
@@ -1683,9 +1727,9 @@ pub fn detect_form_fields(input_file: &str) -> Result<Vec<DetectedFormField>> {
         // Extract /V (value)
         let value = extract_pdf_dict_value(dict_text, "/V").map(|v| {
             if v.starts_with('(') && v.ends_with(')') {
-                v[1..v.len()-1].to_string()
+                v[1..v.len() - 1].to_string()
             } else if v.starts_with('<') && v.ends_with('>') {
-                crate::pdf::decode_pdf_hex_string(&v[1..v.len()-1])
+                crate::pdf::decode_pdf_hex_string(&v[1..v.len() - 1])
             } else {
                 v.to_string()
             }
@@ -1694,7 +1738,8 @@ pub fn detect_form_fields(input_file: &str) -> Result<Vec<DetectedFormField>> {
         // Extract /Opt (options list)
         let options = if let Some(opt_raw) = extract_pdf_dict_value(dict_text, "/Opt") {
             // /Opt can be [(Option1) (Option2)] or an array reference
-            opt_re.captures_iter(&opt_raw)
+            opt_re
+                .captures_iter(&opt_raw)
                 .map(|c| c[1].to_string())
                 .collect()
         } else {
@@ -1815,7 +1860,11 @@ pub fn fill_form_fields(
     }
 
     fs::write(output_file, &updated_bytes)?;
-    println!("[fill] Updated {} field(s) in {}", field_values.len(), output_file);
+    println!(
+        "[fill] Updated {} field(s) in {}",
+        field_values.len(),
+        output_file
+    );
     Ok(())
 }
 
@@ -1883,10 +1932,12 @@ pub fn overlay_image_on_pdf(
     let mut overlay_content = Vec::new();
     if opacity < 1.0 {
         // Set transparency
-        overlay_content.extend_from_slice(format!("{} {} {} rg\n", opacity, opacity, opacity).as_bytes());
+        overlay_content
+            .extend_from_slice(format!("{} {} {} rg\n", opacity, opacity, opacity).as_bytes());
     }
     overlay_content.extend_from_slice(b"q\n");
-    overlay_content.extend_from_slice(format!("{} 0 0 {} {} {} cm\n", width, height, x, y).as_bytes());
+    overlay_content
+        .extend_from_slice(format!("{} 0 0 {} {} {} cm\n", width, height, x, y).as_bytes());
     overlay_content.extend_from_slice(b"/Im1 Do\n");
     overlay_content.extend_from_slice(b"Q\n");
 
@@ -1895,7 +1946,6 @@ pub fn overlay_image_on_pdf(
     // For each page, append the overlay content
     let overlayed: Vec<Vec<u8>> = all_streams
         .iter()
-        
         .map(|stream| {
             let mut combined = stream.clone();
             combined.extend_from_slice(&overlay_content);
@@ -1945,10 +1995,7 @@ fn assemble_pdf_with_image_overlay(
         let page_id = generator.add_object(page_dict);
         page_ids.push(page_id);
 
-        let font_dict = format!(
-            "<< /Type /Font\n/Subtype /Type1\n/BaseFont /{}\n>>\n",
-            font
-        );
+        let font_dict = format!("<< /Type /Font\n/Subtype /Type1\n/BaseFont /{}\n>>\n", font);
         generator.add_object(font_dict);
     }
 
@@ -1961,10 +2008,7 @@ fn assemble_pdf_with_image_overlay(
     let actual_pages_id = generator.add_object(pages_dict);
     assert_eq!(actual_pages_id, pages_obj_id);
 
-    let catalog_dict = format!(
-        "<< /Type /Catalog\n/Pages {} 0 R\n>>\n",
-        actual_pages_id
-    );
+    let catalog_dict = format!("<< /Type /Catalog\n/Pages {} 0 R\n>>\n", actual_pages_id);
     generator.add_object(catalog_dict);
 
     let pdf_data = generator.generate();
@@ -2052,21 +2096,11 @@ fn build_text_watermark_stream(
 ) -> Vec<u8> {
     let escaped = escape_pdf_meta(text);
     let (x, y, rotation) = match position {
-        WatermarkPosition::Center => {
-            (layout.width / 2.0, layout.height / 2.0, 0.0)
-        }
-        WatermarkPosition::TopLeft => {
-            (72.0, layout.height - 72.0, 0.0)
-        }
-        WatermarkPosition::TopRight => {
-            (layout.width - 72.0, layout.height - 72.0, 0.0)
-        }
-        WatermarkPosition::BottomLeft => {
-            (72.0, 72.0, 0.0)
-        }
-        WatermarkPosition::BottomRight => {
-            (layout.width - 72.0, 72.0, 0.0)
-        }
+        WatermarkPosition::Center => (layout.width / 2.0, layout.height / 2.0, 0.0),
+        WatermarkPosition::TopLeft => (72.0, layout.height - 72.0, 0.0),
+        WatermarkPosition::TopRight => (layout.width - 72.0, layout.height - 72.0, 0.0),
+        WatermarkPosition::BottomLeft => (72.0, 72.0, 0.0),
+        WatermarkPosition::BottomRight => (layout.width - 72.0, 72.0, 0.0),
         WatermarkPosition::Diagonal => {
             (layout.width / 2.0 - 100.0, layout.height / 2.0 - 50.0, 45.0)
         }
@@ -2083,7 +2117,7 @@ fn build_text_watermark_stream(
         let cos = rad.cos();
         let sin = rad.sin();
         stream.extend_from_slice(
-            format!("{} {} {} {} {} {} Tm\n", cos, sin, -sin, cos, x, y).as_bytes()
+            format!("{} {} {} {} {} {} Tm\n", cos, sin, -sin, cos, x, y).as_bytes(),
         );
     } else {
         stream.extend_from_slice(format!("{} {} Td\n", x, y).as_bytes());
@@ -2105,32 +2139,25 @@ fn build_image_watermark_stream(
     // Scale image to fit page if too large
     let max_width = layout.width * 0.5;
     let max_height = layout.height * 0.5;
-    let (img_width, img_height) = crate::image::scale_to_fit(
-        image_info.width,
-        image_info.height,
-        max_width,
-        max_height,
-    );
+    let (img_width, img_height) =
+        crate::image::scale_to_fit(image_info.width, image_info.height, max_width, max_height);
 
     let (x, y) = match position {
-        WatermarkPosition::Center => {
-            ((layout.width - img_width) / 2.0, (layout.height - img_height) / 2.0)
-        }
-        WatermarkPosition::TopLeft => {
-            (36.0, layout.height - img_height - 36.0)
-        }
-        WatermarkPosition::TopRight => {
-            (layout.width - img_width - 36.0, layout.height - img_height - 36.0)
-        }
-        WatermarkPosition::BottomLeft => {
-            (36.0, 36.0)
-        }
-        WatermarkPosition::BottomRight => {
-            (layout.width - img_width - 36.0, 36.0)
-        }
-        WatermarkPosition::Diagonal => {
-            ((layout.width - img_width) / 2.0, (layout.height - img_height) / 2.0)
-        }
+        WatermarkPosition::Center => (
+            (layout.width - img_width) / 2.0,
+            (layout.height - img_height) / 2.0,
+        ),
+        WatermarkPosition::TopLeft => (36.0, layout.height - img_height - 36.0),
+        WatermarkPosition::TopRight => (
+            layout.width - img_width - 36.0,
+            layout.height - img_height - 36.0,
+        ),
+        WatermarkPosition::BottomLeft => (36.0, 36.0),
+        WatermarkPosition::BottomRight => (layout.width - img_width - 36.0, 36.0),
+        WatermarkPosition::Diagonal => (
+            (layout.width - img_width) / 2.0,
+            (layout.height - img_height) / 2.0,
+        ),
     };
 
     let mut stream = Vec::new();
@@ -2139,7 +2166,8 @@ fn build_image_watermark_stream(
         stream.extend_from_slice(format!("{} {} {} rg\n", opacity, opacity, opacity).as_bytes());
     }
     stream.extend_from_slice(b"q\n");
-    stream.extend_from_slice(format!("{} 0 0 {} {} {} cm\n", img_width, img_height, x, y).as_bytes());
+    stream
+        .extend_from_slice(format!("{} 0 0 {} {} {} cm\n", img_width, img_height, x, y).as_bytes());
     stream.extend_from_slice(b"/Im1 Do\n");
     stream.extend_from_slice(b"Q\n");
     stream.extend_from_slice(b"Q\n");
@@ -2226,7 +2254,11 @@ pub fn reorder_pages(input_file: &str, output_file: &str, page_order: &[usize]) 
 /// - The input file cannot be read
 /// - The security settings are invalid
 /// - Writing the output file fails
-pub fn protect_pdf(input_file: &str, output_file: &str, security: &crate::security::PdfSecurity) -> Result<()> {
+pub fn protect_pdf(
+    input_file: &str,
+    output_file: &str,
+    security: &crate::security::PdfSecurity,
+) -> Result<()> {
     security.validate()?;
 
     // Honest gate: do not write fake "protected" PDFs that remain plaintext.
@@ -2272,7 +2304,11 @@ use sha2::{Digest, Sha256};
 ///     .with_location("New York");
 /// sign_pdf("input.pdf", "signed.pdf", &sig).unwrap();
 /// ```
-pub fn sign_pdf(input_file: &str, output_file: &str, signature: &crate::security::DigitalSignature) -> Result<()> {
+pub fn sign_pdf(
+    input_file: &str,
+    output_file: &str,
+    signature: &crate::security::DigitalSignature,
+) -> Result<()> {
     sign_pdf_with_certificate(input_file, output_file, signature, None)
 }
 
@@ -2325,14 +2361,20 @@ pub fn sign_pdf_with_certificate(
 
     // Find the last %%EOF
     let last_eof = output.windows(5).rposition(|w| w == b"%%EOF").unwrap_or(0);
-    let startxref_pos = output[..last_eof].windows(9).rposition(|w| w == b"startxref").unwrap_or(0);
+    let startxref_pos = output[..last_eof]
+        .windows(9)
+        .rposition(|w| w == b"startxref")
+        .unwrap_or(0);
     let xref_offset: usize = String::from_utf8_lossy(&output[startxref_pos + 9..last_eof])
         .trim()
         .parse()
         .unwrap_or(0);
 
     // Find catalog reference in trailer
-    let trailer_end = output[startxref_pos..].iter().position(|&b| b == b'>').unwrap_or(0);
+    let trailer_end = output[startxref_pos..]
+        .iter()
+        .position(|&b| b == b'>')
+        .unwrap_or(0);
     let trailer_text = String::from_utf8_lossy(&output[startxref_pos..startxref_pos + trailer_end]);
     let catalog_ref = trailer_text
         .lines()
@@ -2379,7 +2421,11 @@ pub fn sign_pdf_with_certificate(
          /AcroForm << /Fields [{} 0 R] /SigFlags 3 >>\n\
          >>\nendobj\n",
         new_catalog_num,
-        if catalog_ref.is_empty() { "1 0 R".to_string() } else { catalog_ref.to_string() },
+        if catalog_ref.is_empty() {
+            "1 0 R".to_string()
+        } else {
+            catalog_ref.to_string()
+        },
         field_obj_num
     );
     update.extend_from_slice(new_catalog.as_bytes());
@@ -2425,17 +2471,22 @@ pub fn sign_pdf_with_certificate(
     let value_start = contents_start + 1; // Point to '<' in "Contents <"
     let value_end = contents_start + contents_marker.len() + 1; // After '>'
 
-    let byte_range = [0u32,
+    let byte_range = [
+        0u32,
         value_start as u32,
         value_end as u32,
-        (full_output.len() - value_end) as u32];
+        (full_output.len() - value_end) as u32,
+    ];
 
     // Compute SHA-256 over the byte ranges
     let mut hasher = Sha256::new();
     hasher.update(&full_output[0..value_start]);
     hasher.update(&full_output[value_end..]);
     let hash = hasher.finalize();
-    let hash_hex = hash.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+    let hash_hex = hash
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
 
     // Replace placeholder with hash (pad with zeros to maintain length)
     let padded_hash = format!("{:0<width$}", hash_hex, width = contents_placeholder.len());
@@ -2457,7 +2508,10 @@ pub fn sign_pdf_with_certificate(
 
     println!(
         "[sign] Signed {} -> {} (signer: {}, hash: {})",
-        input_file, output_file, sig.signer_name, &hash_hex[..16]
+        input_file,
+        output_file,
+        sig.signer_name,
+        &hash_hex[..16]
     );
 
     Ok(())
@@ -2510,7 +2564,9 @@ pub fn verify_pdf_signature(input_file: &str) -> Result<Vec<SignatureInfo>> {
 }
 
 /// Extract embedded X.509 certificates from PDF signature dictionaries.
-pub fn extract_certificates_from_pdf_bytes(data: &[u8]) -> Result<Vec<crate::security::SigningCertificate>> {
+pub fn extract_certificates_from_pdf_bytes(
+    data: &[u8],
+) -> Result<Vec<crate::security::SigningCertificate>> {
     let text = String::from_utf8_lossy(data);
     let obj_re = regex::Regex::new(r"(?s)(\d+)\s+0\s+obj\s+<<(.+?)>>\s+endobj").unwrap();
     let mut certs = Vec::new();
@@ -2532,7 +2588,9 @@ pub fn extract_certificates_from_pdf_bytes(data: &[u8]) -> Result<Vec<crate::sec
 }
 
 /// Extract embedded certificates from a PDF file.
-pub fn extract_certificates_from_pdf(input_file: &str) -> Result<Vec<crate::security::SigningCertificate>> {
+pub fn extract_certificates_from_pdf(
+    input_file: &str,
+) -> Result<Vec<crate::security::SigningCertificate>> {
     let data = fs::read(input_file)?;
     extract_certificates_from_pdf_bytes(&data)
 }
@@ -2583,10 +2641,13 @@ fn parse_cert_hex_metadata(hex: &str) -> Option<(String, String)> {
 
 fn extract_pdf_dict_value(dict: &str, key: &str) -> Option<String> {
     // Search for key as a standalone token (followed by whitespace or end)
-    let pos = dict.match_indices(key)
+    let pos = dict
+        .match_indices(key)
         .find(|(i, _)| {
             let end = i + key.len();
-            end == dict.len() || dict[end..].starts_with(|c: char| c.is_whitespace() || c == '(' || c == '<' || c == '[')
+            end == dict.len()
+                || dict[end..]
+                    .starts_with(|c: char| c.is_whitespace() || c == '(' || c == '<' || c == '[')
         })
         .map(|(i, _)| i)?;
     let after = dict[pos + key.len()..].trim_start();
@@ -2601,10 +2662,14 @@ fn extract_pdf_dict_value(dict: &str, key: &str) -> Option<String> {
         Some(after[..=end].to_string())
     } else if let Some(name_after) = after.strip_prefix('/') {
         // PDF name: /Name
-        let end = name_after.find(|c: char| c.is_whitespace() || c == '/' || c == '>' || c == '[').unwrap_or(name_after.len());
+        let end = name_after
+            .find(|c: char| c.is_whitespace() || c == '/' || c == '>' || c == '[')
+            .unwrap_or(name_after.len());
         Some(name_after[..end].to_string())
     } else {
-        let end = after.find(|c: char| c.is_whitespace() || c == '/' || c == '>').unwrap_or(after.len());
+        let end = after
+            .find(|c: char| c.is_whitespace() || c == '/' || c == '>')
+            .unwrap_or(after.len());
         Some(after[..end].to_string())
     }
 }
@@ -2635,11 +2700,15 @@ pub fn extract_tables_from_pdf(input_file: &str) -> Result<Vec<String>> {
     let tj_re = regex::Regex::new(r"\(((?:[^()\\]|\\.|(?:\([^()]*\)))*)\)\s*Tj").unwrap();
     let tj_hex_re = regex::Regex::new(r"<([0-9a-fA-F\s]+)>\s*Tj").unwrap();
     let td_re = regex::Regex::new(r"([\d.\-]+)\s+([\d.\-]+)\s+T[dD]").unwrap();
-    let tm_re = regex::Regex::new(r"[\d.\-]+\s+[\d.\-]+\s+[\d.\-]+\s+[\d.\-]+\s+([\d.\-]+)\s+([\d.\-]+)\s+Tm").unwrap();
+    let tm_re = regex::Regex::new(
+        r"[\d.\-]+\s+[\d.\-]+\s+[\d.\-]+\s+[\d.\-]+\s+([\d.\-]+)\s+([\d.\-]+)\s+Tm",
+    )
+    .unwrap();
 
     for obj in doc.objects.values() {
         if let PdfObject::Stream { data, .. } = obj {
-            let processed_data = crate::compression::decompress_deflate(data).unwrap_or_else(|_| data.to_vec());
+            let processed_data =
+                crate::compression::decompress_deflate(data).unwrap_or_else(|_| data.to_vec());
             let content = String::from_utf8_lossy(&processed_data);
 
             let mut current_x: f32 = 0.0;
@@ -2650,15 +2719,17 @@ pub fn extract_tables_from_pdf(input_file: &str) -> Result<Vec<String>> {
 
                 // Track positioning
                 if let Some(caps) = td_re.captures(line)
-                    && let (Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[2].parse::<f32>()) {
-                        current_x = x;
-                        current_y = y;
-                    }
+                    && let (Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[2].parse::<f32>())
+                {
+                    current_x = x;
+                    current_y = y;
+                }
                 if let Some(caps) = tm_re.captures(line)
-                    && let (Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[2].parse::<f32>()) {
-                        current_x = x;
-                        current_y = y;
-                    }
+                    && let (Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[2].parse::<f32>())
+                {
+                    current_x = x;
+                    current_y = y;
+                }
 
                 // Extract text fragments with current position
                 for caps in tj_re.captures_iter(line) {
@@ -2867,12 +2938,16 @@ pub fn detect_document_structure(input_file: &str) -> Result<DocumentStructure> 
     let tj_re = regex::Regex::new(r"\(((?:[^()\\]|\\.|(?:\([^()]*\)))*)\)\s*Tj").unwrap();
     let tj_hex_re = regex::Regex::new(r"<([0-9a-fA-F\s]+)>\s*Tj").unwrap();
     let td_re = regex::Regex::new(r"([\d.\-]+)\s+([\d.\-]+)\s+T[dD]").unwrap();
-    let tm_re = regex::Regex::new(r"([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+Tm").unwrap();
+    let tm_re = regex::Regex::new(
+        r"([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+Tm",
+    )
+    .unwrap();
     let tf_re = regex::Regex::new(r"/(\S+)\s+([\d.\-]+)\s+Tf").unwrap();
 
     for obj in doc.objects.values() {
         if let PdfObject::Stream { data, .. } = obj {
-            let processed_data = crate::compression::decompress_deflate(data).unwrap_or_else(|_| data.to_vec());
+            let processed_data =
+                crate::compression::decompress_deflate(data).unwrap_or_else(|_| data.to_vec());
             let content = String::from_utf8_lossy(&processed_data);
 
             let mut current_x: f32 = 0.0;
@@ -2886,29 +2961,38 @@ pub fn detect_document_structure(input_file: &str) -> Result<DocumentStructure> 
 
                 // Track font change: /FontName size Tf
                 if let Some(caps) = tf_re.captures(line)
-                    && let Ok(size) = caps[2].parse::<f32>() {
-                        current_font_name = caps[1].to_string();
-                        current_font_size = size;
-                    }
+                    && let Ok(size) = caps[2].parse::<f32>()
+                {
+                    current_font_name = caps[1].to_string();
+                    current_font_size = size;
+                }
 
                 // Track positioning
                 if let Some(caps) = td_re.captures(line)
-                    && let (Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[2].parse::<f32>()) {
-                        current_x = x;
-                        current_y = y;
-                    }
+                    && let (Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[2].parse::<f32>())
+                {
+                    current_x = x;
+                    current_y = y;
+                }
                 if let Some(caps) = tm_re.captures(line)
-                    && let (Ok(a), Ok(_d), Ok(x), Ok(y)) = (caps[1].parse::<f32>(), caps[4].parse::<f32>(), caps[5].parse::<f32>(), caps[6].parse::<f32>()) {
-                        current_x = x;
-                        current_y = y;
-                        // Effective font scale from matrix (a = x-scale, d = y-scale)
-                        tm_scale = a.abs();
-                        // Also adjust font size by y-scale if it's meaningful
-                        if let Ok(d) = caps[4].parse::<f32>()
-                            && d.abs() > 0.01 {
-                                tm_scale = d.abs();
-                            }
+                    && let (Ok(a), Ok(_d), Ok(x), Ok(y)) = (
+                        caps[1].parse::<f32>(),
+                        caps[4].parse::<f32>(),
+                        caps[5].parse::<f32>(),
+                        caps[6].parse::<f32>(),
+                    )
+                {
+                    current_x = x;
+                    current_y = y;
+                    // Effective font scale from matrix (a = x-scale, d = y-scale)
+                    tm_scale = a.abs();
+                    // Also adjust font size by y-scale if it's meaningful
+                    if let Ok(d) = caps[4].parse::<f32>()
+                        && d.abs() > 0.01
+                    {
+                        tm_scale = d.abs();
                     }
+                }
 
                 // Extract text fragments
                 for caps in tj_re.captures_iter(line) {
@@ -3015,12 +3099,17 @@ pub fn detect_document_structure(input_file: &str) -> Result<DocumentStructure> 
     let mut current_section_title: Option<String> = None;
 
     for line in &merged_lines {
-        let line_text: String = line.iter().map(|f| &f.text as &str).collect::<Vec<_>>().join(" ");
+        let line_text: String = line
+            .iter()
+            .map(|f| &f.text as &str)
+            .collect::<Vec<_>>()
+            .join(" ");
         if line_text.trim().is_empty() {
             continue;
         }
 
-        let avg_font_size = line.iter().map(|f| f.font_size).sum::<f32>() / line.len().max(1) as f32;
+        let avg_font_size =
+            line.iter().map(|f| f.font_size).sum::<f32>() / line.len().max(1) as f32;
         let is_bold = line.iter().any(|f| {
             let name = f.font_name.to_lowercase();
             name.contains("bold") || name.contains("heavy") || name.contains("black")
@@ -3085,8 +3174,14 @@ pub fn detect_document_structure(input_file: &str) -> Result<DocumentStructure> 
     }
 
     // Estimate page count from Y range (A4 = 842 pts height)
-    let y_min = all_fragments.iter().map(|f| f.y).fold(f32::INFINITY, f32::min);
-    let y_max = all_fragments.iter().map(|f| f.y).fold(f32::NEG_INFINITY, f32::max);
+    let y_min = all_fragments
+        .iter()
+        .map(|f| f.y)
+        .fold(f32::INFINITY, f32::min);
+    let y_max = all_fragments
+        .iter()
+        .map(|f| f.y)
+        .fold(f32::NEG_INFINITY, f32::max);
     let estimated_pages = ((y_max - y_min) / 800.0).ceil().max(1.0) as u32;
 
     Ok(DocumentStructure {
@@ -3145,7 +3240,8 @@ pub fn extract_images_from_pdf(input_path: &str, output_dir: &str) -> Result<Vec
         };
 
         // Check if this is an image XObject
-        let is_image = dictionary.get("Subtype")
+        let is_image = dictionary
+            .get("Subtype")
             .and_then(|v| match v {
                 PdfValue::Object(PdfObject::String(s)) => Some(s.as_str()),
                 _ => None,
@@ -3158,11 +3254,10 @@ pub fn extract_images_from_pdf(input_path: &str, output_dir: &str) -> Result<Vec
         }
 
         // Determine format from /Filter
-        let filter = dictionary.get("Filter")
-            .and_then(|v| match v {
-                PdfValue::Object(PdfObject::String(s)) => Some(s.as_str()),
-                _ => None,
-            });
+        let filter = dictionary.get("Filter").and_then(|v| match v {
+            PdfValue::Object(PdfObject::String(s)) => Some(s.as_str()),
+            _ => None,
+        });
 
         let (ext, raw_data) = match filter {
             Some("/DCTDecode") | Some("DCTDecode") => {
@@ -3227,14 +3322,15 @@ pub fn create_portfolio_pdf(
     // Create a catalog object so embed_file can update it
     let catalog_dict = HashMap::new();
     let catalog_id = 1;
-    doc.objects.insert(catalog_id, PdfObject::Dictionary(catalog_dict));
+    doc.objects
+        .insert(catalog_id, PdfObject::Dictionary(catalog_dict));
     doc.catalog = catalog_id;
 
     // Embed each file
     let mut file_specs: Vec<(String, u32)> = Vec::new(); // (filename, file_spec_object_id)
     for (path, _desc) in files {
-        let data = std::fs::read(path)
-            .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", path, e))?;
+        let data =
+            std::fs::read(path).map_err(|e| anyhow::anyhow!("Cannot read {}: {}", path, e))?;
         let filename = std::path::Path::new(path)
             .file_name()
             .and_then(|n| n.to_str())
@@ -3245,31 +3341,50 @@ pub fn create_portfolio_pdf(
 
     // Build the /Collection dictionary with a simple schema
     let mut collection_dict = HashMap::new();
-    collection_dict.insert("Type".to_string(), PdfValue::Object(PdfObject::String("/Collection".to_string())));
-    collection_dict.insert("View".to_string(), PdfValue::Object(PdfObject::String("/D".to_string()))); // Detailed list view
+    collection_dict.insert(
+        "Type".to_string(),
+        PdfValue::Object(PdfObject::String("/Collection".to_string())),
+    );
+    collection_dict.insert(
+        "View".to_string(),
+        PdfValue::Object(PdfObject::String("/D".to_string())),
+    ); // Detailed list view
 
     // Schema — two columns: Filename and Description
     let mut schema_entries = Vec::new();
     schema_entries.push("/Name << /Type /F /O << /D [ (Name) ] >> >>".to_string());
     schema_entries.push("/Description << /Type /Desc /O << /D [ (Description) ] >> >>".to_string());
     let schema = format!("<< {} >>", schema_entries.join(" "));
-    collection_dict.insert("Schema".to_string(), PdfValue::Object(PdfObject::String(schema)));
+    collection_dict.insert(
+        "Schema".to_string(),
+        PdfValue::Object(PdfObject::String(schema)),
+    );
 
     // Sort entries for the portfolio
     let sort = "<< /S /Name /A true >>".to_string();
-    collection_dict.insert("Sort".to_string(), PdfValue::Object(PdfObject::String(sort)));
+    collection_dict.insert(
+        "Sort".to_string(),
+        PdfValue::Object(PdfObject::String(sort)),
+    );
 
     // Add collection object
     let next_id = doc.objects.keys().copied().max().unwrap_or(0) + 1;
     let collection_id = next_id;
-    doc.objects.insert(collection_id, PdfObject::Dictionary(collection_dict));
+    doc.objects
+        .insert(collection_id, PdfObject::Dictionary(collection_dict));
 
     // Wire /Collection into catalog
     if let Some(PdfObject::Dictionary(catalog_dict)) = doc.objects.get_mut(&doc.catalog) {
-        catalog_dict.insert("Collection".to_string(), PdfValue::Object(PdfObject::String(format!("{} 0 R", collection_id))));
+        catalog_dict.insert(
+            "Collection".to_string(),
+            PdfValue::Object(PdfObject::String(format!("{} 0 R", collection_id))),
+        );
         // Title if provided
         if let Some(t) = title {
-            catalog_dict.insert("Title".to_string(), PdfValue::Object(PdfObject::String(format!("({})", escape_pdf_meta(t)))));
+            catalog_dict.insert(
+                "Title".to_string(),
+                PdfValue::Object(PdfObject::String(format!("({})", escape_pdf_meta(t)))),
+            );
         }
     }
 
@@ -3456,8 +3571,14 @@ mod tests {
         metadata.add_custom_field("CustomField1".to_string(), "Value1".to_string());
         metadata.add_custom_field("CustomField2".to_string(), "Value2".to_string());
 
-        assert_eq!(metadata.get_custom_field("CustomField1"), Some(&"Value1".to_string()));
-        assert_eq!(metadata.get_custom_field("CustomField2"), Some(&"Value2".to_string()));
+        assert_eq!(
+            metadata.get_custom_field("CustomField1"),
+            Some(&"Value1".to_string())
+        );
+        assert_eq!(
+            metadata.get_custom_field("CustomField2"),
+            Some(&"Value2".to_string())
+        );
         assert_eq!(metadata.get_custom_field("NonExistent"), None);
 
         let removed = metadata.remove_custom_field("CustomField1");
@@ -3509,8 +3630,14 @@ mod tests {
         assert_eq!(merged.title, Some("New Title".to_string())); // Overwritten
         assert_eq!(merged.author, Some("Base Author".to_string())); // Preserved
         assert_eq!(merged.subject, Some("New Subject".to_string())); // Added
-        assert_eq!(merged.get_custom_field("BaseField"), Some(&"BaseValue".to_string())); // Preserved
-        assert_eq!(merged.get_custom_field("NewField"), Some(&"NewValue".to_string())); // Added
+        assert_eq!(
+            merged.get_custom_field("BaseField"),
+            Some(&"BaseValue".to_string())
+        ); // Preserved
+        assert_eq!(
+            merged.get_custom_field("NewField"),
+            Some(&"NewValue".to_string())
+        ); // Added
     }
 
     #[test]
@@ -3526,8 +3653,14 @@ mod tests {
     #[test]
     fn test_extract_pdf_string_field() {
         let content = r"<< /Title (Test Title) /Author (Test \(Author\) ) /Subject None >>";
-        assert_eq!(extract_pdf_string_field(content, "/Title"), Some("Test Title".to_string()));
-        assert_eq!(extract_pdf_string_field(content, "/Author"), Some("Test (Author) ".to_string()));
+        assert_eq!(
+            extract_pdf_string_field(content, "/Title"),
+            Some("Test Title".to_string())
+        );
+        assert_eq!(
+            extract_pdf_string_field(content, "/Author"),
+            Some("Test (Author) ".to_string())
+        );
         assert_eq!(extract_pdf_string_field(content, "/Subject"), None);
         assert_eq!(extract_pdf_string_field(content, "/NonExistent"), None);
     }
@@ -3611,7 +3744,11 @@ mod tests {
             width: 100.0,
             height: 20.0,
             default_value: Some("USA".to_string()),
-            options: vec!["USA".to_string(), "Canada".to_string(), "Mexico".to_string()],
+            options: vec![
+                "USA".to_string(),
+                "Canada".to_string(),
+                "Mexico".to_string(),
+            ],
             required: false,
         };
         let dict = create_form_field_dict(&field);
@@ -3629,10 +3766,12 @@ mod tests {
         let layout = crate::pdf_generator::PageLayout::portrait();
 
         // Test different positions
-        let center_stream = build_text_watermark_stream("TEST", 24.0, 0.5, &layout, WatermarkPosition::Center);
+        let center_stream =
+            build_text_watermark_stream("TEST", 24.0, 0.5, &layout, WatermarkPosition::Center);
         assert!(String::from_utf8_lossy(&center_stream).contains("(TEST) Tj"));
 
-        let diagonal_stream = build_text_watermark_stream("DRAFT", 48.0, 0.3, &layout, WatermarkPosition::Diagonal);
+        let diagonal_stream =
+            build_text_watermark_stream("DRAFT", 48.0, 0.3, &layout, WatermarkPosition::Diagonal);
         let content = String::from_utf8_lossy(&diagonal_stream);
         assert!(content.contains("(DRAFT) Tj"));
         assert!(content.contains("0.707")); // cos(45°)
@@ -3669,7 +3808,8 @@ mod tests {
             alt_text: None,
         };
 
-        let result = build_image_watermark_stream(&image_info, 0.5, &layout, WatermarkPosition::Center);
+        let result =
+            build_image_watermark_stream(&image_info, 0.5, &layout, WatermarkPosition::Center);
         assert!(result.is_ok());
 
         let stream = result.unwrap();
@@ -3682,8 +3822,8 @@ mod tests {
 
 #[cfg(test)]
 mod proptest_tests {
-    use proptest::prelude::*;
     use super::*;
+    use proptest::prelude::*;
 
     proptest! {
         #[test]
@@ -3757,11 +3897,7 @@ mod proptest_tests {
             (file2.to_string_lossy().to_string(), "CSV data".to_string()),
         ];
 
-        create_portfolio_pdf(
-            &output.to_string_lossy(),
-            &files,
-            Some("Test Portfolio"),
-        ).unwrap();
+        create_portfolio_pdf(&output.to_string_lossy(), &files, Some("Test Portfolio")).unwrap();
 
         assert!(output.exists(), "Portfolio PDF should be created");
 
@@ -3769,14 +3905,23 @@ mod proptest_tests {
         let content = String::from_utf8_lossy(&bytes);
 
         // Should contain Collection dictionary
-        assert!(content.contains("/Collection"), "Should contain /Collection");
+        assert!(
+            content.contains("/Collection"),
+            "Should contain /Collection"
+        );
 
         // Should contain embedded files
-        assert!(content.contains("/EmbeddedFile"), "Should contain /EmbeddedFile");
+        assert!(
+            content.contains("/EmbeddedFile"),
+            "Should contain /EmbeddedFile"
+        );
         assert!(content.contains("/Filespec"), "Should contain /Filespec");
 
         // Should contain the title
-        assert!(content.contains("Test Portfolio"), "Should contain portfolio title");
+        assert!(
+            content.contains("Test Portfolio"),
+            "Should contain portfolio title"
+        );
 
         // Should be a valid PDF
         assert!(content.starts_with("%PDF-"), "Should be a valid PDF");

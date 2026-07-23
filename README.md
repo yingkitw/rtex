@@ -22,7 +22,7 @@ Most LaTeX workflows assume a full TeX distribution — gigabytes of packages, s
 | | **rtex** | **TeX Live / pdflatex** | **Tectonic** | **Pandoc** | **Typst** |
 |---|:---:|:---:|:---:|:---:|:---:|
 | No TeX install | ✅ | ❌ | ✅ | ✅* | ✅ |
-| Native PDF from LaTeX | ✅ | ✅ | ✅ | ⚠️ via LaTeX | ❌ (own syntax) |
+| PDF from LaTeX (pdfrs) | ✅ | ✅ | ✅ | ⚠️ via LaTeX | ❌ (own syntax) |
 | HTML / DOCX / EPUB | ✅ | ❌ | ❌ | ✅ | ⚠️ export |
 | LSP editor support | ✅ | ⚠️ third-party | ❌ | ❌ | ✅ |
 | WASM / embeddable | ✅ | ❌ | ❌ | ❌ | ✅ |
@@ -92,7 +92,7 @@ This improves final PDF text stability for noisy or mixed TeX input.
 
 ## Mathematical Symbol Support
 
-✅ **Unicode Math Symbols**: Native PDF generator with DejaVu Sans TrueType embedding and Identity-H encoding.
+✅ **Unicode Math Symbols**: PDF generation via the vendored [pdfrs](https://crates.io/crates/pdfrs) engine with DejaVu Sans TrueType embedding and Identity-H encoding.
 
 **Supported Features**:
 - 566 mathematical symbols (Greek letters, operators, relations, arrows, integrals, summation)
@@ -109,10 +109,10 @@ This improves final PDF text stability for noisy or mixed TeX input.
 **Status**:
 - ✅ Math formatter: 566 LaTeX commands → Unicode symbols
 - ✅ Font strategy: standard Helvetica for ASCII-only docs (~750 bytes); embedded DejaVu subset for Unicode/math
-- ✅ PDF generation: [pdfrs](https://crates.io/crates/pdfrs) primary backend (native `src/pdf/` fallback on error)
+- ✅ PDF generation: [pdfrs](https://crates.io/crates/pdfrs) backend (no native fallback)
 - Unicode/math documents: ~385 KB (DejaVu subset)
 
-**For production documents**, this native converter now provides good math support. For complex documents with advanced features (TikZ, complex tables, etc.), use pdflatex.
+**For production documents**, this converter now provides good math support. For complex documents with advanced features (TikZ, complex tables, etc.), use pdflatex.
 
 See `docs/MATH_LEARNINGS_FROM_MINITEX.md` for implementation details.
 
@@ -204,9 +204,9 @@ Or after building:
 The project follows KISS and DRY principles with a trait-based design:
 
 - `TexConverter` trait: Defines the conversion interface
-- `NativeTexConverter`: Pure Rust implementation with native TeX parser and PDF builder
+- `NativeTexConverter`: Pure Rust implementation with native TeX parser and pdfrs PDF engine
 - `TexParser`: Parses LaTeX syntax into structured elements
-- `PdfBuilder`: Generates PDF documents from parsed elements
+- `pdfrs_pdf`: Generates PDF documents from parsed elements via the vendored pdfrs engine
 - `convert_tex_to_pdf`: Convenience function for direct conversion
 - `convert_tex_string_to_pdf_bytes`: In-memory PDF conversion (WASM-ready)
 - `convert_tex_string` / `convert_tex_file`: Multi-format conversion (PDF, HTML, DOCX, EPUB)
@@ -266,7 +266,7 @@ cargo test
 
 The test suite includes:
 - 383 comprehensive tests
-- Native PDF generation verification
+- PDF generation verification
 - File size validation
 - PDF header verification
 - Multiple document types (minimal, math, tables, lists, complex)
