@@ -35,7 +35,6 @@ use std::sync::Mutex;
 
 mod bibliography;
 mod cache;
-mod color;
 mod common;
 pub mod config;
 pub mod error;
@@ -52,7 +51,6 @@ pub mod page_layout;
 mod parallel;
 mod parser;
 mod plugins;
-mod references;
 mod streaming;
 mod table;
 pub mod template;

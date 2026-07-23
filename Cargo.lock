@@ -980,7 +980,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "flate2",
  "lsp-server",
  "lsp-types",
  "pdfrs",

@@ -349,33 +349,6 @@ fn extract_braced(text: &str, start: usize) -> Option<(String, usize)> {
     None
 }
 
-/// Build a key→index map from a bibliography list.
-pub fn build_citation_map(entries: &[(String, String)]) -> HashMap<String, usize> {
-    entries
-        .iter()
-        .enumerate()
-        .map(|(i, (key, _))| (key.clone(), i + 1))
-        .collect()
-}
-
-/// Format citation keys as a numeric bracket string: `[1, 2, 3]`.
-pub fn format_citation(keys: &[String], cmap: &HashMap<String, usize>) -> String {
-    let mut nums: Vec<usize> = keys.iter().filter_map(|k| cmap.get(k).copied()).collect();
-    nums.sort_unstable();
-    nums.dedup();
-
-    if nums.is_empty() {
-        return String::new();
-    }
-
-    let s = nums
-        .iter()
-        .map(|n| n.to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{}]", s)
-}
-
 /// Manages a collection of bibliography entries from one or more
 /// `.bib` files.
 #[derive(Debug, Clone)]
@@ -515,35 +488,6 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].get("title"), Some("A"));
         assert_eq!(entries[1].get("title"), Some("B"));
-    }
-
-    #[test]
-    fn test_citation_map() {
-        let entries = vec![
-            ("smith2024".to_string(), "Smith 2024".to_string()),
-            ("jones2023".to_string(), "Jones 2023".to_string()),
-        ];
-        let cmap = build_citation_map(&entries);
-        assert_eq!(cmap.get("smith2024"), Some(&1));
-        assert_eq!(cmap.get("jones2023"), Some(&2));
-    }
-
-    #[test]
-    fn test_format_citation() {
-        let mut cmap = HashMap::new();
-        cmap.insert("a".to_string(), 1);
-        cmap.insert("b".to_string(), 2);
-        cmap.insert("c".to_string(), 3);
-
-        assert_eq!(
-            format_citation(&["a".to_string(), "b".to_string()], &cmap),
-            "[1, 2]"
-        );
-        assert_eq!(
-            format_citation(&["b".to_string(), "a".to_string()], &cmap),
-            "[1, 2]"
-        );
-        assert_eq!(format_citation(&["unknown".to_string()], &cmap), "");
     }
 
     #[test]

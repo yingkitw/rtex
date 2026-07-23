@@ -37,9 +37,6 @@ struct Cli {
     #[arg(short, long, help = "Watch input file and recompile on changes")]
     watch: bool,
 
-    #[arg(short, long, help = "Path to a TOML template file for styling")]
-    template: Option<PathBuf>,
-
     #[arg(
         long,
         help = "Force rebuild even when source and dependencies are unchanged"
