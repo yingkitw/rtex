@@ -22,7 +22,7 @@
 //! - [`OutputFormat`] — PDF, HTML, DOCX, EPUB selection
 //! - [`PackageFetcher`] — on-demand CTAN package download
 //! - [`TexParser`] / [`TexElement`] — LaTeX parsing AST
-//! - [`pdfrs_pdf`] — PDF generation via the vendored pdfrs engine
+//! - `pdfrs_pdf` — PDF generation via the vendored pdfrs engine
 //!
 //! ## Feature flags
 //!

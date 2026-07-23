@@ -58,7 +58,7 @@ pub enum TextSegment {
         text: String,
         url: String,
     },
-    /// Inline citation `[@key]` rendered as [n].
+    /// Inline citation `[@key]` rendered as \[n\].
     Citation {
         key: String,
     },
