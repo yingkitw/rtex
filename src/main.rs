@@ -1,6 +1,6 @@
 use clap::Parser;
 use rtex::{
-    ConsoleReporter, ConversionOptions, DocumentTemplate, OutputFormat, StreamingConverter,
+    ConsoleReporter, ConversionOptions, OutputFormat, StreamingConverter,
     watch_single,
 };
 use std::fs;
@@ -85,15 +85,11 @@ fn build_converter(
     cli: &Cli,
     options: ConversionOptions,
 ) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
-    let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+    let converter = StreamingConverter::with_reporter(ConsoleReporter)
         .with_options(options)
         .with_incremental(!cli.no_incremental)
         .with_force_rebuild(cli.force)
         .with_keep_intermediate(cli.keep_intermediate);
-    if let Some(path) = &cli.template {
-        let template = DocumentTemplate::from_toml(path)?;
-        converter = converter.with_template(template);
-    }
     Ok(converter)
 }
 
@@ -129,7 +125,6 @@ fn main() -> anyhow::Result<()> {
 
     let input_path = cli.input.clone();
     if cli.watch {
-        let template_path = cli.template.clone();
         let force = cli.force;
         let incremental = !cli.no_incremental;
         let keep_intermediate = cli.keep_intermediate;
@@ -148,10 +143,6 @@ fn main() -> anyhow::Result<()> {
                     .with_incremental(incremental)
                     .with_force_rebuild(force)
                     .with_keep_intermediate(keep_intermediate);
-                if let Some(path) = &template_path {
-                    let template = DocumentTemplate::from_toml(path)?;
-                    converter = converter.with_template(template);
-                }
                 converter.convert(inp, out)?;
                 println!(
                     "Successfully converted {} to {}",

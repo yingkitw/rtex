@@ -1,8 +1,8 @@
 //! Page layout configuration for PDF generation.
 //!
 //! Defines paper sizes, margins, orientation, and heading scale helpers
-//! used by [`PdfBuilder`](crate::pdf::builder::PdfBuilder) and
-//! [`DocumentTemplate`](crate::template::DocumentTemplate).
+//! used by [`DocumentTemplate`](crate::template::DocumentTemplate) and
+//! the pdfrs PDF engine.
 
 /// Page layout configuration for PDF generation
 

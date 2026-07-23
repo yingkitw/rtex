@@ -2,7 +2,6 @@
 //!
 //! Handles `tabular` environments, including cell alignment and horizontal rules.
 
-use crate::pdf::core::ContentStream;
 use serde::Serialize;
 
 /// Horizontal alignment for a table column.
@@ -81,68 +80,6 @@ impl Table {
     }
 }
 
-/// Render a table into PDF content stream operations.
-///
-/// Returns the new Y position after the table.
-pub fn render_table(
-    table: &Table,
-    stream: &mut ContentStream,
-    left_margin: f32,
-    y_position: f32,
-    line_height: f32,
-    content_width: f32,
-) -> f32 {
-    let mut current_y = y_position - 5.0;
-
-    if table.columns.is_empty() || table.rows.is_empty() {
-        return current_y - 10.0;
-    }
-
-    let col_width = content_width / table.columns.len() as f32;
-
-    for row in &table.rows {
-        if row.is_separator {
-            // Draw a horizontal rule
-            let rule_y = current_y + line_height * 0.4;
-            stream.move_to(left_margin, rule_y);
-            stream.line_to(left_margin + content_width, rule_y);
-            stream.stroke();
-            current_y -= line_height * 0.5;
-            continue;
-        }
-
-        for (i, cell) in row.cells.iter().enumerate() {
-            if i >= table.columns.len() {
-                break;
-            }
-            if cell.is_empty() {
-                continue;
-            }
-
-            let x_pos = left_margin + (i as f32 * col_width);
-            let align = table.columns.get(i).copied().unwrap_or(Align::Left);
-
-            // Calculate x offset for alignment
-            let cell_width = estimate_text_width(cell);
-            let x_offset = match align {
-                Align::Left => 0.0,
-                Align::Center => (col_width - cell_width) / 2.0,
-                Align::Right => col_width - cell_width,
-            };
-
-            stream.begin_text();
-            stream.set_font("F1", 10.0);
-            stream.set_position(x_pos + x_offset, current_y);
-            stream.show_text(cell);
-            stream.end_text();
-        }
-
-        current_y -= line_height;
-    }
-
-    current_y - 10.0
-}
-
 /// Parse a LaTeX column specification string into alignment values.
 ///
 /// Ignores `|`, `@{}`, and `p{width}` — treats `p` as left-aligned.
@@ -188,11 +125,6 @@ fn parse_column_spec(spec: &str) -> Vec<Align> {
     }
 
     result
-}
-
-/// Rough text width estimate in PDF points (1 char ≈ 5pt at 10pt font).
-fn estimate_text_width(text: &str) -> f32 {
-    text.chars().count() as f32 * 5.0
 }
 
 #[cfg(test)]

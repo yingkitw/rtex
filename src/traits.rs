@@ -32,21 +32,6 @@ pub trait MathFormatter: Send + Sync {
     }
 }
 
-/// Trait for building PDF documents
-pub trait PdfBuilder: Send + Sync {
-    /// Build a PDF from parsed elements
-    fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<()>;
-
-    /// Set document title
-    fn set_title(&mut self, title: String);
-
-    /// Set document author
-    fn set_author(&mut self, author: String);
-
-    /// Set document date
-    fn set_date(&mut self, date: String);
-}
-
 /// Trait for font management
 pub trait FontProvider: Send + Sync {
     /// Load a font from a path

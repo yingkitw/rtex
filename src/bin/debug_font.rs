@@ -1,5 +1,5 @@
-use rtex::{PdfBuilder, TexParser};
-use std::path::Path;
+use rtex::{TexParser, convert_tex_string_to_pdf_bytes};
+use std::fs;
 
 fn main() {
     // Create a simple test with special characters
@@ -17,12 +17,10 @@ Special characters test:
 ";
 
     let mut parser = TexParser::new(content.to_string());
-    let elements = parser.parse();
+    let _elements = parser.parse();
 
-    let mut builder = PdfBuilder::new();
-    builder
-        .build(elements, Path::new("output/font_test.pdf"))
-        .unwrap();
+    let pdf = convert_tex_string_to_pdf_bytes(content).unwrap();
+    fs::write("output/font_test.pdf", pdf).unwrap();
 
     println!("Font test PDF generated: output/font_test.pdf");
 }

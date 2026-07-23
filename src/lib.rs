@@ -39,11 +39,8 @@ mod color;
 mod common;
 pub mod config;
 pub mod error;
-mod fonts;
-mod image;
 mod incremental;
 mod intermediate;
-mod layout;
 pub mod lsp;
 mod macros;
 mod math;
@@ -54,7 +51,6 @@ mod packages;
 pub mod page_layout;
 mod parallel;
 mod parser;
-mod pdf;
 mod plugins;
 mod references;
 mod streaming;
@@ -82,7 +78,6 @@ pub use output::{DocumentMeta, OutputFormat, PdfBackend, render_elements, render
 pub use packages::{PackageFetcher, PackageRequest};
 pub use parallel::{ParallelConverter, convert_dir};
 pub use parser::{TexElement, TexParser};
-pub use pdf::builder::PdfBuilder;
 pub use plugins::{
     CustomFormatPlugin, FormatType, Plugin, PluginError, PluginRegistry, TodayPlugin, UrlPlugin,
 };

@@ -48,7 +48,6 @@ impl ProgressReporter for ConsoleReporter {
 pub struct StreamingConverter<R: ProgressReporter> {
     reporter: R,
     chunk_size: usize,
-    template: Option<crate::template::DocumentTemplate>,
     incremental: IncrementalCompiler,
     force_rebuild: bool,
     keep_intermediate: bool,
@@ -60,7 +59,6 @@ impl StreamingConverter<NoOpReporter> {
         Self {
             reporter: NoOpReporter,
             chunk_size: 1024 * 1024, // 1 MiB
-            template: None,
             incremental: IncrementalCompiler::new(),
             force_rebuild: false,
             keep_intermediate: false,
@@ -81,7 +79,6 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         Self {
             reporter,
             chunk_size: 1024 * 1024,
-            template: None,
             incremental: IncrementalCompiler::new(),
             force_rebuild: false,
             keep_intermediate: false,
@@ -97,12 +94,6 @@ impl<R: ProgressReporter> StreamingConverter<R> {
 
     pub fn with_chunk_size(mut self, size: usize) -> Self {
         self.chunk_size = size;
-        self
-    }
-
-    /// Attach a document template for styling.
-    pub fn with_template(mut self, template: crate::template::DocumentTemplate) -> Self {
-        self.template = Some(template);
         self
     }
 
@@ -187,15 +178,8 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         };
         self.reporter.stage_started(build_stage, 60.0);
         match self.options.format {
-            OutputFormat::Pdf => {
-                let mut builder = crate::pdf::builder::PdfBuilder::new();
-                if let Some(template) = self.template.take() {
-                    builder = builder.with_template(template);
-                }
-                builder.build(elements.clone(), output)?;
-            }
-            format => {
-                let bytes = render_elements(elements.clone(), format)?;
+            OutputFormat::Pdf | OutputFormat::Html | OutputFormat::Docx | OutputFormat::Epub => {
+                let bytes = render_elements(elements.clone(), self.options.format)?;
                 fs::write(output, bytes).map_err(|source| crate::error::LatexError::IoError {
                     path: output.to_path_buf(),
                     source,
