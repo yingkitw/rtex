@@ -35,12 +35,19 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 
 - `mod.rs`: Core parser struct, element types, and main dispatch
   - `TexParser`: Parses LaTeX source into structured elements
-  - `TexElement`: Enum representing parsed LaTeX elements
-  - Environment parsing (itemize, enumerate, equation, center, etc.)
+  - `TexElement`: Enum representing parsed LaTeX elements (Text, Command, Section, Math, Lists, Theorem, Table, CodeBlock, Image, ColoredText, Citation, Bibliography, Label/Ref/PageRef, Center, Quote, Abstract, LineBreak, FlushLeft, FlushRight, Footnote, Caption, TableOfContents, ListOfFigures, ListOfTables)
+  - Environment parsing (itemize, enumerate, description, equation, align, gather, multline, cases, center, quote, abstract, figure, flushleft, flushright, minipage, displaymath, math, eqnarray, split, aligned, gathered, lstlisting, verbatim, tabular, table, thebibliography, theorem-like)
+  - 27 special character commands (`\copyright`, `\pounds`, `\LaTeX`, `\AA`, `\ss`, etc.)
+  - 40+ skip-commands silently consumed (`\setlength`, `\setcounter`, `\ignorespaces`, font declarations, dimension commands)
+  - Counter formatting (`\value`, `\arabic`, `\roman`, `\alph`, `\the<counter>`)
+  - `\\` line break with optional `[length]` and `*` variants
   - Plugin command/environment dispatch
 - `commands.rs`: Backslash command handlers
   - Sections, text formatting, includegraphics, citations, labels/refs
   - Font size commands, page breaks, footnotes
+  - `\hspace`/`\vspace`, `\mbox`/`\parbox`/`\makebox`, `\multicolumn`/`\cline`
+  - `\footnotemark`/`\footnotetext`, `\textnormal`/`\enquote`
+  - `\linebreak`/`\nopagebreak`/`\samepage`/`\enlargethispage`
 - `math.rs`: Inline and display math delimiter parsing
 - `text.rs`: Plain-text accumulation with inline-math preservation
 
@@ -113,6 +120,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
   - `--template <path>`: Apply a TOML template for styling
   - `--force`: Force rebuild even when source and dependencies are unchanged
   - `--no-incremental`: Disable incremental compilation and always rebuild
+  - `--completions <shell>`: Generate shell completion script (bash, zsh, fish, elvish, powershell)
 - Minimal error handling delegation to library
 
 ### Tests
@@ -126,6 +134,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 ## Dependencies
 
 - **clap**: CLI argument parsing with derive macros
+- **clap_complete**: Shell completion script generation (bash, zsh, fish, elvish, powershell)
 - **anyhow**: Error handling in main
 - **thiserror**: Custom error types
 - **chrono**: Date handling for `\today` command

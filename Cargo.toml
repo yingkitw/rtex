@@ -1,11 +1,13 @@
 [package]
 name = "rtex"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "Native TeX to PDF converter written in Rust with zero external LaTeX dependencies"
 authors = ["Ying Kit WONG"]
 license = "Apache-2.0"
 repository = "https://github.com/yingkitw/rtex"
+documentation = "https://docs.rs/rtex/"
+homepage = "https://github.com/yingkitw/rtex"
 keywords = ["latex", "pdf", "tex", "converter", "typesetting"]
 categories = ["command-line-utilities", "text-processing"]
 rust-version = "1.85"
@@ -23,6 +25,7 @@ dev-bins = []
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
 anyhow = "1.0"
 thiserror = "1.0"
 chrono = "0.4"
@@ -35,7 +38,7 @@ usvg = "0.45.1"
 png = "0.17"
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
-pdfrs = "0.1.5"
+pdfrs = "0.1.9"
 lsp-server = { version = "0.7", optional = true }
 lsp-types = { version = "0.97", optional = true }
 

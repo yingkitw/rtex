@@ -177,6 +177,18 @@ cargo run -- input.tex --keep-intermediate
 # Also writes: output/input.expanded.tex, output/input.ast.json, output/input.meta.json
 ```
 
+### Shell Completions
+
+Generate completion scripts for your shell:
+
+```bash
+cargo run --bin rtex -- --completions bash > /etc/bash_completion.d/rtex
+cargo run --bin rtex -- --completions zsh > ~/.zsh/completions/_rtex
+cargo run --bin rtex -- --completions fish > ~/.config/fish/completions/rtex.fish
+```
+
+Supported shells: bash, zsh, fish, elvish, powershell.
+
 ### Language Server (editor integration)
 
 Build and run the LSP server for VS Code, Cursor, or Neovim:

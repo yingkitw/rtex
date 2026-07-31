@@ -11,7 +11,7 @@ use std::path::Path;
 
 use crate::ConversionOptions;
 use crate::incremental::IncrementalCompiler;
-use crate::output::{OutputFormat, render_elements};
+use crate::output::{OutputFormat, render_elements_in_dir};
 use crate::packages::PackageFetcher;
 
 /// Callback trait for reporting conversion progress.
@@ -179,7 +179,8 @@ impl<R: ProgressReporter> StreamingConverter<R> {
         self.reporter.stage_started(build_stage, 60.0);
         match self.options.format {
             OutputFormat::Pdf | OutputFormat::Html | OutputFormat::Docx | OutputFormat::Epub => {
-                let bytes = render_elements(elements.clone(), self.options.format)?;
+                let bytes =
+                    render_elements_in_dir(elements.clone(), self.options.format, input.parent())?;
                 fs::write(output, bytes).map_err(|source| crate::error::LatexError::IoError {
                     path: output.to_path_buf(),
                     source,
@@ -218,9 +219,8 @@ impl<R: ProgressReporter> StreamingConverter<R> {
             return Ok(buf);
         }
 
-        // For large files read in chunks and accumulate.
         let mut reader = BufReader::with_capacity(self.chunk_size, file);
-        let mut buf = String::with_capacity(len);
+        let mut bytes = Vec::with_capacity(len);
         let mut chunk = vec![0u8; self.chunk_size];
         let mut total_read = 0usize;
 
@@ -229,19 +229,21 @@ impl<R: ProgressReporter> StreamingConverter<R> {
             if n == 0 {
                 break;
             }
-            // SAFETY: the parser expects valid UTF-8; invalid bytes are replaced.
-            let text = String::from_utf8_lossy(&chunk[..n]);
-            buf.push_str(&text);
+            bytes.extend_from_slice(&chunk[..n]);
             total_read += n;
 
-            // Report intermediate progress for very large files.
             if len > 0 {
                 let pct = 30.0 * (total_read as f64 / len as f64).min(1.0);
                 self.reporter.stage_started("reading source", pct);
             }
         }
 
-        Ok(buf)
+        String::from_utf8(bytes).map_err(|error| crate::error::LatexError::ParseError {
+            message: format!("source is not valid UTF-8: {error}"),
+            line: None,
+            column: None,
+            context: Some(path.display().to_string()),
+        })
     }
 }
 

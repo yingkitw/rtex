@@ -270,18 +270,24 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 - [x] **Sized fractions** — `\tfrac` and `\dfrac` now share the `\frac` Unicode-fraction lookup in `format_fractions`
 - [x] **Binomial coefficients** — `\binom`, `\dbinom`, `\tbinom` emit `C(n, k)` notation via `format_fractions`
 - [x] **Nested `\begin{cases}` inside `\[…\]`** — display/inline math delimiter parser detects an embedded cases block, parses it as `MathLines`, and merges any prefix/suffix text onto the first/last lines
+- [x] **Comprehensive LaTeX syntax coverage** — added `\\` line break (with optional `[length]` and `*`), 27 special characters (`\copyright`, `\pounds`, `\S`, `\P`, `\dag`, `\ddag`, `\ldots`, `\dots`, `\LaTeX`, `\TeX`, `\AA`, `\aa`, `\AE`, `\ae`, `\OE`, `\oe`, `\ss`, `\L`, `\l`, `\O`, `\o`, `\i`, `\j`, `\textellipsis`, `\textcopyright`, `\textregistered`, `\texttrademark`), `\hspace`/`\hspace*`/`\vspace*`, `\linebreak`/`\nopagebreak`/`\samepage`/`\enlargethispage`, `\mbox`/`\parbox`/`\makebox`, `\multicolumn`/`\cline`/`\footnotemark`/`\footnotetext`, `\textnormal`/`\enquote`, 40+ skip-commands (`\setlength`, `\setcounter`, `\ignorespaces`, font family/series/shape declarations, dimension commands), counter formatting (`\value`, `\arabic`, `\roman`, `\alph`, `\the<counter>`), new environments (`figure`, `flushleft`, `flushright`, `minipage`, `displaymath`, `math`, `eqnarray`, `split`, `aligned`, `gathered`), word-boundary fix for short special char commands (`\i` vs `\it`)
 - **Collaborative editing** — CRDT or OT layer on parsed AST (Overleaf)
 - **Formula OCR input** — photo/screenshot → LaTeX (Mathpix competitor)
-- **Docker/OCI image** — single-container deploy for CI conversion farms
+- [x] **Shell completions** — `--completions <shell>` flag generates bash/zsh/fish/elvish/powershell scripts via `clap_complete`; documented in README
+- **SyncTeX support** — write `.synctex.gz` for editor forward/reverse search (Tectonic 0.16, useful with LSP)
+- **Variable fonts** — support OpenType variable font axes (Typst 0.15)
+- **Spot colors** — custom pigment definitions for offset printing (Typst 0.15)
+- **MathML export** — emit MathML in HTML output for accessible math (Typst 0.15)
+- **Multiple PDF standards** — produce PDF/A + PDF/UA simultaneously (Typst 0.15)
 
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 400+ (see `cargo test`)
+- Tests: 550+ (see `cargo test`)
 - PDF: pdfrs sole backend (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
 - Math: Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - Math symbols: 566
-- LaTeX commands: ~250+
+- LaTeX commands: ~300+
 - Documentation: ARCHITECTURE/SPEC/README aligned with pdfrs-only PDF backend
 - File size: ~750 bytes for ASCII-only PDFs; subsetted Unicode/math via pdfrs Archive profile
 

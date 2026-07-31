@@ -89,6 +89,12 @@ pub enum TexElement {
     Quote(Vec<TexElement>),
     /// An abstract block (`\begin{abstract}`).
     Abstract(Vec<TexElement>),
+    /// A forced line break (`\\`).
+    LineBreak,
+    /// A flush-left block (`\begin{flushleft}`).
+    FlushLeft(Vec<TexElement>),
+    /// A flush-right block (`\begin{flushright}`).
+    FlushRight(Vec<TexElement>),
 }
 
 /// A single bibliography entry for `thebibliography`.
@@ -385,8 +391,8 @@ impl TexParser {
             return self.parse_pagebreak();
         }
 
-        // Paragraph break
-        if remaining.starts_with("\\par") {
+        // Paragraph break (must check after \parbox to avoid matching \parbox as \par)
+        if remaining.starts_with("\\par") && !remaining.starts_with("\\parbox") {
             self.position += "\\par".len();
             return Some(TexElement::Paragraph);
         }
@@ -444,9 +450,42 @@ impl TexParser {
             ("\\textdollar", "$"),
             ("\\textgreater", ">"),
             ("\\textless", "<"),
+            ("\\textellipsis", "…"),
+            ("\\textcopyright", "©"),
+            ("\\textregistered", "®"),
+            ("\\texttrademark", "™"),
+            ("\\copyright", "©"),
+            ("\\pounds", "£"),
+            ("\\S", "§"),
+            ("\\P", "¶"),
+            ("\\dag", "†"),
+            ("\\ddag", "‡"),
+            ("\\ldots", "…"),
+            ("\\dots", "…"),
+            ("\\LaTeXe", "LaTeX2ε"),
+            ("\\LaTeX", "LaTeX"),
+            ("\\TeX", "TeX"),
+            ("\\AA", "Å"),
+            ("\\aa", "å"),
+            ("\\AE", "Æ"),
+            ("\\ae", "æ"),
+            ("\\OE", "Œ"),
+            ("\\oe", "œ"),
+            ("\\ss", "ß"),
+            ("\\L", "Ł"),
+            ("\\l", "ł"),
+            ("\\O", "Ø"),
+            ("\\o", "ø"),
+            ("\\i", "ı"),
+            ("\\j", "ȷ"),
         ];
         for (prefix, ch) in &text_chars {
-            if remaining.starts_with(prefix) {
+            if let Some(after) = remaining.strip_prefix(prefix) {
+                // Ensure we don't match a prefix of a longer command name.
+                // E.g. \i should not match \it, \o should not match \oe.
+                if after.starts_with(|c: char| c.is_alphabetic()) {
+                    continue;
+                }
                 self.position += prefix.len();
                 return Some(TexElement::Text(ch.to_string()));
             }
@@ -577,8 +616,19 @@ impl TexParser {
         }
 
         // Vertical spacing
+        if remaining.starts_with("\\vspace*{") {
+            return self.parse_simple_braced_command("vspace*", 9);
+        }
         if remaining.starts_with("\\vspace{") {
             return self.parse_vspace();
+        }
+
+        // Horizontal spacing
+        if remaining.starts_with("\\hspace*{") {
+            return self.parse_simple_braced_command("hspace*", 9);
+        }
+        if remaining.starts_with("\\hspace{") {
+            return self.parse_simple_braced_command("hspace", 8);
         }
 
         // Bibliography commands
@@ -609,6 +659,143 @@ impl TexParser {
         // Underline
         if remaining.starts_with("\\underline{") {
             return self.parse_underline();
+        }
+
+        // Text normal font
+        if remaining.starts_with("\\textnormal{") {
+            return self.parse_simple_braced_command("textnormal", 12);
+        }
+
+        // Enquote (csquotes)
+        if remaining.starts_with("\\enquote{") {
+            return self.parse_simple_braced_command("enquote", 9);
+        }
+
+        // mbox — horizontal box
+        if remaining.starts_with("\\mbox{") {
+            return self.parse_simple_braced_command("mbox", 6);
+        }
+
+        // parbox[alignment]{width}{text}
+        if remaining.starts_with("\\parbox") {
+            return self.parse_parbox();
+        }
+
+        // makebox[width][position]{text}
+        if remaining.starts_with("\\makebox") {
+            return self.parse_makebox();
+        }
+
+        // Footnote companions
+        if remaining.starts_with("\\footnotemark") {
+            self.position += "\\footnotemark".len();
+            // Optional [number]
+            self.skip_whitespace_and_comments();
+            if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+                self.position += 1;
+                let _ = self.read_until(']');
+                self.position += 1;
+            }
+            return Some(TexElement::Command {
+                name: "footnotemark".to_string(),
+                args: vec![],
+            });
+        }
+        if remaining.starts_with("\\footnotetext{") {
+            return self.parse_simple_braced_command("footnotetext", 13);
+        }
+
+        // Table commands
+        if remaining.starts_with("\\multicolumn{") {
+            return self.parse_multicolumn();
+        }
+        if remaining.starts_with("\\cline{") {
+            return self.parse_simple_braced_command("cline", 7);
+        }
+
+        // Page control commands (no-op, just consume)
+        let page_cmds = [
+            ("\\linebreak", "linebreak"),
+            ("\\nopagebreak", "nopagebreak"),
+            ("\\samepage", "samepage"),
+            ("\\enlargethispage", "enlargethispage"),
+        ];
+        for (prefix, name) in &page_cmds {
+            if remaining.starts_with(prefix) {
+                self.position += prefix.len();
+                self.skip_whitespace_and_comments();
+                // Optional [length] argument
+                if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+                    self.position += 1;
+                    let _ = self.read_until(']');
+                    self.position += 1;
+                }
+                return Some(TexElement::Command {
+                    name: name.to_string(),
+                    args: vec![],
+                });
+            }
+        }
+
+        // Skip commands — consume and produce no output
+        let skip_cmds = [
+            "\\setlength", "\\addtolength", "\\newlength", "\\setcounter", "\\newcounter",
+            "\\stepcounter", "\\refstepcounter", "\\ignorespaces", "\\ignorespacesafterend",
+            "\\protect", "\\typeout", "\\obeylines", "\\obeyspaces", "\\baselinestretch",
+            "\\linespread", "\\selectfont", "\\resetfontparameters", "\\normalfont",
+            "\\rmfamily", "\\sffamily", "\\ttfamily", "\\bfseries", "\\mdseries",
+            "\\upshape", "\\itshape", "\\slshape", "\\scshape",
+            "\\sloppy", "\\fussy", "\\raggedbottom", "\\flushbottom",
+            "\\columnsep", "\\columnwidth", "\\textwidth", "\\linewidth",
+            "\\pagewidth", "\\paperwidth", "\\paperheight", "\\textheight",
+            "\\unitlength", "\\tabcolsep", "\\arraycolsep", "\\arrayrulewidth",
+            "\\doublerulesep", "\\arraystretch",
+        ];
+        for prefix in &skip_cmds {
+            if remaining.starts_with(prefix) {
+                self.position += prefix.len();
+                self.skip_whitespace_and_comments();
+                // Consume any braced arguments
+                while self.position < self.content.len() && self.content[self.position..].starts_with('{') {
+                    let _ = self.parse_braced_content();
+                    self.skip_whitespace_and_comments();
+                }
+                // Consume optional [...] argument
+                if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+                    self.position += 1;
+                    let _ = self.read_until(']');
+                    self.position += 1;
+                }
+                return None;
+            }
+        }
+
+        // Counter formatting commands — consume and produce empty text
+        let counter_cmds = [
+            "\\value", "\\arabic", "\\roman", "\\Roman", "\\alph", "\\Alph",
+        ];
+        for prefix in &counter_cmds {
+            if remaining.starts_with(prefix) {
+                self.position += prefix.len();
+                self.skip_whitespace_and_comments();
+                let _ = self.parse_braced_content();
+                return Some(TexElement::Text(String::new()));
+            }
+        }
+
+        // \the<counter> — consume
+        if remaining.starts_with("\\the") {
+            self.position += 4;
+            // Consume following alphabetic command name
+            while self.position < self.content.len() {
+                let ch = self.content[self.position..].chars().next().unwrap();
+                if ch.is_alphabetic() {
+                    self.position += ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            return Some(TexElement::Text(String::new()));
         }
 
         // Footnote
@@ -672,6 +859,23 @@ impl TexParser {
                     args: vec![],
                 });
             }
+        }
+
+        // Line break: \\  (possibly followed by [length] or *)
+        if remaining.starts_with("\\\\") {
+            self.position += 2;
+            // Optional * (prevents page break)
+            if self.position < self.content.len() && self.content[self.position..].starts_with('*') {
+                self.position += 1;
+            }
+            // Optional [length] extra vertical space
+            self.skip_whitespace_and_comments();
+            if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+                self.position += 1;
+                let _ = self.read_until(']');
+                self.position += 1;
+            }
+            return Some(TexElement::LineBreak);
         }
 
         if remaining.starts_with('\\') {
@@ -746,6 +950,86 @@ impl TexParser {
         let mut inner_parser = TexParser::new(body);
         let elements = inner_parser.parse();
         Some(TexElement::Abstract(elements))
+    }
+
+    /// Parse a `\begin{figure} … \end{figure}` block.
+    /// Returns the inner content as a `Center` element.
+    fn parse_figure(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{figure}";
+        let body_start = self.position;
+        let body_end = self.content[self.position..].find(end_marker)?;
+        let body = self.content[body_start..body_start + body_end].to_string();
+        self.position = body_start + body_end + end_marker.len();
+
+        let mut inner_parser = TexParser::new(body);
+        let elements = inner_parser.parse();
+        Some(TexElement::Center(elements))
+    }
+
+    /// Parse a `\begin{flushleft} … \end{flushleft}` block.
+    fn parse_flushleft(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{flushleft}";
+        let body_start = self.position;
+        let body_end = self.content[self.position..].find(end_marker)?;
+        let body = self.content[body_start..body_start + body_end].to_string();
+        self.position = body_start + body_end + end_marker.len();
+
+        let mut inner_parser = TexParser::new(body);
+        let elements = inner_parser.parse();
+        Some(TexElement::FlushLeft(elements))
+    }
+
+    /// Parse a `\begin{flushright} … \end{flushright}` block.
+    fn parse_flushright(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{flushright}";
+        let body_start = self.position;
+        let body_end = self.content[self.position..].find(end_marker)?;
+        let body = self.content[body_start..body_start + body_end].to_string();
+        self.position = body_start + body_end + end_marker.len();
+
+        let mut inner_parser = TexParser::new(body);
+        let elements = inner_parser.parse();
+        Some(TexElement::FlushRight(elements))
+    }
+
+    /// Parse a `\begin{minipage}[alignment]{width} … \end{minipage}` block.
+    fn parse_minipage(&mut self) -> Option<TexElement> {
+        // Skip optional [alignment] argument
+        self.skip_whitespace_and_comments();
+        if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let _ = self.read_until(']');
+            self.position += 1;
+        }
+        // Skip {width} argument
+        self.skip_whitespace_and_comments();
+        if self.position < self.content.len() && self.content[self.position..].starts_with('{') {
+            let _ = self.parse_braced_content();
+        }
+
+        let end_marker = "\\end{minipage}";
+        let body_start = self.position;
+        let body_end = self.content[self.position..].find(end_marker)?;
+        let body = self.content[body_start..body_start + body_end].to_string();
+        self.position = body_start + body_end + end_marker.len();
+
+        let mut inner_parser = TexParser::new(body);
+        let elements = inner_parser.parse();
+        Some(TexElement::Center(elements))
+    }
+
+    /// Parse a `\begin{displaymath} … \end{displaymath}` block.
+    fn parse_displaymath_env(&mut self) -> Option<TexElement> {
+        let content = self.read_until_str("\\end{displaymath}");
+        self.position += "\\end{displaymath}".len();
+        Some(TexElement::MathDisplay(content.trim().to_string()))
+    }
+
+    /// Parse a `\begin{math} … \end{math}` block (inline math).
+    fn parse_math_env(&mut self) -> Option<TexElement> {
+        let content = self.read_until_str("\\end{math}");
+        self.position += "\\end{math}".len();
+        Some(TexElement::MathInline(content.trim().to_string()))
     }
 
     #[allow(clippy::question_mark)]
@@ -903,6 +1187,18 @@ impl TexParser {
             "center" => self.parse_center(),
             "quote" | "quotation" => self.parse_quote(&env_name),
             "abstract" => self.parse_abstract(),
+            "figure" => self.parse_figure(),
+            "figure*" => self.parse_figure(),
+            "flushleft" => self.parse_flushleft(),
+            "flushright" => self.parse_flushright(),
+            "minipage" => self.parse_minipage(),
+            "displaymath" => self.parse_displaymath_env(),
+            "math" => self.parse_math_env(),
+            "eqnarray" => self.parse_math_lines(MathLineKind::Align),
+            "eqnarray*" => self.parse_math_lines(MathLineKind::Align),
+            "split" => self.parse_math_lines(MathLineKind::Align),
+            "aligned" => self.parse_math_lines(MathLineKind::Align),
+            "gathered" => self.parse_math_lines(MathLineKind::Gather),
             _ => {
                 if let Some(elem) = self.try_plugin_environment(&env_name) {
                     return Some(elem);
@@ -1325,7 +1621,11 @@ impl TexParser {
             if self.content[self.position..].starts_with(delimiter) {
                 break;
             }
-            self.position += 1;
+            self.position += self.content[self.position..]
+                .chars()
+                .next()
+                .map(char::len_utf8)
+                .unwrap_or(0);
         }
 
         self.content[start..self.position].to_string()
@@ -2894,5 +3194,236 @@ f(x) = \begin{cases}
             }
         }
         assert!(found_prefix, "expected 'f(x) =' prefix to be preserved");
+    }
+
+    #[test]
+    fn parser_parses_line_break() {
+        let content = r#"\documentclass{article}
+\begin{document}
+First line \\ Second line
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::LineBreak)),
+            "Expected a LineBreak element");
+    }
+
+    #[test]
+    fn parser_parses_line_break_with_opt_arg() {
+        let content = r#"\documentclass{article}
+\begin{document}
+A \\[2em] B
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::LineBreak)),
+            "Expected LineBreak with optional [length] argument");
+    }
+
+    #[test]
+    fn parser_parses_extended_special_chars() {
+        let cases = [
+            ("\\copyright", "©"),
+            ("\\pounds", "£"),
+            ("\\S", "§"),
+            ("\\P", "¶"),
+            ("\\dag", "†"),
+            ("\\ddag", "‡"),
+            ("\\ldots", "…"),
+            ("\\dots", "…"),
+            ("\\LaTeX", "LaTeX"),
+            ("\\TeX", "TeX"),
+            ("\\AA", "Å"),
+            ("\\aa", "å"),
+            ("\\ss", "ß"),
+        ];
+        for (cmd, expected) in &cases {
+            let mut parser = TexParser::new(cmd.to_string());
+            let elements = parser.parse();
+            assert!(
+                elements.iter().any(|e| matches!(e, TexElement::Text(t) if t == *expected)),
+                "Command {} should produce text {}",
+                cmd,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn parser_special_chars_word_boundary() {
+        // \i should produce ı, but \it should produce a Command named "it"
+        let mut parser = TexParser::new("\\it".to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "it")),
+            "\\it should be a Command, not consumed by \\i special char");
+    }
+
+    #[test]
+    fn parser_parses_flushleft() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{flushleft}
+Left aligned text
+\end{flushleft}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::FlushLeft(_))),
+            "Expected FlushLeft element");
+    }
+
+    #[test]
+    fn parser_parses_flushright() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{flushright}
+Right aligned text
+\end{flushright}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::FlushRight(_))),
+            "Expected FlushRight element");
+    }
+
+    #[test]
+    fn parser_parses_figure() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{figure}
+\centering
+\caption{Test figure}
+\end{figure}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
+            "Expected figure to produce Center element");
+    }
+
+    #[test]
+    fn parser_parses_displaymath_env() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{displaymath}
+E = mc^2
+\end{displaymath}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::MathDisplay(_))),
+            "Expected displaymath environment to produce MathDisplay");
+    }
+
+    #[test]
+    fn parser_parses_math_env() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{math} x + y \end{math}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::MathInline(_))),
+            "Expected math environment to produce MathInline");
+    }
+
+    #[test]
+    fn parser_skips_setlength() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\setlength{\parindent}{0pt}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "setlength")),
+            "setlength should be silently consumed");
+    }
+
+    #[test]
+    fn parser_skips_setcounter() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\setcounter{page}{3}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "setcounter")),
+            "setcounter should be silently consumed");
+    }
+
+    #[test]
+    fn parser_parses_hspace() {
+        let content = r#"\documentclass{article}
+\begin{document}
+A\hspace{1em}B
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "hspace" && args == &["1em"])),
+            "Expected hspace command");
+    }
+
+    #[test]
+    fn parser_parses_multicolumn() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\multicolumn{2}{c}{Header}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "multicolumn" && args.len() == 3)),
+            "Expected multicolumn command with 3 args");
+    }
+
+    #[test]
+    fn parser_parses_enquote() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\enquote{Hello world}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "enquote" && args == &["Hello world"])),
+            "Expected enquote command");
+    }
+
+    #[test]
+    fn parser_parses_mbox() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\mbox{Hello}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "mbox" && args == &["Hello"])),
+            "Expected mbox command");
+    }
+
+    #[test]
+    fn parser_parses_parbox() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\parbox[c]{3cm}{Centered text}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "parbox" && args == &["Centered text"])),
+            "Expected parbox command with text content");
+    }
+
+    #[test]
+    fn parser_parses_minipage() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{minipage}[c]{0.5\textwidth}
+Hello minipage
+\end{minipage}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
+            "Expected minipage to produce Center element");
     }
 }

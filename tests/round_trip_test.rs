@@ -79,8 +79,8 @@ fn validate_pdf_structure(pdf_data: &[u8]) -> Result<(), String> {
 fn assert_reproducible_conversion(latex: &str, message: &str) {
     let pdf1 = convert_latex_to_bytes(latex).expect(message);
     let pdf2 = convert_latex_to_bytes(latex).expect(message);
-    validate_pdf_structure(&pdf1).expect(&format!("{message}: pdf1 structure"));
-    validate_pdf_structure(&pdf2).expect(&format!("{message}: pdf2 structure"));
+    validate_pdf_structure(&pdf1).unwrap_or_else(|_| panic!("{message}: pdf1 structure"));
+    validate_pdf_structure(&pdf2).unwrap_or_else(|_| panic!("{message}: pdf2 structure"));
 
     let mut parser1 = rtex::TexParser::new(latex.to_string());
     let mut parser2 = rtex::TexParser::new(latex.to_string());
@@ -894,4 +894,474 @@ f(x) = \begin{cases}
 
     let pdf = convert_latex_to_bytes(latex).expect("nested cases must convert");
     validate_pdf_structure(&pdf).expect("nested cases PDF structure invalid");
+}
+
+// ==================== TexElement Full Coverage Tests ====================
+// One round-trip PDF test per TexElement variant to ensure every parsed
+// element can be rendered without panicking or producing an invalid PDF.
+
+#[test]
+fn test_line_break_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+First line \\ Second line
+Third line \\[2em] Fourth line
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("line break must convert");
+    validate_pdf_structure(&pdf).expect("line break PDF structure invalid");
+}
+
+#[test]
+fn test_flushleft_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{flushleft}
+Left aligned text content.
+\end{flushleft}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("flushleft must convert");
+    validate_pdf_structure(&pdf).expect("flushleft PDF structure invalid");
+}
+
+#[test]
+fn test_flushright_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{flushright}
+Right aligned text content.
+\end{flushright}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("flushright must convert");
+    validate_pdf_structure(&pdf).expect("flushright PDF structure invalid");
+}
+
+#[test]
+fn test_colored_text_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{xcolor}
+\begin{document}
+\textcolor{red}{Important warning text.}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("colored text must convert");
+    validate_pdf_structure(&pdf).expect("colored text PDF structure invalid");
+}
+
+#[test]
+fn test_citation_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+See \cite{smith2024, jones2023} for details.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("citation must convert");
+    validate_pdf_structure(&pdf).expect("citation PDF structure invalid");
+}
+
+#[test]
+fn test_bibliography_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Reference \cite{key1}.
+\begin{thebibliography}{9}
+\bibitem{key1} Author, \emph{Title}, Publisher, 2024.
+\bibitem{key2} Another Author, \emph{Another Title}, 2023.
+\end{thebibliography}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("bibliography must convert");
+    validate_pdf_structure(&pdf).expect("bibliography PDF structure invalid");
+}
+
+#[test]
+fn test_label_ref_pageref_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\section{Intro}\label{sec:intro}
+See Section~\ref{sec:intro} on page~\pageref{sec:intro}.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("label/ref/pageref must convert");
+    validate_pdf_structure(&pdf).expect("label/ref/pageref PDF structure invalid");
+}
+
+#[test]
+fn test_tableofcontents_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\tableofcontents
+\section{First}
+\section{Second}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("TOC must convert");
+    validate_pdf_structure(&pdf).expect("TOC PDF structure invalid");
+}
+
+#[test]
+fn test_listoffigures_listoftables_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\listoffigures
+\listoftables
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("LOF/LOT must convert");
+    validate_pdf_structure(&pdf).expect("LOF/LOT PDF structure invalid");
+}
+
+#[test]
+fn test_footnote_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+This has a footnote\footnote{Footnote text here.}.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("footnote must convert");
+    validate_pdf_structure(&pdf).expect("footnote PDF structure invalid");
+}
+
+#[test]
+fn test_caption_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{figure}
+\centering
+Caption text.
+\caption{A test caption.}
+\end{figure}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("caption must convert");
+    validate_pdf_structure(&pdf).expect("caption PDF structure invalid");
+}
+
+#[test]
+fn test_quote_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{quote}
+A famous quote goes here.
+\end{quote}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("quote must convert");
+    validate_pdf_structure(&pdf).expect("quote PDF structure invalid");
+}
+
+#[test]
+fn test_abstract_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{abstract}
+This is the abstract text.
+\end{abstract}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("abstract must convert");
+    validate_pdf_structure(&pdf).expect("abstract PDF structure invalid");
+}
+
+#[test]
+fn test_codeblock_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{lstlisting}
+fn main() {
+    println!("Hello");
+}
+\end{lstlisting}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("codeblock must convert");
+    validate_pdf_structure(&pdf).expect("codeblock PDF structure invalid");
+}
+
+#[test]
+fn test_verbatim_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{verbatim}
+raw text \with $commands$
+\end{verbatim}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("verbatim must convert");
+    validate_pdf_structure(&pdf).expect("verbatim PDF structure invalid");
+}
+
+#[test]
+fn test_figure_environment_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{figure}
+\centering
+Figure content here.
+\caption{Figure caption.}
+\end{figure}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("figure must convert");
+    validate_pdf_structure(&pdf).expect("figure PDF structure invalid");
+}
+
+#[test]
+fn test_minipage_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{minipage}[c]{0.5\textwidth}
+Minipage content.
+\end{minipage}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("minipage must convert");
+    validate_pdf_structure(&pdf).expect("minipage PDF structure invalid");
+}
+
+#[test]
+fn test_displaymath_env_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{displaymath}
+E = mc^2
+\end{displaymath}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("displaymath env must convert");
+    validate_pdf_structure(&pdf).expect("displaymath env PDF structure invalid");
+}
+
+#[test]
+fn test_math_env_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{math} x + y = z \end{math}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("math env must convert");
+    validate_pdf_structure(&pdf).expect("math env PDF structure invalid");
+}
+
+#[test]
+fn test_eqnarray_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{eqnarray}
+a &=& b + c \\
+d &=& e + f
+\end{eqnarray}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("eqnarray must convert");
+    validate_pdf_structure(&pdf).expect("eqnarray PDF structure invalid");
+}
+
+#[test]
+fn test_hspace_vspace_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+A\hspace{1em}B\hspace*{2em}C
+\vspace{12pt}
+D
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("hspace/vspace must convert");
+    validate_pdf_structure(&pdf).expect("hspace/vspace PDF structure invalid");
+}
+
+#[test]
+fn test_mbox_parbox_makebox_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\mbox{Boxed text} \parbox[c]{3cm}{Parbox content} \makebox[5cm][s]{Makebox content}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("mbox/parbox/makebox must convert");
+    validate_pdf_structure(&pdf).expect("mbox/parbox/makebox PDF structure invalid");
+}
+
+#[test]
+fn test_multicolumn_cline_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{tabular}{|c|c|c|}
+\hline
+\multicolumn{2}{|c|}{Header} & C \\
+\hline
+A & B & C \\
+\cline{1-2}
+D & E & F \\
+\hline
+\end{tabular}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("multicolumn/cline must convert");
+    validate_pdf_structure(&pdf).expect("multicolumn/cline PDF structure invalid");
+}
+
+#[test]
+fn test_footnotemark_footnotetext_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Text\footnotemark\ with mark.
+\footnotetext{The footnote text.}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("footnotemark/text must convert");
+    validate_pdf_structure(&pdf).expect("footnotemark/text PDF structure invalid");
+}
+
+#[test]
+fn test_enquote_textnormal_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\enquote{Quoted text} and \textnormal{Normal text}.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("enquote/textnormal must convert");
+    validate_pdf_structure(&pdf).expect("enquote/textnormal PDF structure invalid");
+}
+
+#[test]
+fn test_skip_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\setlength{\parindent}{0pt}
+\setcounter{page}{3}
+\ignorespaces
+\selectfont
+Hello after skip commands.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("skip commands must convert");
+    validate_pdf_structure(&pdf).expect("skip commands PDF structure invalid");
+}
+
+#[test]
+fn test_special_chars_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\copyright\ \pounds\ \S\ \P\ \dag\ \ddag\ \ldots\ \LaTeX\ \TeX\ \AA\ \aa\ \ss\ \OE\ \ae\ \textcopyright\ \textregistered\ \texttrademark
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("special chars must convert");
+    validate_pdf_structure(&pdf).expect("special chars PDF structure invalid");
+}
+
+#[test]
+fn test_linebreak_nopagebreak_samepage_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+A \linebreak B \nopagebreak C \samepage D
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("page control must convert");
+    validate_pdf_structure(&pdf).expect("page control PDF structure invalid");
+}
+
+#[test]
+fn test_counter_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\setcounter{section}{5}
+\arabic{section} \roman{section} \alph{section} \thechapter
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("counter commands must convert");
+    validate_pdf_structure(&pdf).expect("counter commands PDF structure invalid");
+}
+
+#[test]
+fn test_split_aligned_gathered_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+\[
+\begin{aligned}
+a &= b \\
+c &= d
+\end{aligned}
+\]
+\[
+\begin{gathered}
+x + y \\
+z + w
+\end{gathered}
+\]
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("aligned/gathered must convert");
+    validate_pdf_structure(&pdf).expect("aligned/gathered PDF structure invalid");
+}
+
+#[test]
+fn test_font_declarations_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\em \bf \it \rm \sf \tt \sc \sl
+Normal text after font declarations.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("font declarations must convert");
+    validate_pdf_structure(&pdf).expect("font declarations PDF structure invalid");
+}
+
+#[test]
+fn test_font_size_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\tiny tiny \scriptsize script \footnotesize footnote \small small
+\normalsize normal \large large \Large Large \LARGE LARGE \huge huge \Huge Huge
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("font sizes must convert");
+    validate_pdf_structure(&pdf).expect("font sizes PDF structure invalid");
+}
+
+#[test]
+fn test_all_text_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\textsc{SmallCaps} \textrm{Roman} \textsf{Sans} \textsl{Slanted}
+\textup{Upright} \textmd{Medium} \textnormal{Normal}
+\textsuperscript{sup} \textsubscript{sub}
+\sout{strikethrough} \overline{bar} \fbox{framed}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("text commands must convert");
+    validate_pdf_structure(&pdf).expect("text commands PDF structure invalid");
+}
+
+#[test]
+fn test_box_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\raisebox{2pt}{raised} \rotatebox{90}{rotated} \scalebox{2}{scaled}
+\colorbox{red}{colored box} \fcolorbox{black}{yellow}{framed color box}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("box commands must convert");
+    validate_pdf_structure(&pdf).expect("box commands PDF structure invalid");
+}
+
+#[test]
+fn test_phantom_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\phantom{hidden} \vphantom{vhidden} \hphantom{hhidden}
+visible text
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("phantom commands must convert");
+    validate_pdf_structure(&pdf).expect("phantom commands PDF structure invalid");
+}
+
+#[test]
+fn test_spacing_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+A\hfill B\vfill C\qquad D\quad E\, F\; G\: H\! I\strut J
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("spacing commands must convert");
+    validate_pdf_structure(&pdf).expect("spacing commands PDF structure invalid");
+}
+
+#[test]
+fn test_rule_command_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\rule{5cm}{0.4pt}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("rule must convert");
+    validate_pdf_structure(&pdf).expect("rule PDF structure invalid");
+}
+
+#[test]
+fn test_index_glossary_appendix_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Text\index{term} with index\glossary{glossary term}.
+\appendix
+\section{Appendix Section}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("index/glossary/appendix must convert");
+    validate_pdf_structure(&pdf).expect("index/glossary/appendix PDF structure invalid");
+}
+
+#[test]
+fn test_href_url_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\url{https://example.com} and \href{https://example.com}{Example Link}.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("href/url must convert");
+    validate_pdf_structure(&pdf).expect("href/url PDF structure invalid");
 }

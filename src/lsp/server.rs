@@ -22,7 +22,6 @@ use super::{
 };
 
 #[allow(clippy::mutable_key_type)]
-
 pub fn run() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (connection, io_threads) = Connection::stdio();
 
@@ -131,6 +130,7 @@ fn publish_diagnostics(
     Ok(())
 }
 
+#[allow(clippy::mutable_key_type)]
 fn handle_completion(
     documents: &HashMap<Uri, String>,
     params: &serde_json::Value,
@@ -173,6 +173,7 @@ fn handle_completion(
     Ok(Some(CompletionResponse::Array(completions)))
 }
 
+#[allow(clippy::mutable_key_type)]
 fn handle_document_symbol(
     documents: &HashMap<Uri, String>,
     params: &serde_json::Value,
@@ -183,6 +184,7 @@ fn handle_document_symbol(
     Ok(symbols.iter().map(|s| to_lsp_symbol(text, s)).collect())
 }
 
+#[allow(clippy::mutable_key_type)]
 fn handle_hover(
     documents: &HashMap<Uri, String>,
     params: &serde_json::Value,

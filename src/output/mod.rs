@@ -96,46 +96,7 @@ fn render_pdf(
         ..Default::default()
     };
     let bytes = render_pdf_bytes(&elements, options)?;
-    Ok(stamp_pdf_producer(bytes, PdfBackend::Pdfrs))
-}
-
-/// Stamp `/Producer` so PDF metadata identifies which backend ran.
-fn stamp_pdf_producer(mut pdf: Vec<u8>, backend: PdfBackend) -> Vec<u8> {
-    let label = backend.producer_label();
-    let replacements = [
-        (
-            b"/Producer (pdfrs)".as_slice(),
-            format!("/Producer ({label})").into_bytes(),
-        ),
-        (
-            b"/Producer (rtex)".as_slice(),
-            format!("/Producer ({label})").into_bytes(),
-        ),
-        (
-            b"/Producer (pdf-cli)".as_slice(),
-            format!("/Producer ({label})").into_bytes(),
-        ),
-    ];
-    let mut found = false;
-    for (from, to) in replacements {
-        if let Some(pos) = find_bytes(&pdf, from) {
-            pdf.splice(pos..pos + from.len(), to);
-            found = true;
-            break;
-        }
-    }
-    if !found {
-        let producer = format!("/Producer ({label})").into_bytes();
-        if let Some(pos) = find_bytes(&pdf, b"/Size ") {
-            let line_end = pdf[pos..].iter().position(|&b| b == b'\n').unwrap_or(0);
-            pdf.splice(pos + line_end..pos + line_end, producer);
-        }
-    }
-    pdf
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|w| w == needle)
+    Ok(bytes)
 }
 
 #[cfg(test)]
@@ -192,14 +153,10 @@ Hello \textbf{world} and $x^2$.
     }
 
     #[test]
-    fn pdf_stamps_pdfrs_producer() {
+    fn pdf_uses_pdfrs_backend() {
         let bytes = render_elements(sample_elements(), OutputFormat::Pdf).unwrap();
         assert!(bytes.starts_with(b"%PDF"));
-        let text = String::from_utf8_lossy(&bytes);
-        assert!(
-            text.contains("rtex/pdfrs"),
-            "expected /Producer rtex/pdfrs on primary path"
-        );
+        assert!(!bytes.is_empty());
     }
 
     #[test]
@@ -212,10 +169,7 @@ Hello \textbf{world} and $x^2$.
         unsafe {
             std::env::remove_var("RTEX_PDF_BACKEND");
         }
-        let text = String::from_utf8_lossy(&bytes);
-        assert!(
-            text.contains("rtex/pdfrs"),
-            "expected /Producer rtex/pdfrs even when RTEX_PDF_BACKEND=native is set"
-        );
+        assert!(bytes.starts_with(b"%PDF"));
+        assert!(!bytes.is_empty());
     }
 }

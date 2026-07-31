@@ -441,4 +441,85 @@ impl TexParser {
 
         self.skip_whitespace_and_comments();
     }
+
+    /// Parse `\parbox[alignment]{width}{text}`.
+    pub(super) fn parse_parbox(&mut self) -> Option<TexElement> {
+        self.position += "\\parbox".len();
+        self.skip_whitespace_and_comments();
+
+        // Optional [alignment]
+        if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let _ = self.read_until(']');
+            self.position += 1;
+            self.skip_whitespace_and_comments();
+        }
+
+        // {width}
+        if self.position < self.content.len() && self.content[self.position..].starts_with('{') {
+            let _ = self.parse_braced_content();
+            self.skip_whitespace_and_comments();
+        }
+
+        // {text}
+        let text = if self.position < self.content.len() && self.content[self.position..].starts_with('{') {
+            self.parse_braced_content().unwrap_or_default()
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command {
+            name: "parbox".to_string(),
+            args: vec![text],
+        })
+    }
+
+    /// Parse `\makebox[width][position]{text}`.
+    pub(super) fn parse_makebox(&mut self) -> Option<TexElement> {
+        self.position += "\\makebox".len();
+        self.skip_whitespace_and_comments();
+
+        // Optional [width]
+        if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let _ = self.read_until(']');
+            self.position += 1;
+            self.skip_whitespace_and_comments();
+        }
+
+        // Optional [position]
+        if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+            self.position += 1;
+            let _ = self.read_until(']');
+            self.position += 1;
+            self.skip_whitespace_and_comments();
+        }
+
+        // {text}
+        let text = if self.position < self.content.len() && self.content[self.position..].starts_with('{') {
+            self.parse_braced_content().unwrap_or_default()
+        } else {
+            String::new()
+        };
+        Some(TexElement::Command {
+            name: "makebox".to_string(),
+            args: vec![text],
+        })
+    }
+
+    /// Parse `\multicolumn{n}{align}{content}`.
+    pub(super) fn parse_multicolumn(&mut self) -> Option<TexElement> {
+        self.position += "\\multicolumn".len();
+        self.skip_whitespace_and_comments();
+
+        let n = self.parse_braced_content().unwrap_or_default();
+        self.skip_whitespace_and_comments();
+        let align = self.parse_braced_content().unwrap_or_default();
+        self.skip_whitespace_and_comments();
+        let content = self.parse_braced_content().unwrap_or_default();
+
+        Some(TexElement::Command {
+            name: "multicolumn".to_string(),
+            args: vec![n, align, content],
+        })
+    }
 }

@@ -215,6 +215,17 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
             render_elements_html(content, out);
             out.push_str("</section>\n");
         }
+        TexElement::LineBreak => out.push_str("<br />\n"),
+        TexElement::FlushLeft(content) => {
+            out.push_str("<div style=\"text-align:left\">");
+            render_elements_html(content, out);
+            out.push_str("</div>\n");
+        }
+        TexElement::FlushRight(content) => {
+            out.push_str("<div style=\"text-align:right\">");
+            render_elements_html(content, out);
+            out.push_str("</div>\n");
+        }
     }
 }
 
@@ -263,6 +274,92 @@ fn render_command_html(name: &str, args: &[String], out: &mut String) {
         }
         "newline" | "linebreak" => out.push_str("<br />\n"),
         "hfill" => out.push_str("<span class=\"hfill\"></span>"),
+        "textsc" if !args.is_empty() => {
+            out.push_str("<span style=\"font-variant:small-caps\">");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</span>");
+        }
+        "textrm" | "textnormal" if !args.is_empty() => {
+            out.push_str("<span style=\"font-family:serif\">");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</span>");
+        }
+        "textsf" if !args.is_empty() => {
+            out.push_str("<span style=\"font-family:sans-serif\">");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</span>");
+        }
+        "textsl" | "textit" | "emph" | "it" if !args.is_empty() => {
+            out.push_str("<em>");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</em>");
+        }
+        "textup" | "textmd" | "textrm" | "textnormal" if !args.is_empty() => {
+            out.push_str(&escape_html(&args[0]));
+        }
+        "sout" if !args.is_empty() => {
+            out.push_str("<s>");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</s>");
+        }
+        "text" | "ensuremath" | "mbox" | "makebox" | "parbox" if !args.is_empty() => {
+            out.push_str(&escape_html(&args[0]));
+        }
+        "enquote" if !args.is_empty() => {
+            out.push_str("&ldquo;");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("&rdquo;");
+        }
+        "overline" if !args.is_empty() => {
+            out.push_str("<span style=\"text-decoration:overline\">");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</span>");
+        }
+        "textsuperscript" if !args.is_empty() => {
+            out.push_str("<sup>");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</sup>");
+        }
+        "textsubscript" if !args.is_empty() => {
+            out.push_str("<sub>");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</sub>");
+        }
+        "fbox" if !args.is_empty() => {
+            out.push_str("<span style=\"border:1px solid #ccc;padding:0.2em\">");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</span>");
+        }
+        "multicolumn" if args.len() >= 3 => {
+            out.push_str(&escape_html(&args[2]));
+        }
+        "footnotetext" if !args.is_empty() => {
+            out.push_str("<sup class=\"footnote\">");
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("</sup>");
+        }
+        "hspace" | "hspace*" | "vspace" | "vspace*" | "quad" | "qquad" => {
+            out.push(' ');
+        }
+        "footnotemark" | "cline" | "rule" | "phantom" | "vphantom" | "hphantom" => {}
+        "raisebox" if args.len() >= 2 => {
+            out.push_str(&escape_html(&args[1]));
+        }
+        "rotatebox" if args.len() >= 2 => {
+            out.push_str(&escape_html(&args[1]));
+        }
+        "scalebox" if args.len() >= 2 => {
+            out.push_str(&escape_html(&args[1]));
+        }
+        "colorbox" if args.len() >= 2 => {
+            out.push_str(&escape_html(&args[1]));
+        }
+        "fcolorbox" if args.len() >= 3 => {
+            out.push_str(&escape_html(&args[2]));
+        }
+        "today" => {
+            out.push_str(&chrono::Local::now().format("%B %d, %Y").to_string());
+        }
         _ if !args.is_empty() => {
             out.push_str(&escape_html(&args[0]));
         }
@@ -376,7 +473,9 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
             TexElement::Ref { key } | TexElement::PageRef { key } => out.push_str(key),
             TexElement::Center(content)
             | TexElement::Quote(content)
-            | TexElement::Abstract(content) => collect_plain_text(content, out),
+            | TexElement::Abstract(content)
+            | TexElement::FlushLeft(content)
+            | TexElement::FlushRight(content) => collect_plain_text(content, out),
             TexElement::Theorem { kind, title, body } => {
                 out.push_str(&kind.to_uppercase());
                 if let Some(t) = title {
@@ -387,6 +486,7 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
                 out.push('\n');
             }
             TexElement::Footnote { text } | TexElement::Caption { text } => out.push_str(text),
+            TexElement::LineBreak => out.push('\n'),
             TexElement::Label { .. }
             | TexElement::TableOfContents
             | TexElement::ListOfFigures

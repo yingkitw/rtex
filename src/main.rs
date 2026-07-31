@@ -1,8 +1,6 @@
-use clap::Parser;
-use rtex::{
-    ConsoleReporter, ConversionOptions, OutputFormat, StreamingConverter,
-    watch_single,
-};
+use clap::{CommandFactory, Parser};
+use clap_complete::{Shell, generate};
+use rtex::{ConsoleReporter, ConversionOptions, OutputFormat, StreamingConverter, watch_single};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -11,7 +9,7 @@ use std::path::{Path, PathBuf};
 #[command(about = "Convert TeX files to PDF, HTML, DOCX, or EPUB", long_about = None)]
 struct Cli {
     #[arg(help = "Input TeX file path")]
-    input: PathBuf,
+    input: Option<PathBuf>,
 
     #[arg(short, long, help = "Output file path")]
     output: Option<PathBuf>,
@@ -51,6 +49,13 @@ struct Cli {
         help = "Keep intermediate files (.expanded.tex, .ast.json, .meta.json)"
     )]
     keep_intermediate: bool,
+
+    #[arg(
+        long,
+        value_name = "SHELL",
+        help = "Generate shell completion script (bash, zsh, fish, elvish, powershell)"
+    )]
+    completions: Option<Shell>,
 }
 
 fn parse_format(raw: &str) -> anyhow::Result<OutputFormat> {
@@ -108,19 +113,29 @@ fn run_conversion(
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    if let Some(shell) = cli.completions {
+        let mut cmd = Cli::command();
+        generate(shell, &mut cmd, "rtex", &mut std::io::stdout());
+        return Ok(());
+    }
+
+    let input_path = cli.input.clone().ok_or_else(|| {
+        anyhow::anyhow!("input file path is required (use --completions SHELL to generate completions instead)")
+    })?;
+
     let format = parse_format(&cli.format)?;
     let options = conversion_options(&cli, format);
 
     let output = cli
         .output
         .clone()
-        .unwrap_or_else(|| default_output(&cli.input, format));
+        .unwrap_or_else(|| default_output(&input_path, format));
 
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    let input_path = cli.input.clone();
     if cli.watch {
         let force = cli.force;
         let incremental = !cli.no_incremental;

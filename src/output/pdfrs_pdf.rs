@@ -495,6 +495,14 @@ fn push_tex_element(
                 }
             }
         }
+        TexElement::LineBreak => {
+            writer.push_plain("\n");
+        }
+        TexElement::FlushLeft(inner) | TexElement::FlushRight(inner) => {
+            for child in inner {
+                push_tex_element(child, writer, list_depth, image_base_dir);
+            }
+        }
         TexElement::Footnote { text } => {
             writer.push_block(Element::Footnote {
                 label: String::new(),
@@ -544,6 +552,35 @@ fn push_tex_element(
             }
             "today" => {
                 writer.push_plain(&chrono::Local::now().format("%B %d, %Y").to_string());
+            }
+            "hspace" | "hspace*" | "vspace" | "vspace*" | "quad" | "qquad"
+            | "footnotemark" | "cline" | "rule" | "linebreak" | "nopagebreak"
+            | "samepage" | "enlargethispage" | "raggedright" | "raggedleft"
+            | "centering" | "noindent" | "appendix" | "bibliography"
+            | "bibliographystyle" | "index" | "glossary" => {}
+            "enquote" if !args.is_empty() => {
+                writer.push_plain(&format!("\u{201c}{}\u{201d}", args[0]));
+            }
+            "textsc" if !args.is_empty() => {
+                writer.push_segment(TextSegment::Italic(args[0].clone()));
+            }
+            "sout" | "underline" if !args.is_empty() => {
+                writer.push_plain(&args[0]);
+            }
+            "textsuperscript" if !args.is_empty() => {
+                writer.push_plain(&format!("^{}", args[0]));
+            }
+            "textsubscript" if !args.is_empty() => {
+                writer.push_plain(&format!("_{}", args[0]));
+            }
+            "multicolumn" if args.len() >= 3 => {
+                writer.push_plain(&args[2]);
+            }
+            "text" | "ensuremath" | "mbox" | "makebox" | "parbox"
+            | "textrm" | "textsf" | "textsl" | "textup" | "textmd"
+            | "textnormal" | "fbox" | "overline" | "footnotetext"
+            | "phantom" | "vphantom" | "hphantom" if !args.is_empty() => {
+                writer.push_plain(&args[0]);
             }
             _ => {
                 if let Some(text) = args.first() {
@@ -656,6 +693,8 @@ fn push_table(table: &Table, out: &mut Vec<Element>) {
             cells: row.cells.clone(),
             is_separator: false,
             alignments: alignments.clone(),
+            colspans: Vec::new(),
+            rowspans: Vec::new(),
         });
     }
 }
