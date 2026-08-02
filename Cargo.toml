@@ -36,7 +36,7 @@ usvg = "0.45.1"
 png = "0.18"
 zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
-pdfrs = "0.1.9"
+pdfrs = { path = "vendor/pdfrs" }
 lsp-server = { version = "0.7", optional = true }
 lsp-types = { version = "0.97", optional = true }
 

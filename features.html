@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Common LaTeX Features</title>
+  <meta name="author" content="rtex" />
+  <style>body{font-family:Georgia,serif;max-width:48rem;margin:2rem auto;line-height:1.5}.math.display{text-align:center;margin:1rem 0}.center{text-align:center}.abstract{border:1px solid #ccc;padding:1rem;margin:1rem 0}</style>
+</head>
+<body>
+<header>
+<h1>Common LaTeX Features</h1>
+<p class="author">rtex</p>
+</header>
+<p></p>
+<p></p>
+<h2>Description Lists</h2>
+<p></p>
+<dl>
+<dt>Parser</dt>
+<dd>Converts TeX source into a structured AST.
+  </dd>
+<dt>Builder</dt>
+<dd>Walks the AST and emits PDF content streams.
+  </dd>
+<dt>Formatter</dt>
+<dd>Maps LaTeX math commands to Unicode symbols.
+</dd>
+</dl>
+<p></p>
+<h2>Multi-line Equations</h2>
+<p></p>
+Aligned equations use <code>align</code>:<p></p>
+<div class="math display multi"><math display="block"><mi>a</mi><mo>&amp;</mo><mo>=</mo><mi>b</mi><mo>+</mo><mi>c</mi></math><span aria-hidden="true">a    = b + c</span><br /><math display="block"><mi>d</mi><mo>+</mo><mi>e</mi><mo>&amp;</mo><mo>=</mo><mi>f</mi><mo>+</mo><mi>g</mi><mo>+</mo><mi>h</mi></math><span aria-hidden="true">d + e    = f + g + h</span><br /><math display="block"><mi>i</mi><mo>&amp;</mo><mo>=</mo><mi>j</mi></math><span aria-hidden="true">i    = j</span></div>
+<p></p>
+Gathered equations use <code>gather</code>:<p></p>
+<div class="math display multi"><math display="block"><mi>x</mi><mo>=</mo><mn>1</mn></math><span aria-hidden="true">x = 1</span><br /><math display="block"><mi>y</mi><mo>=</mo><mn>2</mn></math><span aria-hidden="true">y = 2</span><br /><math display="block"><mi>z</mi><mo>=</mo><mn>3</mn></math><span aria-hidden="true">z = 3</span></div>
+<p></p>
+Multi-line single equation uses <code>multline</code>:<p></p>
+<div class="math display multi"><math display="block"><mi>a</mi><mo>+</mo><mi>b</mi><mo>+</mo><mi>c</mi><mo>+</mo><mi>d</mi><mo>+</mo><mi>e</mi><mo>+</mo><mi>f</mi><mo>+</mo><mi>g</mi><mo>+</mo><mi>h</mi><mo>+</mo><mi>i</mi><mo>+</mo><mi>j</mi></math><span aria-hidden="true">a + b + c + d + e + f + g + h + i + j</span><br /><math display="block"><mo>+</mo><mi>k</mi><mo>+</mo><mi>l</mi><mo>+</mo><mi>m</mi></math><span aria-hidden="true">+ k + l + m</span></div>
+<p></p>
+<h2>Piecewise Functions</h2>
+<p></p>
+Piecewise definitions can appear inside math delimiters:<p></p>
+<div class="math display multi"><math display="block"><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mrow><msup><mi>x</mi><mn>2</mn></msup><mtext>if </mtext><mi>x</mi><mo>≥</mo><mn>0</mn></mrow></math><span aria-hidden="true">f(x) = { x²  if  x ≥ 0</span><br /><math display="block"><mrow><mo>-</mo><mi>x</mi><mtext>if </mtext><mi>x</mi><mo>&lt;</mo><mn>0</mn></mrow></math><span aria-hidden="true">{ -x  if  x &lt; 0</span></div>
+<p></p>
+or at the top level via <code>\textbackslash begin\{cases\}</code>.<p></p>
+<h2>Links</h2>
+<p></p>
+Read the docs at <a href="https://example.com">Example Site</a> or email
+<a href="mailto:hello@example.com">the maintainers</a>.<p></p>
+</body>
+</html>

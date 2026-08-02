@@ -1,0 +1,67 @@
+[
+  {
+    "Command": {
+      "name": "title",
+      "args": [
+        "Mathematical Equations"
+      ]
+    }
+  },
+  {
+    "Command": {
+      "name": "author",
+      "args": [
+        "latex-rs"
+      ]
+    }
+  },
+  {
+    "Command": {
+      "name": "maketitle",
+      "args": []
+    }
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Algebra"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "The quadratic formula:\n"
+  },
+  {
+    "MathDisplay": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Calculus"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "The fundamental theorem of calculus:\n"
+  },
+  {
+    "MathDisplay": "\\int_a^b f(x)\\,dx = F(b) - F(a)"
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Linear Algebra"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "Matrix multiplication:\n"
+  },
+  {
+    "MathDisplay": "\\begin{pmatrix}\n        a & b \\\\\n        c & d\n    \\end{pmatrix}\n    \\begin{pmatrix}\n        x \\\\\n        y\n    \\end{pmatrix}\n    =\n    \\begin{pmatrix}\n        ax + by \\\\\n        cx + dy\n    \\end{pmatrix}"
+  },
+  "Paragraph"
+]

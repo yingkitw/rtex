@@ -1,0 +1,219 @@
+[
+  {
+    "Command": {
+      "name": "title",
+      "args": [
+        "Common LaTeX Features"
+      ]
+    }
+  },
+  {
+    "Command": {
+      "name": "author",
+      "args": [
+        "rtex"
+      ]
+    }
+  },
+  "Paragraph",
+  {
+    "Command": {
+      "name": "maketitle",
+      "args": []
+    }
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Description Lists"
+    }
+  },
+  "Paragraph",
+  {
+    "DescriptionList": {
+      "items": [
+        {
+          "term": "Parser",
+          "body": [
+            {
+              "Text": "Converts TeX source into a structured AST.\n  "
+            }
+          ]
+        },
+        {
+          "term": "Builder",
+          "body": [
+            {
+              "Text": "Walks the AST and emits PDF content streams.\n  "
+            }
+          ]
+        },
+        {
+          "term": "Formatter",
+          "body": [
+            {
+              "Text": "Maps LaTeX math commands to Unicode symbols.\n"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Multi-line Equations"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "Aligned equations use "
+  },
+  {
+    "Command": {
+      "name": "texttt",
+      "args": [
+        "align"
+      ]
+    }
+  },
+  {
+    "Text": ":"
+  },
+  "Paragraph",
+  {
+    "MathLines": {
+      "lines": [
+        "a  & = b + c",
+        "d + e  & = f + g + h",
+        "i  & = j"
+      ],
+      "kind": "Align"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "Gathered equations use "
+  },
+  {
+    "Command": {
+      "name": "texttt",
+      "args": [
+        "gather"
+      ]
+    }
+  },
+  {
+    "Text": ":"
+  },
+  "Paragraph",
+  {
+    "MathLines": {
+      "lines": [
+        "x = 1",
+        "y = 2",
+        "z = 3"
+      ],
+      "kind": "Gather"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "Multi-line single equation uses "
+  },
+  {
+    "Command": {
+      "name": "texttt",
+      "args": [
+        "multline"
+      ]
+    }
+  },
+  {
+    "Text": ":"
+  },
+  "Paragraph",
+  {
+    "MathLines": {
+      "lines": [
+        "a + b + c + d + e + f + g + h + i + j",
+        "+ k + l + m"
+      ],
+      "kind": "Multline"
+    }
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Piecewise Functions"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "Piecewise definitions can appear inside math delimiters:"
+  },
+  "Paragraph",
+  {
+    "MathLines": {
+      "lines": [
+        "f(x) = { x^2  \\text{if } x \\geq 0",
+        "{ -x  \\text{if } x < 0"
+      ],
+      "kind": "Cases"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "or at the top level via "
+  },
+  {
+    "Command": {
+      "name": "texttt",
+      "args": [
+        "\\textbackslash begin\\{cases\\}"
+      ]
+    }
+  },
+  {
+    "Text": "."
+  },
+  "Paragraph",
+  {
+    "Section": {
+      "level": 1,
+      "title": "Links"
+    }
+  },
+  "Paragraph",
+  {
+    "Text": "Read the docs at "
+  },
+  {
+    "Command": {
+      "name": "href",
+      "args": [
+        "https://example.com",
+        "Example Site"
+      ]
+    }
+  },
+  {
+    "Text": " or email\n"
+  },
+  {
+    "Command": {
+      "name": "href",
+      "args": [
+        "mailto:hello@example.com",
+        "the maintainers"
+      ]
+    }
+  },
+  {
+    "Text": "."
+  },
+  "Paragraph"
+]

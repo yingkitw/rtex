@@ -7,7 +7,7 @@ use pdfrs::optimization::{OptimizationProfile, OptimizedPdfGenerator};
 use pdfrs::pdf_generator::{AccessibilityOptions, PageLayout as PdfrsLayout};
 
 use crate::error::LatexError;
-use crate::parser::TexElement;
+use crate::parser::{MathLineKind, TexElement};
 use crate::table::{Align, Table};
 
 /// Rasterize an SVG file to a PNG temp file and return the temp path.
@@ -293,15 +293,17 @@ impl ElementWriter {
     }
 
     fn push_plain(&mut self, text: &str) {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
+        let normalized: String = text.chars().map(|c| if c == '\n' { ' ' } else { c }).collect();
+        if normalized.trim().is_empty() {
             return;
         }
         if let Some(TextSegment::Plain(last)) = self.segments.last_mut() {
-            last.push(' ');
-            last.push_str(trimmed);
+            if !last.ends_with(' ') && !normalized.starts_with(' ') {
+                last.push(' ');
+            }
+            last.push_str(&normalized);
         } else {
-            self.segments.push(TextSegment::Plain(trimmed.to_string()));
+            self.segments.push(TextSegment::Plain(normalized));
         }
     }
 
@@ -326,7 +328,9 @@ fn merge_plain_segments(segments: Vec<TextSegment>) -> Vec<TextSegment> {
         match segment {
             TextSegment::Plain(text) => {
                 if let Some(TextSegment::Plain(last)) = merged.last_mut() {
-                    last.push(' ');
+                    if !last.ends_with(' ') && !text.starts_with(' ') {
+                        last.push(' ');
+                    }
                     last.push_str(&text);
                 } else {
                     merged.push(TextSegment::Plain(text));
@@ -361,9 +365,16 @@ fn push_tex_element(
                 expression: math_block_expression(expr),
             });
         }
-        TexElement::MathLines { lines, .. } => {
+        TexElement::MathLines { lines, kind } => {
+            let processed: Vec<String> = lines
+                .iter()
+                .map(|l| match kind {
+                    MathLineKind::Align => l.replace('&', " ").replace("  ", " "),
+                    _ => l.replace('&', " "),
+                })
+                .collect();
             writer.push_block(Element::MathBlock {
-                expression: math_block_expression(&lines.join(" \\\\ ")),
+                expression: math_block_expression(&processed.join("\n")),
             });
         }
         TexElement::ItemList {
@@ -636,9 +647,8 @@ fn push_text_with_inline_math(writer: &mut ElementWriter, text: &str) {
 }
 
 fn flush_plain_buffer(writer: &mut ElementWriter, plain: &mut String) {
-    let trimmed = plain.trim();
-    if !trimmed.is_empty() {
-        writer.push_plain(trimmed);
+    if !plain.trim().is_empty() {
+        writer.push_plain(plain);
     }
     plain.clear();
 }
@@ -666,7 +676,47 @@ fn inline_uses_display_math(expr: &str) -> bool {
 }
 
 fn math_block_expression(expr: &str) -> String {
-    expr.to_string()
+    format_matrix_envs(expr)
+}
+
+/// Convert `\begin{pmatrix}…\end{pmatrix}` and friends into multi-line
+/// bracketed/parenthesised text so that pdfrs's `emit_display_math` (which
+/// splits on newlines) renders each matrix row on its own line.
+fn format_matrix_envs(expr: &str) -> String {
+    let mut s = expr.to_string();
+    for &(env, left, right) in &[
+        ("pmatrix", "(", ")"),
+        ("bmatrix", "[", "]"),
+        ("vmatrix", "|", "|"),
+        ("matrix", "", ""),
+    ] {
+        let open = format!("\\begin{{{}}}", env);
+        let close = format!("\\end{{{}}}", env);
+        while let Some(start) = s.find(&open) {
+            let body_start = start + open.len();
+            let Some(rel_end) = s[body_start..].find(&close) else {
+                break;
+            };
+            let body = s[body_start..body_start + rel_end].trim();
+            let rows: Vec<String> = body
+                .split("\\\\")
+                .map(|r| {
+                    r.trim()
+                        .split('&')
+                        .map(str::trim)
+                        .filter(|c| !c.is_empty())
+                        .collect::<Vec<_>>()
+                        .join("  ")
+                })
+                .filter(|r| !r.is_empty())
+                .map(|r| format!("{} {} {}", left, r, right))
+                .collect();
+            let replacement = rows.join("\n");
+            let end = body_start + rel_end + close.len();
+            s.replace_range(start..end, &replacement);
+        }
+    }
+    s
 }
 
 fn push_maketitle(_writer: &mut ElementWriter) {
@@ -1048,7 +1098,7 @@ mod tests {
                 e,
                 Element::MathBlock { expression } if expression.contains("\\sqrt")
             )),
-            "expected MathBlock for sqrt in list item, got: {mapped:?}"
+            "expected MathBlock with raw \\sqrt for pdfrs vinculum rendering, got: {mapped:?}"
         );
     }
 
@@ -1076,7 +1126,7 @@ mod tests {
                 e,
                 Element::MathBlock { expression } if expression.contains("\\sqrt")
             )),
-            "expected MathBlock with raw sqrt for vinculum layout, got: {mapped:?}"
+            "expected MathBlock with raw \\sqrt for pdfrs vinculum rendering, got: {mapped:?}"
         );
     }
 
@@ -1090,5 +1140,85 @@ mod tests {
                 .any(|e| matches!(e, Element::MathBlock { .. })),
             "expected display math block for inline fraction, got: {mapped:?}"
         );
+    }
+
+    #[test]
+    fn math_lines_join_with_newlines_not_backslashes() {
+        use crate::parser::MathLineKind;
+        let elements = vec![TexElement::MathLines {
+            lines: vec!["a = b + c".to_string(), "d = e".to_string()],
+            kind: MathLineKind::Align,
+        }];
+        let mapped = tex_to_pdfrs_elements(&elements, None);
+        let block = mapped.iter().find(|e| matches!(e, Element::MathBlock { .. }));
+        assert!(block.is_some(), "expected MathBlock for MathLines");
+        if let Some(Element::MathBlock { expression }) = block {
+            assert!(
+                expression.contains('\n'),
+                "expected newline-separated lines, got: {expression:?}"
+            );
+            assert!(
+                !expression.contains("\\\\"),
+                "expected no literal backslash-backslash, got: {expression:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn math_lines_align_strips_ampersands() {
+        use crate::parser::MathLineKind;
+        let elements = vec![TexElement::MathLines {
+            lines: vec!["a & = b".to_string()],
+            kind: MathLineKind::Align,
+        }];
+        let mapped = tex_to_pdfrs_elements(&elements, None);
+        if let Some(Element::MathBlock { expression }) =
+            mapped.iter().find(|e| matches!(e, Element::MathBlock { .. }))
+        {
+            assert!(
+                !expression.contains('&'),
+                "expected & stripped for Align, got: {expression:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn pmatrix_renders_as_multiline_with_parens() {
+        let elements = vec![TexElement::MathDisplay(
+            "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}".to_string(),
+        )];
+        let mapped = tex_to_pdfrs_elements(&elements, None);
+        let block = mapped.iter().find(|e| matches!(e, Element::MathBlock { .. }));
+        assert!(block.is_some(), "expected MathBlock for pmatrix");
+        if let Some(Element::MathBlock { expression }) = block {
+            assert!(
+                expression.contains("( a  b )"),
+                "expected first row with parens, got: {expression:?}"
+            );
+            assert!(
+                expression.contains("( c  d )"),
+                "expected second row with parens, got: {expression:?}"
+            );
+            assert!(
+                !expression.contains("\\begin{pmatrix}"),
+                "expected no raw begin pmatrix, got: {expression:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sqrt_passes_raw_to_pdfrs_for_vinculum() {
+        let elements = vec![TexElement::MathDisplay(
+            "\\sqrt{b^2 - 4ac}".to_string(),
+        )];
+        let mapped = tex_to_pdfrs_elements(&elements, None);
+        if let Some(Element::MathBlock { expression }) =
+            mapped.iter().find(|e| matches!(e, Element::MathBlock { .. }))
+        {
+            assert!(
+                expression.contains("\\sqrt"),
+                "expected raw \\sqrt for pdfrs vinculum rendering, got: {expression:?}"
+            );
+        }
     }
 }

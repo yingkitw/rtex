@@ -1,0 +1,63 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Common LaTeX Features}
+\author{rtex}
+
+\begin{document}
+
+\maketitle
+
+\section{Description Lists}
+
+\begin{description}
+  \item[Parser] Converts TeX source into a structured AST.
+  \item[Builder] Walks the AST and emits PDF content streams.
+  \item[Formatter] Maps LaTeX math commands to Unicode symbols.
+\end{description}
+
+\section{Multi-line Equations}
+
+Aligned equations use \texttt{align}:
+
+\begin{align}
+    a &= b + c \\
+    d + e &= f + g + h \\
+    i &= j
+\end{align}
+
+Gathered equations use \texttt{gather}:
+
+\begin{gather}
+    x = 1 \\
+    y = 2 \\
+    z = 3
+\end{gather}
+
+Multi-line single equation uses \texttt{multline}:
+
+\begin{multline}
+    a + b + c + d + e + f + g + h + i + j \\
+    + k + l + m
+\end{multline}
+
+\section{Piecewise Functions}
+
+Piecewise definitions can appear inside math delimiters:
+
+\[
+    f(x) = \begin{cases}
+        x^2  & \text{if } x \geq 0 \\
+        -x   & \text{if } x < 0
+    \end{cases}
+\]
+
+or at the top level via \texttt{\textbackslash begin\{cases\}}.
+
+\section{Links}
+
+Read the docs at \href{https://example.com}{Example Site} or email
+\href{mailto:hello@example.com}{the maintainers}.
+
+\end{document}

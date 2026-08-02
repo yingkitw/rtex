@@ -38,9 +38,14 @@ pub fn render(elements: &[TexElement]) -> Result<Vec<u8>, LatexError> {
             ));
         }
         if let Some(d) = &meta.date {
+            let date_text = if d == "\\today" {
+                chrono::Local::now().format("%B %d, %Y").to_string()
+            } else {
+                d.clone()
+            };
             html.push_str(&format!(
                 "<p class=\"date\">{}</p>\n",
-                super::common::escape_html(d)
+                super::common::escape_html(&date_text)
             ));
         }
         html.push_str("</header>\n");

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sample LaTeX Document</title>
+  <meta name="author" content="latex-rs" />
+  <style>body{font-family:Georgia,serif;max-width:48rem;margin:2rem auto;line-height:1.5}.math.display{text-align:center;margin:1rem 0}.center{text-align:center}.abstract{border:1px solid #ccc;padding:1rem;margin:1rem 0}</style>
+</head>
+<body>
+<header>
+<h1>Sample LaTeX Document</h1>
+<p class="author">latex-rs</p>
+<p class="date">August 02, 2026</p>
+</header>
+<p></p>
+<p></p>
+<h2>Introduction</h2>
+<p></p>
+This is a sample LaTeX document to demonstrate the <code>latex-rs</code> TeX to PDF converter.<p></p>
+<h2>Features</h2>
+<p></p>
+The converter supports:
+<ul>
+<li>Standard LaTeX documents
+    </li>
+<li>Mathematical equations
+    </li>
+<li>Tables and figures
+    </li>
+<li>Custom document classes
+</li>
+</ul>
+<p></p>
+<h2>Mathematics</h2>
+<p></p>
+Here&#39;s a simple equation:
+<math display="block"><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></math><div class="math display" aria-hidden="true">E = mc²</div>
+<p></p>
+And an inline equation: $\int_0^\infty e^{-x} dx = 1$<p></p>
+<h2>Conclusion</h2>
+<p></p>
+This document demonstrates basic LaTeX functionality that can be converted to PDF using the <code>latex-rs</code> CLI tool.<p></p>
+</body>
+</html>

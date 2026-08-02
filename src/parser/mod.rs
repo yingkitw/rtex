@@ -244,7 +244,7 @@ impl TexParser {
 
     /// Scan the next syntactic construct and return a [`TexElement`].
     fn parse_next(&mut self) -> Option<TexElement> {
-        self.skip_whitespace_and_comments();
+        self.skip_comments();
 
         if self.position >= self.content.len() {
             return None;
@@ -892,6 +892,22 @@ impl TexParser {
         }
 
         self.parse_text()
+    }
+
+    /// Advance past `%` comments only (not whitespace).
+    fn skip_comments(&mut self) {
+        while self.position < self.content.len() {
+            let remaining = &self.content[self.position..];
+            if remaining.starts_with('%') {
+                if let Some(newline) = remaining.find('\n') {
+                    self.position += newline + 1;
+                } else {
+                    self.position = self.content.len();
+                }
+            } else {
+                break;
+            }
+        }
     }
 
     /// Advance past whitespace characters and `%` comments.

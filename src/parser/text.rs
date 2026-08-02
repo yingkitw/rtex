@@ -39,10 +39,10 @@ impl TexParser {
             }
         }
 
-        if text.is_empty() {
+        if text.trim().is_empty() {
             None
         } else {
-            Some(TexElement::Text(text.trim().to_string()))
+            Some(TexElement::Text(text))
         }
     }
 }

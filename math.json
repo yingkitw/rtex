@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mathematical Equations</title>
+  <meta name="author" content="latex-rs" />
+  <style>body{font-family:Georgia,serif;max-width:48rem;margin:2rem auto;line-height:1.5}.math.display{text-align:center;margin:1rem 0}.center{text-align:center}.abstract{border:1px solid #ccc;padding:1rem;margin:1rem 0}</style>
+</head>
+<body>
+<header>
+<h1>Mathematical Equations</h1>
+<p class="author">latex-rs</p>
+</header>
+<p></p>
+<h2>Algebra</h2>
+<p></p>
+The quadratic formula:
+<math display="block"><mi>x</mi><mo>=</mo><mfrac><mo>-</mo><mi>b</mi><mo>±</mo><msqrt><msup><mi>b</mi><mn>2</mn></msup><mo>-</mo><mn>4</mn><mi>a</mi><mi>c</mi></msqrt><mn>2</mn><mi>a</mi></mfrac></math><div class="math display" aria-hidden="true">x = [-b ± √(b² - 4ac)] ÷ [2a]</div>
+<p></p>
+<h2>Calculus</h2>
+<p></p>
+The fundamental theorem of calculus:
+<math display="block"><msubsup><mo>∫</mo><mi>a</mi><mi>b</mi></msubsup><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mspace width="0.167em" /><mi>d</mi><mi>x</mi><mo>=</mo><mi>F</mi><mo>(</mo><mi>b</mi><mo>)</mo><mo>-</mo><mi>F</mi><mo>(</mo><mi>a</mi><mo>)</mo></math><div class="math display" aria-hidden="true">∫ₐᵇ f(x) dx = F(b) - F(a)</div>
+<p></p>
+<h2>Linear Algebra</h2>
+<p></p>
+Matrix multiplication:
+<math display="block"><mrow><mo>(</mo><mtable><mtr><mtd><mi>a</mi></mtd><mtd><mi>b</mi></mtd></mtr><mtr><mtd><mi>c</mi></mtd><mtd><mi>d</mi></mtd></mtr></mtable><mo>)</mo></mrow><mrow><mo>(</mo><mtable><mtr><mtd><mi>x</mi></mtd></mtr><mtr><mtd><mi>y</mi></mtd></mtr></mtable><mo>)</mo></mrow><mo>=</mo><mrow><mo>(</mo><mtable><mtr><mtd><mi>a</mi><mi>x</mi><mo>+</mo><mi>b</mi><mi>y</mi></mtd></mtr><mtr><mtd><mi>c</mi><mi>x</mi><mo>+</mo><mi>d</mi><mi>y</mi></mtd></mtr></mtable><mo>)</mo></mrow></math><div class="math display" aria-hidden="true">[
+        a   b  
+        c   d
+    ]
+    [
+        x  
+        y
+    ]
+    =
+    [
+        ax + by  
+        cx + dy
+    ]</div>
+<p></p>
+</body>
+</html>

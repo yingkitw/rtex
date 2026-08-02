@@ -485,12 +485,19 @@ impl<'a> MathMLParser<'a> {
                 self.next();
             }
             let arg = self.parse_required_group();
+            // Wrap radicand in <mrow> if it contains multiple elements to ensure
+            // <mroot> has exactly 2 children (radicand + index) per MathML spec
+            let radicand = if arg.starts_with("<mrow>") || !arg.contains('<') || arg.chars().filter(|&c| c == '<').count() == 2 {
+                arg
+            } else {
+                format!("<mrow>{arg}</mrow>")
+            };
             let index_mathml = if index.contains('<') {
                 index
             } else {
                 format!("<mn>{}</mn>", escape_xml_text(&index))
             };
-            format!("<mroot>{arg}{index_mathml}</mroot>")
+            format!("<mroot>{radicand}{index_mathml}</mroot>")
         } else {
             let arg = self.parse_required_group();
             format!("<msqrt>{arg}</msqrt>")
@@ -822,6 +829,24 @@ mod tests {
     fn test_nth_root() {
         let ml = latex_to_mathml("\\sqrt[3]{x}");
         assert_eq!(ml, "<mroot><mi>x</mi><mn>3</mn></mroot>");
+    }
+
+    #[test]
+    fn test_nth_root_multi_digit_radicand() {
+        // Multi-digit radicand should be wrapped in <mrow> to ensure
+        // <mroot> has exactly 2 children per MathML spec
+        let ml = latex_to_mathml("\\sqrt[4]{16}");
+        assert_eq!(ml, "<mroot><mrow><mn>1</mn><mn>6</mn></mrow><mn>4</mn></mroot>");
+    }
+
+    #[test]
+    fn test_nth_root_multi_term_radicand() {
+        // Multi-term radicand (like x+y) should be wrapped in <mrow>
+        let ml = latex_to_mathml("\\sqrt[3]{x+y}");
+        assert_eq!(
+            ml,
+            "<mroot><mrow><mi>x</mi><mo>+</mo><mi>y</mi></mrow><mn>3</mn></mroot>"
+        );
     }
 
     #[test]
