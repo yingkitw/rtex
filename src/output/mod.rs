@@ -161,7 +161,9 @@ Hello \textbf{world} and $x^2$.
 
     #[test]
     fn pdf_backend_env_native_is_ignored_and_uses_pdfrs() {
-        // SAFETY: test-only; serial test process, restored immediately after.
+        // SAFETY: This is test-only code that runs in a controlled environment.
+        // The environment variable is set and restored within the same test,
+        // ensuring no interference with other code.
         unsafe {
             std::env::set_var("RTEX_PDF_BACKEND", "native");
         }

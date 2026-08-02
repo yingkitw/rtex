@@ -788,9 +788,12 @@ impl TexParser {
             self.position += 4;
             // Consume following alphabetic command name
             while self.position < self.content.len() {
-                let ch = self.content[self.position..].chars().next().unwrap();
-                if ch.is_alphabetic() {
-                    self.position += ch.len_utf8();
+                if let Some(ch) = self.content[self.position..].chars().next() {
+                    if ch.is_alphabetic() {
+                        self.position += ch.len_utf8();
+                    } else {
+                        break;
+                    }
                 } else {
                     break;
                 }
@@ -1082,9 +1085,10 @@ impl TexParser {
         }
 
         // Now borrow plugins mutably, after all self-borrows are done.
-        let plugins = self.plugins.as_mut().unwrap();
-        if let Some(elem) = plugins.try_command(&name, &args) {
-            return Some(elem);
+        if let Some(plugins) = self.plugins.as_mut() {
+            if let Some(elem) = plugins.try_command(&name, &args) {
+                return Some(elem);
+            }
         }
 
         // No plugin handled it — restore position.
@@ -1102,10 +1106,11 @@ impl TexParser {
         let body_end = self.content[self.position..].find(&end_marker)?;
         let body = self.content[body_start..body_start + body_end].to_string();
 
-        let plugins = self.plugins.as_mut().unwrap();
-        if let Some(elem) = plugins.try_environment(env_name, &body) {
-            self.position = body_start + body_end + end_marker.len();
-            return Some(elem);
+        if let Some(plugins) = self.plugins.as_mut() {
+            if let Some(elem) = plugins.try_environment(env_name, &body) {
+                self.position = body_start + body_end + end_marker.len();
+                return Some(elem);
+            }
         }
         None
     }
@@ -1142,11 +1147,14 @@ impl TexParser {
                     // Plain key (no braces)
                     let start = self.position;
                     while self.position < self.content.len() {
-                        let ch = self.content[self.position..].chars().next().unwrap();
-                        if ch.is_whitespace() || ch == '\\' {
+                        if let Some(ch) = self.content[self.position..].chars().next() {
+                            if ch.is_whitespace() || ch == '\\' {
+                                break;
+                            }
+                            self.position += ch.len_utf8();
+                        } else {
                             break;
                         }
-                        self.position += ch.len_utf8();
                     }
                     self.content[start..self.position].to_string()
                 };
@@ -1159,13 +1167,19 @@ impl TexParser {
                     if rem.starts_with("\\bibitem") || rem.starts_with(end_marker) {
                         break;
                     }
-                    self.position += rem.chars().next().unwrap().len_utf8();
+                    if let Some(ch) = rem.chars().next() {
+                        self.position += ch.len_utf8();
+                    } else {
+                        break;
+                    }
                 }
                 let text = self.content[text_start..self.position].trim().to_string();
                 entries.push(BibEntry { key, text });
             } else {
                 // Skip unknown content
-                self.position += remaining.chars().next().unwrap().len_utf8();
+                if let Some(ch) = remaining.chars().next() {
+                    self.position += ch.len_utf8();
+                }
             }
         }
 
@@ -1441,7 +1455,7 @@ impl TexParser {
             return TexElement::MathDisplay(String::new());
         }
         if lines.len() == 1 {
-            return TexElement::MathDisplay(lines.into_iter().next().unwrap());
+            return TexElement::MathDisplay(lines.into_iter().next().unwrap_or_default());
         }
         TexElement::MathLines { lines, kind }
     }
@@ -1609,20 +1623,24 @@ impl TexParser {
         let mut depth = 0;
 
         while self.position < self.content.len() {
-            let ch = self.content[self.position..].chars().next().unwrap();
-
-            if ch == '{' {
-                depth += 1;
-            } else if ch == '}' {
-                if depth == 0 && delimiter == '}' {
+            if let Some(ch) = self.content[self.position..].chars().next() {
+                if ch == '{' {
+                    depth += 1;
+                } else if ch == '}' {
+                    if depth == 0 && delimiter == '}' {
+                        break;
+                    }
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                } else if ch == delimiter && depth == 0 {
                     break;
                 }
-                depth -= 1;
-            } else if ch == delimiter && depth == 0 {
+
+                self.position += ch.len_utf8();
+            } else {
                 break;
             }
-
-            self.position += ch.len_utf8();
         }
 
         self.content[start..self.position].to_string()

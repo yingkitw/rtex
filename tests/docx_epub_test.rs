@@ -22,9 +22,9 @@ fn doc(body: &str) -> String {
 
 fn assert_zip_contains(zip_bytes: &[u8], expected_file: &str, label: &str) {
     let cursor = Cursor::new(zip_bytes.to_vec());
-    let mut archive = ZipArchive::new(cursor).expect(&format!("{} should be a valid zip", label));
+    let archive = ZipArchive::new(cursor).unwrap_or_else(|_| panic!("{} should be a valid zip", label));
     let names: Vec<String> = (0..archive.len())
-        .map(|i| archive.file_names().nth(i).unwrap().to_string())
+        .filter_map(|i| archive.file_names().nth(i).map(|n| n.to_string()))
         .collect();
     assert!(
         names.iter().any(|n| n == expected_file),
@@ -98,9 +98,9 @@ fn epub_contains_mimetype() {
 fn epub_contains_opf() {
     let bytes = render(&doc("OPF test."), OutputFormat::Epub);
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor).expect("EPUB should be valid zip");
+    let archive = ZipArchive::new(cursor).expect("EPUB should be valid zip");
     let has_opf = (0..archive.len())
-        .map(|i| archive.file_names().nth(i).unwrap().to_string())
+        .filter_map(|i| archive.file_names().nth(i).map(|n| n.to_string()))
         .any(|n| n.ends_with(".opf"));
     assert!(has_opf, "EPUB should contain an .opf file");
 }
@@ -109,9 +109,9 @@ fn epub_contains_opf() {
 fn epub_contains_xhtml() {
     let bytes = render(&doc("XHTML content test."), OutputFormat::Epub);
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor).expect("EPUB should be valid zip");
+    let archive = ZipArchive::new(cursor).expect("EPUB should be valid zip");
     let has_xhtml = (0..archive.len())
-        .map(|i| archive.file_names().nth(i).unwrap().to_string())
+        .filter_map(|i| archive.file_names().nth(i).map(|n| n.to_string()))
         .any(|n| n.ends_with(".xhtml") || n.ends_with(".html"));
     assert!(has_xhtml, "EPUB should contain an XHTML/HTML file");
 }
@@ -123,7 +123,7 @@ fn epub_renders_text_content() {
     let mut archive = ZipArchive::new(cursor).expect("EPUB should be valid zip");
     // Search all XHTML/HTML files for the body text
     for i in 0..archive.len() {
-        let name = archive.file_names().nth(i).unwrap().to_string();
+        let name = archive.file_names().nth(i).map(|n| n.to_string()).unwrap_or_default();
         if name.ends_with(".xhtml") || name.ends_with(".html") {
             let mut file = archive.by_index(i).unwrap();
             let mut content = String::new();
