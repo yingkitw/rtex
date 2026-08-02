@@ -211,25 +211,23 @@ impl MacroStore {
                 continue;
             }
 
-            #[allow(clippy::manual_strip)]
-            if remaining.starts_with('\\') {
+            if let Some(after_backslash) = remaining.strip_prefix('\\') {
                 // Try to match a macro name.
-                let name_end = if remaining.len() > 1 {
-                    remaining[1..]
-                        .find(|c: char| !c.is_alphabetic() && c != '*')
-                        .map(|i| i + 1)
-                        .unwrap_or(remaining.len())
+                let name_end = if after_backslash.is_empty() {
+                    0
                 } else {
-                    remaining.len()
+                    after_backslash
+                        .find(|c: char| !c.is_alphabetic() && c != '*')
+                        .unwrap_or(after_backslash.len())
                 };
-                let name = &remaining[1..name_end];
+                let name = &after_backslash[..name_end];
 
                 if let Some(def) = self.defs.get(name) {
-                    let after = &remaining[name_end..];
+                    let after = &after_backslash[name_end..];
                     let (args, consumed) = self.collect_args(after, def.param_count);
                     let expanded = self.substitute(&def.body, &args);
                     result.push_str(&expanded);
-                    i += name_end + consumed;
+                    i += 1 + name_end + consumed;
                     continue;
                 }
             }

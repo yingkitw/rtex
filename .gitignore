@@ -1,5 +1,4 @@
 /target
-/vendor/pdfrs/target
 /output
 *.pdf
 *.aux

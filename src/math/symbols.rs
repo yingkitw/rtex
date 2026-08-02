@@ -78,7 +78,7 @@ pub fn replace_math_symbols(text: &str) -> String {
     result
 }
 
-fn lookup_symbol(name: &str) -> Option<&'static str> {
+pub fn lookup_symbol(name: &str) -> Option<&'static str> {
     Some(match name {
         // Differential operators
         "mathrm" => return Some(""), // handled above, but fallback

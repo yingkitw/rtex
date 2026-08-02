@@ -76,13 +76,19 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
         }
         TexElement::Paragraph => out.push_str("<p></p>\n"),
         TexElement::MathInline(math) => {
-            out.push_str("<span class=\"math inline\">");
-            out.push_str(&escape_html(&format_math_inline(math)));
+            let mathml = crate::math::mathml::inline_mathml(math);
+            let fallback = escape_html(&format_math_inline(math));
+            out.push_str(&mathml);
+            out.push_str("<span class=\"math inline\" aria-hidden=\"true\">");
+            out.push_str(&fallback);
             out.push_str("</span>");
         }
         TexElement::MathDisplay(math) => {
-            out.push_str("<div class=\"math display\">");
-            out.push_str(&escape_html(&format_math_display(math)));
+            let mathml = crate::math::mathml::display_mathml(math);
+            let fallback = escape_html(&format_math_display(math));
+            out.push_str(&mathml);
+            out.push_str("<div class=\"math display\" aria-hidden=\"true\">");
+            out.push_str(&fallback);
             out.push_str("</div>\n");
         }
         TexElement::MathLines { lines, .. } => {
@@ -91,7 +97,12 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
                 if idx > 0 {
                     out.push_str("<br />");
                 }
-                out.push_str(&escape_html(&format_math_display(line)));
+                let mathml = crate::math::mathml::display_mathml(line);
+                let fallback = escape_html(&format_math_display(line));
+                out.push_str(&mathml);
+                out.push_str("<span aria-hidden=\"true\">");
+                out.push_str(&fallback);
+                out.push_str("</span>");
             }
             out.push_str("</div>\n");
         }

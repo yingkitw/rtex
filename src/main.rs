@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
 use clap_complete::{Shell, generate};
-use rtex::{ConsoleReporter, ConversionOptions, OutputFormat, StreamingConverter, watch_single};
+use rtex::{ConsoleReporter, ConversionOptions, LatexError, OutputFormat, StreamingConverter, watch_single};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -58,9 +58,8 @@ struct Cli {
     completions: Option<Shell>,
 }
 
-fn parse_format(raw: &str) -> anyhow::Result<OutputFormat> {
+fn parse_format(raw: &str) -> Result<OutputFormat, LatexError> {
     raw.parse()
-        .map_err(|e: rtex::LatexError| anyhow::anyhow!(e.to_string()))
 }
 
 fn default_output(input: &Path, format: OutputFormat) -> PathBuf {
@@ -86,7 +85,7 @@ fn conversion_options(cli: &Cli, format: OutputFormat) -> ConversionOptions {
 fn build_converter(
     cli: &Cli,
     options: ConversionOptions,
-) -> anyhow::Result<StreamingConverter<ConsoleReporter>> {
+) -> Result<StreamingConverter<ConsoleReporter>, LatexError> {
     let converter = StreamingConverter::with_reporter(ConsoleReporter)
         .with_options(options)
         .with_incremental(!cli.no_incremental)
@@ -100,7 +99,7 @@ fn run_conversion(
     input: &Path,
     output: &Path,
     options: ConversionOptions,
-) -> anyhow::Result<()> {
+) -> Result<(), LatexError> {
     let mut converter = build_converter(cli, options)?;
     converter.convert(input, output)?;
     println!(
@@ -111,7 +110,7 @@ fn run_conversion(
     Ok(())
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     if let Some(shell) = cli.completions {
@@ -121,7 +120,9 @@ fn main() -> anyhow::Result<()> {
     }
 
     let input_path = cli.input.clone().ok_or_else(|| {
-        anyhow::anyhow!("input file path is required (use --completions SHELL to generate completions instead)")
+        LatexError::ConfigError {
+            message: "input file path is required (use --completions SHELL to generate completions instead)".to_string(),
+        }
     })?;
 
     let format = parse_format(&cli.format)?;
@@ -142,7 +143,7 @@ fn main() -> anyhow::Result<()> {
         let keep_intermediate = cli.keep_intermediate;
         let fetch_packages = cli.fetch_packages;
         let package_cache = cli.package_cache.clone();
-        let result: Result<(), anyhow::Error> =
+        let result: Result<(), LatexError> =
             watch_single(&input_path, &output, move |inp, out| {
                 let options = ConversionOptions {
                     format,

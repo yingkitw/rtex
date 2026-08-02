@@ -4,6 +4,8 @@
 //! transform the element tree before PDF generation.  This provides
 //! extension points without modifying the core library.
 
+#![allow(dead_code)]
+
 use crate::parser::TexElement;
 
 /// A plugin that extends the LaTeX-to-PDF pipeline.
@@ -117,15 +119,6 @@ impl std::fmt::Display for PluginError {
 }
 
 impl std::error::Error for PluginError {}
-
-/// Load plugins from a directory by looking for `.texplugin` marker
-/// files (for future dynamic-loading support) and returning a
-/// pre-configured registry.
-#[allow(dead_code)]
-pub fn load_plugins_from_dir(_dir: &std::path::Path) -> PluginRegistry {
-    // Currently no dynamic loading; reserved for future work.
-    PluginRegistry::new()
-}
 
 // ── Built-in example plugins ──────────────────────────────────────────
 

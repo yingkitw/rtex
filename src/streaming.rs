@@ -253,17 +253,6 @@ impl Default for StreamingConverter<NoOpReporter> {
     }
 }
 
-/// Convenience one-shot conversion with progress reporting.
-#[allow(dead_code)]
-pub fn convert_with_progress<P: ProgressReporter>(
-    input: &Path,
-    output: &Path,
-    reporter: P,
-) -> Result<(), crate::error::LatexError> {
-    let mut converter = StreamingConverter::with_reporter(reporter);
-    converter.convert(input, output)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

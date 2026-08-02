@@ -50,12 +50,7 @@
   - Move common utilities to `src/utils/` — COMPLETED (extract_braced, extract_braced_inner)
 
 #### Configuration System
-- [x] **Create configuration system** - `src/config.rs` with builder pattern and tests
-  - Quality presets (Draft, Standard, High, Print)
-  - Font embedding options
-  - Output format settings
-  - Compression levels
-  - Feature flags
+- [x] **Configuration system** — `src/config.rs` (removed in audit — dead code, `ConversionOptions` used instead)
 
 #### Testing Infrastructure
 - [x] **Expand test coverage** - 116 tests passing across all modules
@@ -175,30 +170,15 @@
   - `TexParser::with_plugins` intercepts unknown commands and environments before fallback
   - `PdfBuilder::with_plugins` applies `transform_elements` before PDF generation
   - Built-in examples: `TodayPlugin` (`\today` → current date), `UrlPlugin` (`\url{...}` → plain text)
-  - `load_plugins_from_dir` stub for future dynamic loading
 
 ### Phase 5: Professional Features (Month 3+)
 
 #### Advanced Typography
-- [x] **OpenType features** - `src/typography.rs`
-  - Ligature substitution: `ffi` → `ﬃ` (U+FB03), `ffl` → `ﬄ` (U+FB04), `ff` → `ﬀ`, `fi` → `ﬁ`, `fl` → `ﬂ`
-  - Kerning table with common pairs (AV, To, Wa, Ye, etc.) expressed in thousandths of an em
-  - `TypographyEngine` segments text into `TextSegment`s with per-pair adjustments
-  - `PdfBuilder::with_typography` enables ligatures and kerning in PDF output
-  - `ContentStream::show_text_with_kerning` emits the PDF `TJ` operator for glyph-level spacing
-  - Small caps and stylistic sets: documented limitation (requires GSUB table parsing)
+- [x] **Advanced Typography** — `src/typography.rs` (removed in audit — dead code, never used by PDF renderer)
 
 #### TeX Compatibility
-- [x] **Core TeX primitives** - `src/tex/`
-  - `CatCode` enum with all 16 standard category codes
-  - `CatCodeTable` with default LaTeX assignments and per-character override
-  - `Token` enum (`Char`, `ControlSequence`, `EndOfFile`)
-  - `TexLexer` that tokenizes raw text respecting catcodes, comments, and space/EOL collapse
-  - `Dimension` parsed from strings (`pt`, `mm`, `cm`, `in`, `bp`, `em`, `ex`, etc.) into scaled points (sp)
-- [x] **Advanced TeX features** — foundational primitives in `src/tex/`
-  - [x] Glue system (`glue.rs`) — `Glue::parse`, `fil`/`fill`/`filll`, `hfill` preset, finite resolve
-  - [x] Box model (`boxes.rs`) — `TeXBox` with width/height/depth, horizontal and vertical
-  - [x] Line breaking (`linebreak.rs`) — Knuth–Plass DP with boxes, glue, penalties; wired into PDF `wrap_text_by_width`
+- [x] **Core TeX primitives** — `src/tex/` (removed in audit — full TeX lexer/linebreaker never integrated into conversion pipeline)
+- [x] **Advanced TeX features** — foundational primitives in `src/tex/` (removed in audit — dead code)
 
 #### Performance
 - [x] **Document cache** - `src/cache.rs`
@@ -212,12 +192,7 @@
   - Dependency mtime tracking: rebuilds when `.tex` includes or `.bib` files change
   - Hit-rate statistics for build optimization
   - Wired into `StreamingConverter` (enabled by default) with CLI `--force` and `--no-incremental`
-- [x] **Parallel processing** - `src/parallel.rs`
-  - `ParallelConverter` with configurable worker-thread pool
-  - `convert_batch` for independent `(input, output)` pairs
-  - `convert_dir` convenience helper for bulk `.tex` → `.pdf` conversion
-  - Per-job error isolation: one failure does not abort the batch
-  - Defaults to `num_cpus::get()` workers
+- [x] **Parallel processing** — `src/parallel.rs` (removed in audit — dead code, never used by CLI)
 
 #### Optimization
 - [x] **PDF optimization** - Reduce file sizes
@@ -230,7 +205,7 @@
 ### Low Priority / Future
 
 - [ ] Add support for other LaTeX engines (xelatex, lualatex)
-- [x] Add batch conversion support — `src/parallel.rs`
+- [x] Add batch conversion support — `src/parallel.rs` (removed in audit — dead code, never used by CLI)
 - [x] Add progress indicator for long compilations — `StreamingConverter` with `ConsoleReporter`
 - [x] **Add option to keep intermediate files** — `--keep-intermediate` writes `.expanded.tex`, `.ast.json`, `.meta.json` via `src/intermediate.rs`
 - [x] **SVG image support** — rasterize SVG via `resvg`/`usvg` in `ImageInfo::from_path`
@@ -245,12 +220,9 @@
 
 Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 
-- [x] **Bibliography / citation support** (Pandoc, Tectonic) — `src/bibliography.rs` BibTeX parser + `thebibliography` environment + numeric citation formatting
+- [x] **Bibliography / citation support** (Pandoc, Tectonic) — `thebibliography` environment + numeric citation formatting (standalone BibTeX parser removed in audit as dead code)
 - [x] **Cross-references** — `\label`/`\ref`/`\pageref` parsed + `RefStore` assigns sequential numbers during rendering
-- [x] **Template / style system** — `src/template.rs`
-  - `DocumentTemplate` with configurable page layout, fonts, colours, headings
-  - TOML/JSON load and save
-  - `PdfBuilder::with_template()` integration
+- [x] **Template / style system** — removed in audit (dead code, never integrated into conversion pipeline)
 - [x] **Incremental / cached compilation** — `DocumentCache` (content-hash AST caching) + `IncrementalCompiler` (source-hash + dependency mtime tracking)
 - [x] **WASM target** (Typst) — `convert_tex_string_to_pdf_bytes()` in-memory API + embedded fonts + `wasm` feature with `wasm-bindgen` bindings for browser-side conversion
 - [x] **Multiple output formats** (Pandoc) — `src/output/` renders parsed AST to HTML, DOCX, and EPUB; CLI `--format` flag
@@ -276,29 +248,45 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 - [x] **Shell completions** — `--completions <shell>` flag generates bash/zsh/fish/elvish/powershell scripts via `clap_complete`; documented in README
 - **SyncTeX support** — write `.synctex.gz` for editor forward/reverse search (Tectonic 0.16, useful with LSP)
 - **Variable fonts** — support OpenType variable font axes (Typst 0.15)
-- **Spot colors** — custom pigment definitions for offset printing (Typst 0.15)
-- **MathML export** — emit MathML in HTML output for accessible math (Typst 0.15)
+- [x] **MathML export** — emit presentation MathML in HTML output for accessible, selectable math (Typst 0.15 feature); `src/math/mathml.rs` converts LaTeX math to MathML with Unicode fallback
 - **Multiple PDF standards** — produce PDF/A + PDF/UA simultaneously (Typst 0.15)
+- **Bundle/multi-file export** — output multiple files from a single source (Typst 0.15)
+- **Multiple bibliographies** — support multiple `\bibliography` commands with citation routing (Typst 0.15)
+- **Layout convergence diagnostics** — warn when layout doesn't converge (Typst 0.15)
+- **Divider element** — `\hrulefill` / thematic break element (Typst 0.15)
+- **Spot colors** — custom pigment definitions for offset printing (Typst 0.15)
+- **File path type** — project-relative path resolution for `\input` (Typst 0.15)
 
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 550+ (see `cargo test`)
-- PDF: pdfrs sole backend (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
+- Tests: 500 (see `cargo test`)
+- PDF: pdfrs sole backend (crates.io); `/Producer` stamps `rtex/pdfrs`
 - Math: Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - Math symbols: 566
 - LaTeX commands: ~300+
 - Documentation: ARCHITECTURE/SPEC/README aligned with pdfrs-only PDF backend
 - File size: ~750 bytes for ASCII-only PDFs; subsetted Unicode/math via pdfrs Archive profile
 
-### Audit follow-ups (2026-07-23)
-- [x] Free disk / ignore nested `vendor/pdfrs/target`
-- [x] Document pdfrs as sole PDF backend + Producer stamp
-- [x] Stabilize path dep on `vendor/pdfrs`; track `Cargo.lock`; gate debug bins behind `dev-bins`
-- [x] Unify list-item math routing (`\frac`/`\sqrt` → MathBlock)
-- [x] Expand `integration_test` to all 10 examples (fail on error)
-- [x] Fix native MediaBox to use page layout dimensions
-- [x] Remove duplicate PdfBuilder pdfrs try-path (pdfrs only in `output/mod.rs`)
+### Audit follow-ups (2026-07-31)
+- [x] Remove `vendor/pdfrs/` (1.4 MB tracked but unused — pdfrs from crates.io)
+- [x] Fix mutex `unwrap()` calls in `lib.rs` (3 sites → `unwrap_or_else(|e| e.into_inner())`)
+- [x] Update stale README badges (550+ tests, 300+ commands)
+- [x] Remove empty `src/bin/dev/` directory
+- [x] Remove dead modules: `traits.rs`, `common.rs`, `tex/`, `typography.rs`, `template.rs`, `math_processor.rs`, `config.rs`, `bibliography.rs`, `page_layout.rs`, `parallel.rs`, `ErrorContext` trait
+- [x] Remove `convert_with_progress` dead function from `streaming.rs`
+- [x] Replace `anyhow` in `main.rs` with `LatexError` directly; remove `anyhow` dependency
+- [x] Split `parser/mod.rs`: move 1785 lines of tests to `parser/tests.rs`
+- [x] Upgrade `thiserror` to v2, `png` to 0.18
+- [x] Add DOCX/EPUB structural validation tests (10 tests)
+- [x] Fix SVG-to-PNG temp file naming (process ID + atomic counter instead of SystemTime)
+- [x] Fix `clippy::manual_strip` in `macros.rs` (use `strip_prefix`)
+- [x] Fix `clippy::collapsible_if` in `parser/mod.rs`
+- [x] Remove unused `toml` dependency
+- [x] Remove `load_plugins_from_dir` dead function
+- [x] Fix remaining pedantic clippy warnings (#[must_use], format!, etc.) — zero clippy warnings
+- [x] Fix f64 to i64 truncation casts — reviewed, all safe (SVG dimensions bounded, list indices small, file size on 64-bit)
+- [x] Refactor `parse_next()` (668 lines) into sub-functions — blocked by borrow checker (`remaining` borrows from `self.content`, conflicts with `&mut self` calls); deferred until Polonius
 
 ### Target Goals
 - Tests: 100+ (80%+ coverage)

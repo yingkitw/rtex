@@ -22,7 +22,7 @@
 //! - [`OutputFormat`] — PDF, HTML, DOCX, EPUB selection
 //! - [`PackageFetcher`] — on-demand CTAN package download
 //! - [`TexParser`] / [`TexElement`] — LaTeX parsing AST
-//! - `pdfrs_pdf` — PDF generation via the vendored pdfrs engine
+//! - `pdfrs_pdf` — PDF generation via the pdfrs engine
 //!
 //! ## Feature flags
 //!
@@ -33,10 +33,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 
-mod bibliography;
 mod cache;
-mod common;
-pub mod config;
 pub mod error;
 mod incremental;
 mod intermediate;
@@ -44,19 +41,12 @@ pub mod lsp;
 mod macros;
 mod math;
 mod math_formatter;
-mod math_processor;
 mod output;
 mod packages;
-pub mod page_layout;
-mod parallel;
 mod parser;
 mod plugins;
 mod streaming;
 mod table;
-pub mod template;
-mod tex;
-pub mod traits;
-mod typography;
 pub(crate) mod utils;
 mod watch;
 
@@ -71,23 +61,10 @@ pub use lsp::{
 };
 pub use macros::expand_document;
 pub use math_formatter::MathFormatter;
-pub use math_processor::{MathCommandInfo, MathCommandType, MathProcessor};
 pub use output::{DocumentMeta, OutputFormat, PdfBackend, render_elements, render_elements_in_dir};
 pub use packages::{PackageFetcher, PackageRequest};
-pub use parallel::{ParallelConverter, convert_dir};
 pub use parser::{TexElement, TexParser};
-pub use plugins::{
-    CustomFormatPlugin, FormatType, Plugin, PluginError, PluginRegistry, TodayPlugin, UrlPlugin,
-};
 pub use streaming::{ConsoleReporter, NoOpReporter, ProgressReporter, StreamingConverter};
-pub use template::{
-    ColorScheme, DocumentTemplate, HeadingScale, Margins, PaperSize, TitlePageConfig,
-};
-pub use tex::{
-    BoxDirection, BrokenLine, CatCode, Dimension, Glue, InfiniteUnit, LineBreaker, LineItem,
-    Stretch, TeXBox, TexLexer, Token, TokenizedParagraph, line_badness,
-};
-pub use typography::{KerningTable, TextSegment, TypographyEngine, TypographyOptions};
 pub use watch::{watch_batch, watch_single};
 
 /// Run the rtex language server over stdio (requires `lsp` feature).
@@ -95,9 +72,6 @@ pub use watch::{watch_batch, watch_single};
 pub fn run_lsp_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     lsp::run_stdio_server()
 }
-pub use bibliography::{BibEntry, BibEntryType, BibliographyManager};
-pub use common::{Clear, Stats};
-
 /// Options controlling conversion format and package fetching.
 #[derive(Debug, Clone)]
 pub struct ConversionOptions {
@@ -184,13 +158,13 @@ impl NativeTexConverter {
     /// Parse TeX source into structured elements, using the cache when enabled.
     fn parse_content(&self, content: &str, base_dir: Option<&Path>) -> Vec<parser::TexElement> {
         if let Some(ref cache) = self.cache {
-            let mut c = cache.lock().unwrap();
+            let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(els) = c.get_parsed(content) {
                 return els;
             }
             drop(c);
             let els = self.parse_fresh(content, base_dir);
-            cache.lock().unwrap().put_parsed(content, els.clone());
+            cache.lock().unwrap_or_else(|e| e.into_inner()).put_parsed(content, els.clone());
             els
         } else {
             self.parse_fresh(content, base_dir)
@@ -256,7 +230,7 @@ impl NativeTexConverter {
     pub fn cache_stats(&self) -> Option<CacheStats> {
         self.cache
             .as_ref()
-            .map(|c| c.lock().unwrap().stats().clone())
+            .map(|c| c.lock().unwrap_or_else(|e| e.into_inner()).stats().clone())
     }
 }
 

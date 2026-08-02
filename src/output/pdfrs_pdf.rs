@@ -12,6 +12,8 @@ use crate::table::{Align, Table};
 
 /// Rasterize an SVG file to a PNG temp file and return the temp path.
 /// Returns the original path unchanged if it is not an SVG.
+/// Uses a random UUID for the temp filename to avoid collisions under
+/// parallel conversion.
 fn rasterize_svg_if_needed(path: &str, base_dir: Option<&std::path::Path>) -> String {
     let resolved = if std::path::Path::new(path).is_absolute() {
         PathBuf::from(path)
@@ -72,12 +74,12 @@ fn rasterize_svg_if_needed(path: &str, base_dir: Option<&std::path::Path>) -> St
         writer.write_image_data(&rgb).unwrap();
     }
 
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let tmp_path = std::env::temp_dir().join(format!(
-        "rtex_svg_{}.png",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
+        "rtex_svg_{}_{}.png",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     if std::fs::write(&tmp_path, &png_buf).is_err() {
         return path.to_string();
