@@ -657,3 +657,9 @@ Body text.
     assert_contains(&html, "My Author", "author in HTML");
     assert_contains(&html, "Body text.", "body in HTML");
 }
+
+#[test]
+fn html_hrulefill() {
+    let html = render_html(&doc(r"Above\hrulefill Below"));
+    assert_contains(&html, "<hr", "hrulefill produces <hr>");
+}

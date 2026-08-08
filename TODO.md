@@ -253,9 +253,9 @@ Research vs. Tectonic, Pandoc, Typst — capabilities we lack:
 - **Bundle/multi-file export** — output multiple files from a single source (Typst 0.15)
 - **Multiple bibliographies** — support multiple `\bibliography` commands with citation routing (Typst 0.15)
 - **Layout convergence diagnostics** — warn when layout doesn't converge (Typst 0.15)
-- **Divider element** — `\hrulefill` / thematic break element (Typst 0.15)
+- [x] **Divider element** — `\hrulefill` renders as `Element::HorizontalRule` in PDF and `<hr>` in HTML
 - **Spot colors** — custom pigment definitions for offset printing (Typst 0.15)
-- **File path type** — project-relative path resolution for `\input` (Typst 0.15)
+- [x] **File path type** — `\input` supports both braced and unbraced syntax; `\include{filename}` splices with `\clearpage` before/after; shared `splice_file` helper resolves via base_dir, search_paths, and bare path with auto `.tex` extension
 
 ## Metrics & Goals
 

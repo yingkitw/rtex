@@ -566,6 +566,9 @@ fn push_tex_element(
             "today" => {
                 writer.push_plain(&chrono::Local::now().format("%B %d, %Y").to_string());
             }
+            "hrulefill" => {
+                writer.push_block(Element::HorizontalRule);
+            }
             "hspace" | "hspace*" | "vspace" | "vspace*" | "quad" | "qquad"
             | "footnotemark" | "cline" | "rule" | "linebreak" | "nopagebreak"
             | "samepage" | "enlargethispage" | "raggedright" | "raggedleft"

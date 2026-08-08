@@ -1,6 +1,6 @@
 [package]
 name = "rtex"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 description = "Native TeX to PDF converter written in Rust with zero external LaTeX dependencies"
 authors = ["Ying Kit WONG"]
@@ -10,7 +10,6 @@ documentation = "https://docs.rs/rtex/"
 homepage = "https://github.com/yingkitw/rtex"
 keywords = ["latex", "pdf", "tex", "converter", "typesetting"]
 categories = ["command-line-utilities", "text-processing"]
-rust-version = "1.85"
 autobins = false
 
 [lib]

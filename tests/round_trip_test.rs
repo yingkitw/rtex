@@ -1365,3 +1365,37 @@ fn test_href_url_renders_pdf() {
     let pdf = convert_latex_to_bytes(latex).expect("href/url must convert");
     validate_pdf_structure(&pdf).expect("href/url PDF structure invalid");
 }
+
+#[test]
+fn test_hrulefill_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Above the rule.
+\hrulefill
+Below the rule.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("hrulefill must convert");
+    validate_pdf_structure(&pdf).expect("hrulefill PDF structure invalid");
+}
+
+#[test]
+fn test_include_renders_pdf() {
+    use std::io::Write;
+    let tmp = tempfile::tempdir().unwrap();
+    let included = tmp.path().join("chapter.tex");
+    {
+        let mut f = std::fs::File::create(&included).unwrap();
+        f.write_all(b"Included content.").unwrap();
+    }
+    let input = tmp.path().join("main.tex");
+    let latex = r#"\documentclass{article}
+\begin{document}
+Main text.
+\include{chapter}
+\end{document}"#;
+    fs::write(&input, latex).unwrap();
+    let output = tmp.path().join("output.pdf");
+    convert_tex_to_pdf(&input, &output).expect("include must convert");
+    let pdf = fs::read(&output).expect("must read PDF");
+    validate_pdf_structure(&pdf).expect("include PDF structure invalid");
+}

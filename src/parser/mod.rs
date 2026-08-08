@@ -611,8 +611,17 @@ impl TexParser {
         }
 
         // Include external file content inline
-        if remaining.starts_with("\\input{") {
-            return self.parse_input();
+        if remaining.starts_with("\\input") {
+            // Ensure we don't match \input* or other longer commands
+            let after = &remaining["\\input".len()..];
+            if after.starts_with('{') || after.starts_with(|c: char| c.is_whitespace()) {
+                return self.parse_input();
+            }
+        }
+
+        // \include{filename} — like \input but with page breaks
+        if remaining.starts_with("\\include{") {
+            return self.parse_include();
         }
 
         // Vertical spacing

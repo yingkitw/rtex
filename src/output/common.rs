@@ -285,6 +285,7 @@ fn render_command_html(name: &str, args: &[String], out: &mut String) {
         }
         "newline" | "linebreak" => out.push_str("<br />\n"),
         "hfill" => out.push_str("<span class=\"hfill\"></span>"),
+        "hrulefill" => out.push_str("<hr />\n"),
         "textsc" if !args.is_empty() => {
             out.push_str("<span style=\"font-variant:small-caps\">");
             out.push_str(&escape_html(&args[0]));

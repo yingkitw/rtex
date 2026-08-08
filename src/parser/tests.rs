@@ -820,6 +820,61 @@ Visit \url{https://example.com}.
     }
 
     #[test]
+    fn parser_input_without_braces() {
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let included = tmp.path().join("chapter1.tex");
+        {
+            let mut f = std::fs::File::create(&included).unwrap();
+            f.write_all(b"Chapter text").unwrap();
+        }
+
+        let content = r#"\input chapter1
+More text"#;
+        let mut parser = TexParser::new(content.to_string()).with_base_dir(tmp.path());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| {
+            if let TexElement::Text(t) = e {
+                t.contains("Chapter text")
+            } else {
+                false
+            }
+        }));
+        assert!(elements.iter().any(|e| {
+            if let TexElement::Text(t) = e {
+                t.contains("More text")
+            } else {
+                false
+            }
+        }));
+    }
+
+    #[test]
+    fn parser_include_splices_with_clearpage() {
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let included = tmp.path().join("chapter2.tex");
+        {
+            let mut f = std::fs::File::create(&included).unwrap();
+            f.write_all(b"Included chapter").unwrap();
+        }
+
+        let content = r#"\include{chapter2}"#;
+        let mut parser = TexParser::new(content.to_string()).with_base_dir(tmp.path());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| {
+            if let TexElement::Text(t) = e {
+                t.contains("Included chapter")
+            } else {
+                false
+            }
+        }));
+        assert!(elements
+            .iter()
+            .any(|e| matches!(e, TexElement::Command { name, .. } if name == "clearpage")));
+    }
+
+    #[test]
     fn parser_parses_centering_command() {
         let content = r#"\centering centered text"#;
         let mut parser = TexParser::new(content.to_string());

@@ -176,20 +176,60 @@ impl TexParser {
         })
     }
 
-    /// Parse `\input{filename}` and splice the referenced file inline.
+    /// Parse `\input{filename}` or `\input filename` and splice the
+    /// referenced file inline.
     pub(super) fn parse_input(&mut self) -> Option<TexElement> {
-        self.position += "\\input{".len();
+        self.position += "\\input".len();
+        let filename = if self.content[self.position..].starts_with('{') {
+            self.position += 1;
+            let name = self.read_until('}');
+            self.position += 1; // skip closing brace
+            name
+        } else {
+            self.skip_whitespace_and_comments();
+            let start = self.position;
+            let rest = &self.content[self.position..];
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '\\' || c == '%' || c == '{')
+                .unwrap_or(rest.len());
+            self.position += end;
+            self.content[start..self.position].to_string()
+        };
+
+        self.splice_file(&filename);
+        None
+    }
+
+    /// Parse `\include{filename}` — like `\input` but with a page break
+    /// before and after the included content (LaTeX semantics).
+    pub(super) fn parse_include(&mut self) -> Option<TexElement> {
+        self.position += "\\include{".len();
         let filename = self.read_until('}');
         self.position += 1; // skip closing brace
 
+        let before = self.content[..self.position].to_string();
+        let after = self.content[self.position..].to_string();
+        self.content = format!("{}\\clearpage\n", before);
+        let insert_pos = self.content.len();
+        self.content = format!("{}\n\\clearpage\n{}", self.content, after);
+        let saved = self.position;
+        self.position = insert_pos;
+        self.splice_file(&filename);
+        self.position = saved + "\\clearpage\n".len();
+        None
+    }
+
+    /// Resolve `filename` against base_dir, search_paths, and bare path,
+    /// then splice its contents into `self.content` at the current position.
+    fn splice_file(&mut self, filename: &str) {
         let mut candidates = Vec::new();
         if let Some(ref base) = self.base_dir {
-            candidates.push(base.join(&filename));
+            candidates.push(base.join(filename));
         }
         for dir in &self.search_paths {
-            candidates.push(dir.join(&filename));
+            candidates.push(dir.join(filename));
         }
-        candidates.push(PathBuf::from(&filename));
+        candidates.push(PathBuf::from(filename));
 
         for mut path in candidates {
             if path.extension().is_none() {
@@ -202,7 +242,6 @@ impl TexParser {
                 break;
             }
         }
-        None
     }
 
     /// Parse `\vspace{length}`.
