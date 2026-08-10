@@ -3,9 +3,9 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Tests](https://img.shields.io/badge/tests-550%2B-brightgreen.svg)](TODO.md)
+[![Tests](https://img.shields.io/badge/tests-520%2B-brightgreen.svg)](TODO.md)
 [![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-300%2B-informational.svg)](TODO.md)
-[![Math symbols](https://img.shields.io/badge/math%20symbols-566%2B-informational.svg)](TODO.md)
+[![Math symbols](https://img.shields.io/badge/math%20symbols-618%2B-informational.svg)](TODO.md)
 [![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
 [![LSP](https://img.shields.io/badge/LSP-rtex--lsp-blueviolet.svg)](docs/LSP.md)
 [![No TeX Live](https://img.shields.io/badge/TeX%20Live-not%20required-critical.svg)](#why-rtex)
@@ -36,7 +36,7 @@ Most LaTeX workflows assume a full TeX distribution — gigabytes of packages, s
 - **CI and servers without TeX Live** — one `cargo build`, no 4 GB install step
 - **Multi-format output from one source** — same AST → PDF, HTML, DOCX, or EPUB
 - **Editor integration** — `rtex-lsp` gives diagnostics, completions, outline, and hover
-- **Fast iteration** — incremental compilation, `--watch`, and parallel batch conversion
+- **Fast iteration** — incremental compilation and `--watch` mode
 - **Small, predictable artifacts** — ASCII-only PDFs can be under 1 KB; tests run with zero external tools
 - **Embedding** — use as a Rust library, compile to WASM for browser preview, or run headless in pipelines
 
@@ -80,41 +80,20 @@ See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for the full honesty 
 - `\tfrac` / `\dfrac` sized fractions
 - Ellipsis: `\ldots`, `\cdots`, `\vdots`, `\ddots`
 
-## Text Output Quality Validation
+## Math Support
 
-Text elements are validated before writing to PDF content streams:
+PDF generation uses the vendored [pdfrs](https://crates.io/crates/pdfrs) engine with DejaVu Sans TrueType embedding for Unicode math symbols.
 
-- Inline math safety: unmatched `$` is preserved as literal text (not dropped)
-- Text normalization: collapses excessive whitespace and removes non-printable control chars
-- Wrapping robustness: long tokens are split by Unicode character count to avoid overflow
+- **618 symbols** — Greek letters, operators, relations, arrows, integrals, summation, function names
+- Inline and display math, multi-line environments (`align`, `gather`, `multline`, `cases`)
+- Math alphabets (`\mathbb`, `\mathcal`, `\mathfrak`, `\mathbf`, `\mathit`, `\mathsf`, `\mathtt`)
+- Math accents (`\vec`, `\hat`, `\tilde`, `\bar`, `\dot`, `\ddot`)
+- Fractions, radicals (`\sqrt`), binomials (`\binom`), sized fractions (`\tfrac`, `\dfrac`)
+- Matrix environments (`pmatrix`, `bmatrix`, `vmatrix`)
+- MathML export in HTML output for accessible, selectable math
+- Font strategy: standard Helvetica for ASCII-only docs (~750 bytes); embedded DejaVu subset for Unicode/math (~385 KB)
 
-This improves final PDF text stability for noisy or mixed TeX input.
-
-## Mathematical Symbol Support
-
-✅ **Unicode Math Symbols**: PDF generation via the vendored [pdfrs](https://crates.io/crates/pdfrs) engine with DejaVu Sans TrueType embedding and Identity-H encoding.
-
-**Supported Features**:
-- 566 mathematical symbols (Greek letters, operators, relations, arrows, integrals, summation)
-- Inline and display math equations
-- Multi-line math (`align`, `gather`, `multline`, `cases`)
-- Special roots (∛ cube root, ∜ fourth root)
-- Full alphabet super/subscripts
-- Math alphabets: \mathbb, \mathcal, \mathfrak, \mathbf, \mathit, \mathsf, \mathtt
-- Math accents: \vec, \hat, \tilde, \bar, \dot, \ddot
-- Fractions with Unicode fraction characters and parenthesized form
-- Piecewise definitions via `\begin{cases}`
-- Proper Unicode text encoding
-
-**Status**:
-- ✅ Math formatter: 566 LaTeX commands → Unicode symbols
-- ✅ Font strategy: standard Helvetica for ASCII-only docs (~750 bytes); embedded DejaVu subset for Unicode/math
-- ✅ PDF generation: [pdfrs](https://crates.io/crates/pdfrs) backend (no native fallback)
-- Unicode/math documents: ~385 KB (DejaVu subset)
-
-**For production documents**, this converter now provides good math support. For complex documents with advanced features (TikZ, complex tables, etc.), use pdflatex.
-
-See `docs/MATH_LEARNINGS_FROM_MINITEX.md` for implementation details.
+Text elements are validated before PDF output: unmatched `$` preserved as literal text, whitespace normalized, long tokens split by Unicode count to avoid overflow.
 
 ## Prerequisites
 
@@ -277,7 +256,7 @@ cargo test
 ```
 
 The test suite includes:
-- 552 comprehensive tests
+- 520+ comprehensive tests (520 passing, 3 ignored)
 - PDF generation verification
 - File size validation
 - PDF header verification

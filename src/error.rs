@@ -205,4 +205,53 @@ mod tests {
         assert!(display.contains("Unsupported feature"));
         assert!(display.contains("Suggestion"));
     }
+
+    #[test]
+    fn test_unsupported_feature_no_suggestion() {
+        let err = LatexError::UnsupportedFeature {
+            feature: "custom macro".to_string(),
+            suggestion: None,
+        };
+        let display = format!("{}", err);
+        assert!(display.contains("Unsupported feature"));
+        assert!(!display.contains("Suggestion"));
+    }
+
+    #[test]
+    fn test_string_to_error_conversion() {
+        let err: LatexError = "something went wrong".into();
+        match err {
+            LatexError::PdfError { message, .. } => assert_eq!(message, "something went wrong"),
+            _ => panic!("expected PdfError"),
+        }
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let err: LatexError = io_err.into();
+        match err {
+            LatexError::IoError { .. } => {}
+            _ => panic!("expected IoError"),
+        }
+    }
+
+    #[test]
+    fn test_invalid_path_display() {
+        let err = LatexError::InvalidPath;
+        assert_eq!(format!("{}", err), "Invalid file path");
+    }
+
+    #[test]
+    fn test_parse_error_without_context() {
+        let err = LatexError::ParseError {
+            message: "Unexpected EOF".to_string(),
+            line: None,
+            column: None,
+            context: None,
+        };
+        let display = format!("{}", err);
+        assert!(display.contains("Parse error"));
+        assert!(!display.contains("line"));
+    }
 }

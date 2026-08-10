@@ -776,4 +776,113 @@ Test output directory creation.
         assert!(pdf_data.starts_with(b"%PDF"), "should be a valid PDF");
         assert!(pdf_data.len() > 500, "PDF should contain actual content");
     }
+
+    #[test]
+    fn test_convert_tex_string_to_html() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+Hello world
+\end{document}"#;
+        let result = convert_tex_string(tex, OutputFormat::Html);
+        assert!(result.is_ok());
+        let html = String::from_utf8(result.unwrap()).unwrap();
+        assert!(html.contains("Hello world"));
+    }
+
+    #[test]
+    fn test_convert_tex_string_pdf_format() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+Test
+\end{document}"#;
+        let result = convert_tex_string(tex, OutputFormat::Pdf);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn test_convert_tex_string_to_epub() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+EPUB test
+\end{document}"#;
+        let result = convert_tex_string(tex, OutputFormat::Epub);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        // EPUB is a ZIP archive — starts with PK
+        assert!(bytes.starts_with(b"PK"));
+    }
+
+    #[test]
+    fn test_convert_tex_string_to_docx() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+DOCX test
+\end{document}"#;
+        let result = convert_tex_string(tex, OutputFormat::Docx);
+        assert!(result.is_ok());
+        let bytes = result.unwrap();
+        // DOCX is a ZIP archive — starts with PK
+        assert!(bytes.starts_with(b"PK"));
+    }
+
+    #[test]
+    fn test_conversion_options_builder() {
+        let opts = ConversionOptions::default()
+            .with_format(OutputFormat::Html)
+            .with_fetch_packages(false)
+            .with_keep_intermediate(false);
+        assert_eq!(opts.format, OutputFormat::Html);
+        assert!(!opts.fetch_packages);
+        assert!(!opts.keep_intermediate);
+    }
+
+    #[test]
+    fn test_newpage_in_document() {
+        let temp_dir = tempdir().unwrap();
+        let input_path = temp_dir.path().join("newpage.tex");
+        let output_path = temp_dir.path().join("newpage.pdf");
+
+        let tex_content = r#"\documentclass{article}
+\begin{document}
+First page\newpage
+Second page
+\end{document}
+"#;
+        fs::write(&input_path, tex_content).unwrap();
+
+        let converter = NativeTexConverter::new();
+        converter.convert(&input_path, &output_path).unwrap();
+
+        assert!(output_path.exists(), "PDF should be generated");
+        let pdf_data = fs::read(&output_path).unwrap();
+        assert!(pdf_data.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn test_marginpar_does_not_appear_in_output() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+Text\marginpar{secret note}
+More text
+\end{document}"#;
+        let result = convert_tex_string(tex, OutputFormat::Html);
+        assert!(result.is_ok());
+        let html = String::from_utf8(result.unwrap()).unwrap();
+        assert!(!html.contains("secret note"), "marginpar should be dropped");
+        assert!(html.contains("More text"));
+    }
+
+    #[test]
+    fn test_math_symbols_in_html_output() {
+        let tex = r#"\documentclass{article}
+\begin{document}
+$\alpha + \beta = \gamma$
+\end{document}"#;
+        let result = convert_tex_string(tex, OutputFormat::Html);
+        assert!(result.is_ok());
+        let html = String::from_utf8(result.unwrap()).unwrap();
+        assert!(html.contains('α') || html.contains("alpha"));
+    }
 }

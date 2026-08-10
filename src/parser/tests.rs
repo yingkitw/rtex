@@ -1839,4 +1839,350 @@ Hello minipage
         assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
             "Expected minipage to produce Center element");
     }
+
+    #[test]
+    fn parser_parses_newpage_command() {
+        let content = r#"\documentclass{article}
+\begin{document}
+First page\newpage
+Second page
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "newpage")),
+            "Expected newpage command");
+    }
+
+    #[test]
+    fn parser_parses_pagebreak_with_optional_arg() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Text\pagebreak[2]
+More text
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "pagebreak")),
+            "Expected pagebreak command");
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("More text"))),
+            "Text after pagebreak should still parse");
+    }
+
+    #[test]
+    fn parser_parses_noindent_and_par() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\noindent First paragraph\par
+Second paragraph
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "noindent")),
+            "Expected noindent command");
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Paragraph)),
+            "Expected par to produce Paragraph element");
+    }
+
+    #[test]
+    fn parser_consumes_marginpar() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Text\marginpar{note}
+More text
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("note"))),
+            "Marginpar content should be consumed, not rendered");
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("More text"))),
+            "Text after marginpar should still parse");
+    }
+
+    #[test]
+    fn parser_parses_nocite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\nocite{key1,key2}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys } if *keys == vec!["key1".to_string(), "key2".to_string()])),
+            "Expected nocite to produce Citation element");
+    }
+
+    #[test]
+    fn parser_parses_eqref() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See \eqref{fig:1} for details
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Ref { key } if key == "fig:1")),
+            "Expected eqref to produce Ref element");
+    }
+
+    #[test]
+    fn parser_parses_autoref() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See \autoref{sec:intro} for details
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Ref { key } if key == "sec:intro")),
+            "Expected autoref to produce Ref element");
+    }
+
+    #[test]
+    fn parser_parses_nameref() {
+        let content = r#"\documentclass{article}
+\begin{document}
+See \nameref{sec:intro} for details
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Ref { key } if key == "sec:intro")),
+            "Expected nameref to produce Ref element");
+    }
+
+    #[test]
+    fn parser_skips_pagestyle() {
+        let content = r#"\documentclass{article}
+\pagestyle{plain}
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("plain"))),
+            "pagestyle should be consumed");
+    }
+
+    #[test]
+    fn parser_skips_pagenumbering() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\pagenumbering{arabic}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("arabic"))),
+            "pagenumbering should be consumed");
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("Hello"))),
+            "Text after pagenumbering should still parse");
+    }
+
+    #[test]
+    fn parser_skips_definecolor() {
+        let content = r#"\documentclass{article}
+\definecolor{myred}{rgb}{0.8,0.0,0.0}
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("myred"))),
+            "definecolor should be consumed");
+    }
+
+    #[test]
+    fn parser_parses_textcircled() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\textcircled{a}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "textcircled")),
+            "Expected textcircled command");
+    }
+
+    #[test]
+    fn parser_parses_hl() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\hl{highlighted}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "hl")),
+            "Expected hl command");
+    }
+
+    #[test]
+    fn parser_parses_uline() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\uline{underlined}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "uline")),
+            "Expected uline command");
+    }
+
+    #[test]
+    fn parser_parses_color_declaration() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\color{red} Red text
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "color")),
+            "Expected color command");
+    }
+
+    #[test]
+    fn parser_skips_let() {
+        let content = r#"\documentclass{article}
+\let\oldsection\section
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("oldsection"))),
+            "\\let should be consumed");
+    }
+
+    #[test]
+    fn parser_skips_parindent() {
+        let content = r#"\documentclass{article}
+\setlength{\parindent}{0pt}
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("parindent"))),
+            "setlength with parindent should be consumed");
+    }
+
+    #[test]
+    fn parser_skips_floatsep() {
+        let content = r#"\documentclass{article}
+\floatsep{12pt}
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("floatsep"))),
+            "floatsep should be consumed");
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("Hello"))),
+            "Text after floatsep should still parse");
+    }
+
+    #[test]
+    fn parser_parses_normalcolor() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\color{red} Red \normalcolor normal
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "normalcolor")),
+            "Expected normalcolor command");
+    }
+
+    #[test]
+    fn parser_parses_tag() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\tag{1.1} x = y
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "tag")),
+            "Expected tag command");
+    }
+
+    #[test]
+    fn parser_parses_tag_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\tag*{1.1} x = y
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "tag*")),
+            "Expected tag* command");
+    }
+
+    #[test]
+    fn parser_parses_intertext() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\intertext{Some text}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "intertext")),
+            "Expected intertext command");
+    }
+
+    #[test]
+    fn parser_parses_reflectbox() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\reflectbox{mirrored}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "reflectbox")),
+            "Expected reflectbox command");
+    }
+
+    #[test]
+    fn parser_parses_resizebox() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\resizebox{5cm}{3cm}{content}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "resizebox")),
+            "Expected resizebox command");
+    }
+
+    #[test]
+    fn parser_skips_nonumber() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Hello \nonumber world
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("nonumber"))),
+            "\\nonumber should be consumed");
+    }
+
+    #[test]
+    fn parser_skips_theoremstyle() {
+        let content = r#"\documentclass{article}
+\theoremstyle{plain}
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("plain"))),
+            "\\theoremstyle should be consumed");
+    }
+
+    #[test]
+    fn parser_skips_sbox() {
+        let content = r#"\documentclass{article}
+\sbox{\mybox}{content}
+\begin{document}
+Hello
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("mybox"))),
+            "\\sbox should be consumed");
+    }
 }

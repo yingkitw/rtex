@@ -147,12 +147,25 @@ impl MathFormatter {
         let mut index = 0;
 
         let accents = [
-            ("\\vec{", "\u{20d7}"),   // combining right arrow above
-            ("\\hat{", "\u{0302}"),   // combining circumflex
-            ("\\tilde{", "\u{0303}"), // combining tilde
-            ("\\bar{", "\u{0304}"),   // combining macron
-            ("\\dot{", "\u{0307}"),   // combining dot above
-            ("\\ddot{", "\u{0308}"),  // combining diaeresis
+            ("\\vec{", "\u{20d7}"),          // combining right arrow above
+            ("\\overrightarrow{", "\u{20d7}"), // combining right arrow above
+            ("\\overleftarrow{", "\u{20d6}"),  // combining left arrow above
+            ("\\hat{", "\u{0302}"),          // combining circumflex
+            ("\\widehat{", "\u{0302}"),      // combining circumflex
+            ("\\tilde{", "\u{0303}"),        // combining tilde
+            ("\\widetilde{", "\u{0303}"),    // combining tilde
+            ("\\bar{", "\u{0304}"),          // combining macron
+            ("\\overline{", "\u{0305}"),     // combining overline
+            ("\\underline{", "\u{0332}"),    // combining low line
+            ("\\dot{", "\u{0307}"),          // combining dot above
+            ("\\ddot{", "\u{0308}"),         // combining diaeresis
+            ("\\dddot{", "\u{20db}"),        // combining three dots above
+            ("\\ddddot{", "\u{20dc}"),       // combining four dots above
+            ("\\check{", "\u{030c}"),        // combining caron
+            ("\\breve{", "\u{0306}"),        // combining breve
+            ("\\acute{", "\u{0301}"),        // combining acute
+            ("\\grave{", "\u{0300}"),        // combining grave
+            ("\\mathring{", "\u{030a}"),     // combining ring above
         ];
 
         while index < text.len() {
@@ -473,5 +486,165 @@ mod tests {
     fn format_mathit() {
         let formatted = MathFormatter::format("\\mathit{x}");
         assert!(formatted.contains('\u{1d465}')); // 𝑥 (U+1D465) — italic x
+    }
+
+    #[test]
+    fn format_mathsf() {
+        let formatted = MathFormatter::format("\\mathsf{x}");
+        assert!(formatted.contains('\u{1d5d1}')); // 𝗑 sans-serif x
+    }
+
+    #[test]
+    fn format_mathtt() {
+        let formatted = MathFormatter::format("\\mathtt{x}");
+        assert!(formatted.contains('\u{1d6a1}')); // 𝚡 monospace x
+    }
+
+    #[test]
+    fn format_binom() {
+        let formatted = MathFormatter::format("\\binom{n}{k}");
+        assert!(formatted.contains('n'));
+        assert!(formatted.contains('k'));
+    }
+
+    #[test]
+    fn format_tfrac() {
+        let formatted = MathFormatter::format("\\tfrac{1}{2}");
+        assert_eq!(formatted, "½");
+    }
+
+    #[test]
+    fn format_dfrac() {
+        let formatted = MathFormatter::format("\\dfrac{a}{b}");
+        assert!(formatted.contains('a'));
+        assert!(formatted.contains('b'));
+    }
+
+    #[test]
+    fn format_nested_sqrt() {
+        let formatted = MathFormatter::format("\\sqrt{\\sqrt{x}}");
+        assert!(formatted.contains('√'));
+        assert!(formatted.contains('x'));
+    }
+
+    #[test]
+    fn format_combined_accents_and_greek() {
+        let formatted = MathFormatter::format("\\vec{\\alpha} + \\hat{\\beta}");
+        assert!(formatted.contains('α'));
+        assert!(formatted.contains('β'));
+        assert!(formatted.contains('\u{20d7}')); // vec arrow
+        assert!(formatted.contains('\u{0302}')); // hat
+    }
+
+    #[test]
+    fn format_multiple_symbols_in_expression() {
+        let formatted = MathFormatter::format("\\alpha + \\beta = \\gamma");
+        assert_eq!(formatted, "α + β = γ");
+    }
+
+    #[test]
+    fn format_math_alphabet_full_word() {
+        let formatted = MathFormatter::format("\\mathbb{N}");
+        assert!(formatted.contains('\u{1d545}')); // 𝕅 double-struck N (U+1D545)
+    }
+
+    #[test]
+    fn format_empty_expression() {
+        assert_eq!(MathFormatter::format(""), "");
+    }
+
+    #[test]
+    fn format_plain_text_passthrough() {
+        assert_eq!(MathFormatter::format("hello world"), "hello world");
+    }
+
+    #[test]
+    fn format_check_accent() {
+        let formatted = MathFormatter::format("\\check{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{030c}')); // caron
+    }
+
+    #[test]
+    fn format_breve_accent() {
+        let formatted = MathFormatter::format("\\breve{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0306}')); // breve
+    }
+
+    #[test]
+    fn format_acute_accent() {
+        let formatted = MathFormatter::format("\\acute{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0301}')); // acute
+    }
+
+    #[test]
+    fn format_grave_accent() {
+        let formatted = MathFormatter::format("\\grave{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{0300}')); // grave
+    }
+
+    #[test]
+    fn format_mathring_accent() {
+        let formatted = MathFormatter::format("\\mathring{x}");
+        assert!(formatted.contains('x'));
+        assert!(formatted.contains('\u{030a}')); // ring above
+    }
+
+    #[test]
+    fn format_widehat_accent() {
+        let formatted = MathFormatter::format("\\widehat{AB}");
+        assert!(formatted.contains('\u{0302}')); // circumflex
+    }
+
+    #[test]
+    fn format_widetilde_accent() {
+        let formatted = MathFormatter::format("\\widetilde{AB}");
+        assert!(formatted.contains('\u{0303}')); // tilde
+    }
+
+    #[test]
+    fn format_overrightarrow_accent() {
+        let formatted = MathFormatter::format("\\overrightarrow{AB}");
+        assert!(formatted.contains('\u{20d7}')); // right arrow above
+    }
+
+    #[test]
+    fn format_overleftarrow_accent() {
+        let formatted = MathFormatter::format("\\overleftarrow{AB}");
+        assert!(formatted.contains('\u{20d6}')); // left arrow above
+    }
+
+    #[test]
+    fn format_overline_accent() {
+        let formatted = MathFormatter::format("\\overline{x}");
+        assert!(formatted.contains('\u{0305}')); // overline
+    }
+
+    #[test]
+    fn format_underline_accent() {
+        let formatted = MathFormatter::format("\\underline{x}");
+        assert!(formatted.contains('\u{0332}')); // low line
+    }
+
+    #[test]
+    fn format_boldsymbol() {
+        let formatted = MathFormatter::format("\\boldsymbol{x}");
+        assert!(formatted.contains('x'));
+    }
+
+    #[test]
+    fn format_operatorname() {
+        let formatted = MathFormatter::format("\\operatorname{Tr}");
+        assert!(formatted.contains("Tr"));
+    }
+
+    #[test]
+    fn format_displaystyle_noop() {
+        let formatted = MathFormatter::format("\\displaystyle x^2");
+        assert!(formatted.contains('x'));
+        assert!(!formatted.contains("displaystyle"));
     }
 }

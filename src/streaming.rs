@@ -395,4 +395,105 @@ mod tests {
         assert!(tmp.path().join("doc.ast.json").exists());
         assert!(tmp.path().join("doc.meta.json").exists());
     }
+
+    #[test]
+    fn streaming_converts_epub() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.epub");
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}EPUB content\\end{document}",
+        )
+        .unwrap();
+
+        let mut converter = StreamingConverter::new()
+            .with_options(ConversionOptions::default().with_format(OutputFormat::Epub));
+        converter.convert(&src, &dst).expect("epub conversion");
+
+        assert!(dst.exists());
+        let data = std::fs::read(&dst).unwrap();
+        assert!(data.starts_with(b"PK"), "EPUB should be a ZIP");
+    }
+
+    #[test]
+    fn streaming_converts_docx() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.docx");
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}DOCX content\\end{document}",
+        )
+        .unwrap();
+
+        let mut converter = StreamingConverter::new()
+            .with_options(ConversionOptions::default().with_format(OutputFormat::Docx));
+        converter.convert(&src, &dst).expect("docx conversion");
+
+        assert!(dst.exists());
+        let data = std::fs::read(&dst).unwrap();
+        assert!(data.starts_with(b"PK"), "DOCX should be a ZIP");
+    }
+
+    #[test]
+    fn streaming_custom_chunk_size() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.pdf");
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}Chunked\\end{document}",
+        )
+        .unwrap();
+
+        let mut converter = StreamingConverter::new().with_chunk_size(256);
+        converter.convert(&src, &dst).expect("conversion with small chunk size");
+
+        assert!(dst.exists());
+        assert!(std::fs::read(&dst).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn incremental_rebuilds_on_source_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("doc.tex");
+        let dst = tmp.path().join("doc.pdf");
+
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}Version 1\\end{document}",
+        )
+        .unwrap();
+
+        let mut first = StreamingConverter::new();
+        first.convert(&src, &dst).expect("first conversion");
+        assert!(dst.exists());
+
+        // Modify source
+        std::fs::write(
+            &src,
+            "\\documentclass{article}\\begin{document}Version 2\\end{document}",
+        )
+        .unwrap();
+
+        let reporter = CollectingReporter::default();
+        let events = reporter.events.clone();
+        let mut second = StreamingConverter::with_reporter(reporter);
+        second.convert(&src, &dst).expect("second conversion after change");
+
+        let log = events.lock().unwrap();
+        assert!(log.iter().any(|(name, _)| name == "reading source"),
+            "Should rebuild when source changes");
+    }
+
+    #[test]
+    fn streaming_nonexistent_file_returns_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("nonexistent.tex");
+        let dst = tmp.path().join("out.pdf");
+
+        let mut converter = StreamingConverter::new();
+        assert!(converter.convert(&src, &dst).is_err());
+    }
 }

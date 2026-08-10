@@ -449,6 +449,61 @@ impl<'a> MathMLParser<'a> {
                     "<mrow><mo>(</mo><mi>mod</mi><mspace width=\"0.167em\" />{arg}</mrow><mo>)</mo>"
                 )
             }
+            "mod" => {
+                let arg = self.parse_required_group();
+                format!("<mi>mod</mi><mspace width=\"0.167em\" />{arg}")
+            }
+            "pod" => {
+                let arg = self.parse_required_group();
+                format!("<mrow><mo>(</mo>{arg}<mo>)</mo></mrow>")
+            }
+
+            // Additional function names not in the main list above
+            "arcsec" | "arccsc" | "arccot" | "arcsinh" | "arccosh" | "arctanh" => {
+                format!("<mi mathvariant=\"normal\">{name}</mi>")
+            }
+
+            // \boxed{...} — draw a box around content
+            "boxed" => {
+                let arg = self.parse_required_group();
+                format!("<menclose notation=\"box\">{arg}</menclose>")
+            }
+
+            // \substack for multi-line subscripts
+            "substack" => {
+                let arg = self.parse_raw_group();
+                let rows: Vec<&str> = arg.split("\\\\").collect();
+                let rows_xml: String = rows
+                    .iter()
+                    .map(|r| {
+                        let mut sub = MathMLParser::new(r.trim());
+                        format!("<mtr><mtd>{}</mtd></mtr>", sub.parse_sequence())
+                    })
+                    .collect::<Vec<_>>()
+                    .join("");
+                format!("<mtable>{rows_xml}</mtable>")
+            }
+
+            // \textstyle, \displaystyle, etc. — style switches, no MathML equivalent
+            "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                // Consume but don't render — MathML handles sizing automatically
+                String::new()
+            }
+
+            // \boldsymbol, \pmb — bold math
+            "boldsymbol" | "pmb" => {
+                let arg = self.parse_required_group();
+                // Wrap each mi/mo in mathvariant="bold"
+                if arg.contains('<') {
+                    arg.replace("<mi>", "<mi mathvariant=\"bold\">")
+                        .replace("<mn>", "<mn mathvariant=\"bold\">")
+                } else {
+                    format!("<mi mathvariant=\"bold\">{}</mi>", escape_xml_text(&arg))
+                }
+            }
+
+            // \limits, \nolimits, \displaylimits — placement control, no-op
+            "limits" | "nolimits" | "displaylimits" => String::new(),
 
             // Default: look up in symbol table
             _ => {
@@ -959,5 +1014,62 @@ mod tests {
     fn test_xml_escaping() {
         let ml = latex_to_mathml("x < y");
         assert!(ml.contains("&lt;"));
+    }
+
+    #[test]
+    fn test_mod_command() {
+        let ml = latex_to_mathml("\\mod{n}");
+        assert!(ml.contains("mod"));
+        assert!(ml.contains("<mi>n</mi>"));
+    }
+
+    #[test]
+    fn test_pod_command() {
+        let ml = latex_to_mathml("\\pod{n}");
+        assert!(ml.contains("<mo>(</mo>"));
+        assert!(ml.contains("<mi>n</mi>"));
+        assert!(ml.contains("<mo>)</mo>"));
+    }
+
+    #[test]
+    fn test_boxed_command() {
+        let ml = latex_to_mathml("\\boxed{x}");
+        assert!(ml.contains("<menclose"));
+        assert!(ml.contains("<mi>x</mi>"));
+    }
+
+    #[test]
+    fn test_substack_command() {
+        let ml = latex_to_mathml("\\substack{a \\\\ b}");
+        assert!(ml.contains("<mtable>"));
+        assert!(ml.contains("<mtr>"));
+        assert!(ml.contains("<mtd>"));
+    }
+
+    #[test]
+    fn test_boldsymbol_mathml() {
+        let ml = latex_to_mathml("\\boldsymbol{x}");
+        assert!(ml.contains("bold"));
+        assert!(ml.contains("<mi"));
+    }
+
+    #[test]
+    fn test_displaystyle_mathml() {
+        let ml = latex_to_mathml("\\displaystyle x^2");
+        assert!(ml.contains("<mi>x</mi>"));
+        assert!(!ml.contains("displaystyle"));
+    }
+
+    #[test]
+    fn test_limits_nolimits() {
+        let ml = latex_to_mathml("\\sum\\limits_{i=0}^n");
+        assert!(ml.contains("<mo>∑</mo>"));
+    }
+
+    #[test]
+    fn test_additional_function_names_mathml() {
+        let ml = latex_to_mathml("\\arcsec");
+        assert!(ml.contains("arcsec"));
+        assert!(ml.contains("mathvariant=\"normal\""));
     }
 }

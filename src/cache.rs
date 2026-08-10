@@ -320,4 +320,52 @@ mod tests {
         let _ = c.get_parsed("other");
         assert_eq!(c.stats().parsed_hit_rate(), 0.5);
     }
+
+    #[test]
+    fn cache_output_miss_then_hit() {
+        let mut c = DocumentCache::new();
+        assert!(c.get_output("key").is_none());
+        c.put_output("key", "/tmp/out.pdf".to_string());
+        assert!(c.get_output("key").is_some());
+        assert_eq!(c.stats().output_hits, 1);
+    }
+
+    #[test]
+    fn cache_ttl_expiry() {
+        let mut c = DocumentCache::with_config(CacheConfig {
+            max_parsed_entries: 100,
+            max_output_entries: 100,
+            ttl: Duration::from_millis(1),
+            enable_lru: true,
+        });
+        c.put_parsed("x", vec![]);
+        std::thread::sleep(Duration::from_millis(10));
+        c.clear_expired();
+        assert_eq!(c.size_info().0, 0);
+        assert!(c.stats().expired_entries > 0);
+    }
+
+    #[test]
+    fn cache_update_config_shrinks() {
+        let mut c = DocumentCache::new();
+        c.put_parsed("a", vec![]);
+        c.put_parsed("b", vec![]);
+        c.put_parsed("c", vec![]);
+        c.update_config(CacheConfig {
+            max_parsed_entries: 1,
+            max_output_entries: 1,
+            ttl: Duration::from_secs(3600),
+            enable_lru: true,
+        });
+        assert_eq!(c.size_info().0, 1);
+    }
+
+    #[test]
+    fn cache_size_info_after_operations() {
+        let mut c = DocumentCache::new();
+        assert_eq!(c.size_info(), (0, 0));
+        c.put_parsed("a", vec![]);
+        c.put_output("a", "/tmp/a.pdf".to_string());
+        assert_eq!(c.size_info(), (1, 1));
+    }
 }

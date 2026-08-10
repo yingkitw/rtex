@@ -2,7 +2,7 @@
 
 ## Overview
 
-rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no external dependencies**. It follows clean architecture principles with a modular design.
+rtex is a **native** TeX-to-document converter written in Rust, requiring **no external TeX installation**. It parses a practical subset of LaTeX and renders to PDF, HTML, DOCX, or EPUB from a single AST.
 
 ## Design Principles
 
@@ -11,6 +11,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - **SoC**: Clear separation between CLI, parsing, PDF generation, and error handling
 - **Test-friendly**: Trait-based design enables easy mocking and testing
 - **Self-contained**: No external LaTeX installation required
+- **Multi-format**: Same parsed AST → PDF, HTML, DOCX, or EPUB
 
 ## Components
 
@@ -53,7 +54,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 
 ### Math Processing (`src/math/`)
 
-- `symbols.rs`: LaTeX-to-Unicode symbol mapping table (566+ symbols)
+- `symbols.rs`: LaTeX-to-Unicode symbol mapping table (618+ symbols)
   - Greek letters, operators, relations, arrows, special symbols
 - `scripts.rs`: Unicode superscript/subscript character conversion
 - `radicals.rs`: Square-root formatting (`\sqrt{...}`)
@@ -65,22 +66,15 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - `MathFormatter` (`src/math_formatter.rs`): Orchestrates math formatting
   - Delegates to submodule handlers for radicals, fractions, scripts, and symbols
 
-### PDF Generation (`src/pdf/`)
+### PDF Generation (`src/output/pdfrs_pdf.rs`)
 
-- `builder.rs`: Converts parsed elements to PDF
-  - `PdfBuilder`: Page layout, text positioning, automatic page breaks
-  - Font management (DejaVu Sans with Unicode support, subsetting)
-  - Supports titles, sections, lists, math, images, tables
-- `core.rs`: Low-level PDF generation primitives
-  - `PdfGenerator`: Object management and PDF serialization
-  - `DictBuilder`: PDF dictionary construction
-  - `ContentStream`: PDF content stream operations
-- `text_renderer.rs`: Text rendering utilities
-  - Text normalization, character counting, word wrapping
-- `font_subset.rs`: Font subsetting and dual-font selection
-  - `requires_embedded_font` chooses standard Helvetica vs embedded DejaVu
-  - Collects used Unicode characters from parsed document (formatted math)
-  - Subsets TrueType fonts via the `font-subset` crate when Unicode is needed
+- Converts parsed `TexElement` AST to PDF via the vendored pdfrs engine
+- Page layout, text positioning, automatic page breaks
+- Font management: standard Helvetica for ASCII-only docs; embedded DejaVu Sans subset for Unicode/math
+- Font subsetting via `font-subset` crate when Unicode characters are present
+- Supports titles, sections, lists, math, images, tables, theorems, cross-references
+- FlateDecode content stream compression
+- PDF metadata (Title, Author, Creator, Producer, CreationDate)
 
 ### Error Handling (`src/error.rs`)
 
@@ -110,7 +104,8 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - `tests/round_trip_test.rs`: PDF regression tests
 - `tests/html_render_test.rs`: HTML rendering tests
 - `tests/docx_epub_test.rs`: DOCX/EPUB structural tests
-- Module-level tests in `error.rs`, `parser/tests.rs`, `math/symbols.rs`, `math/scripts.rs`, `watch.rs`, `streaming.rs`
+- `tests/sqrt_audit_test.rs`: Radical rendering audit tests
+- Module-level tests in `parser/tests.rs`, `math/symbols.rs`, `math/scripts.rs`, `watch.rs`, `streaming.rs`
 
 ## Dependencies
 
@@ -122,7 +117,7 @@ rtex is a **native** TeX to PDF converter CLI built with Rust, requiring **no ex
 - `resvg` + **usvg** + **png**: SVG rasterization for `\includegraphics{*.svg}`
 - `zip`: DOCX and EPUB packaging (ZIP archives)
 - `ureq`: CTAN package downloading (`--fetch-packages`)
-- `pdfrs` (from crates.io): Primary PDF layout/render engine
+- `pdfrs` (vendored at `vendor/pdfrs`): PDF layout/render engine
 
 ## Data Flow
 
@@ -147,7 +142,7 @@ Output file
 
 | Backend | When used | Module |
 |---------|-----------|--------|
-| **pdfrs** | All PDF output | `src/output/pdfrs_pdf.rs` → crates.io |
+| **pdfrs** | All PDF output | `src/output/pdfrs_pdf.rs` → `vendor/pdfrs` |
 
 Math policy on the pdfrs path: simple symbols → Unicode via `MathFormatter`; `\frac` / `\sqrt` → display math layout (stacked fractions, vinculum).
 
@@ -164,7 +159,6 @@ The trait-based design allows for:
 rtex targets `wasm32-unknown-unknown` for zero-infrastructure browser preview:
 
 - **`convert_tex_string_to_pdf_bytes(tex)`** — parses and renders entirely in memory (no file I/O)
-- **`src/fonts.rs`** — embeds DejaVu Sans at compile time via `include_bytes!`
 - **`src/wasm.rs`** — optional `wasm` feature exports `convertTexToPdf` via `wasm-bindgen`
 - **`pdfrs_pdf::render_pdf_bytes`** — renders parsed elements to PDF bytes entirely in memory
 
@@ -176,7 +170,7 @@ The `src/output/` module renders the same parsed `TexElement` AST to multiple fo
 
 | Format | Module | Notes |
 |--------|--------|-------|
-| PDF | `output/pdfrs_pdf.rs` → crates.io | pdfrs only |
+| PDF | `output/pdfrs_pdf.rs` → `vendor/pdfrs` | Vendored pdfrs engine |
 | HTML | `output/html.rs` | Semantic HTML with embedded CSS |
 | DOCX | `output/docx.rs` | Minimal OOXML packaged as ZIP |
 | EPUB | `output/epub.rs` | EPUB 3 package with XHTML chapter |
@@ -214,45 +208,62 @@ When `--keep-intermediate` is set (or `ConversionOptions::keep_intermediate`), s
 ```
 rtex/
 ├── Cargo.toml              # Dependencies and metadata (crate name: rtex)
+├── vendor/pdfrs/           # Vendored pdfrs PDF engine (local path dependency)
 ├── src/
 │   ├── lib.rs              # Core conversion logic & public API
-│   ├── wasm.rs             # wasm-bindgen exports (feature: wasm)
-│   ├── output/             # HTML, DOCX, EPUB renderers + pdfrs PDF
-│   ├── packages/           # CTAN package scanning and fetching
 │   ├── main.rs             # CLI entry point (binary: rtex)
-│   ├── bin/rtex-lsp.rs     # LSP server entry (feature: lsp)
-│   ├── lsp/                # LSP analysis + server (feature: lsp for server)
 │   ├── error.rs            # Structured error types with Position tracking
-│   ├── table.rs            # Table parsing and PDF rendering
-│   ├── macros.rs           # Macro definition and expansion system
-│   ├── math_formatter.rs   # Math formatting orchestrator
-│   ├── parser/             # LaTeX parser implementation
+│   ├── parser/             # LaTeX parser
 │   │   ├── mod.rs          # TexParser, TexElement enum, environment dispatch
 │   │   ├── tests.rs        # Parser unit tests
 │   │   ├── text.rs         # Raw text accumulation
 │   │   ├── math.rs         # Inline and display math delimiter parsing
-│   │   └── commands.rs     # Backslash Command handlers (section, URL, rule, etc.)
+│   │   └── commands.rs     # Backslash command handlers
 │   ├── math/               # Math formatting submodules
-│   │   ├── symbols.rs      # 566+ LaTeX-to-Unicode mappings
+│   │   ├── symbols.rs      # 618+ LaTeX-to-Unicode mappings
 │   │   ├── scripts.rs      # Superscript/subscript Unicode conversion
-│   │   ├── radicals.rs     # Square root formatting with Unicode
-│   │   ├── fractions.rs    # Fraction → Unicode fraction or parenthesized form
+│   │   ├── radicals.rs     # Square root formatting
+│   │   ├── fractions.rs    # Fraction → Unicode or parenthesized form
 │   │   └── mathml.rs       # LaTeX math → presentation MathML for HTML
+│   ├── math_formatter.rs   # Math formatting orchestrator
+│   ├── output/             # Multi-format output renderers
+│   │   ├── mod.rs          # Output dispatcher
+│   │   ├── pdfrs_pdf.rs    # PDF generation via vendored pdfrs
+│   │   ├── html.rs         # HTML output backend
+│   │   ├── docx.rs         # DOCX output backend
+│   │   ├── epub.rs         # EPUB output backend
+│   │   └── common.rs       # Shared output utilities
+│   ├── packages/           # CTAN package scanning and fetching
+│   ├── lsp/                # Language Server Protocol support (feature: lsp)
+│   │   ├── server.rs       # stdio LSP loop
+│   │   ├── diagnostics.rs  # Error/warning diagnostics
+│   │   ├── completion.rs   # Autocomplete candidates
+│   │   ├── hover.rs        # Hover documentation
+│   │   └── symbols.rs      # Document symbol outline
+│   ├── table.rs            # Table parsing and rendering
+│   ├── macros.rs           # \newcommand / \def macro expansion
 │   ├── plugins.rs          # Plugin trait and built-in plugins
 │   ├── cache.rs            # Document cache with TTL and LRU eviction
-│   ├── incremental.rs     # Incremental compilation (source hash tracking)
+│   ├── incremental.rs      # Incremental compilation (source hash tracking)
 │   ├── intermediate.rs     # Intermediate artifact writer
-│   ├── streaming.rs       # Streaming converter with progress reporting
+│   ├── streaming.rs        # Streaming converter with progress reporting
 │   ├── watch.rs            # File watch mode for auto-rebuild
+│   ├── utils.rs            # Shared utility functions
+│   ├── wasm.rs             # wasm-bindgen exports (feature: wasm)
+│   ├── tests.rs            # Inline unit tests
+│   ├── example_tests.rs    # Example file compilation tests
 │   └── bin/                # Debug/test binaries (feature: dev-bins)
 ├── examples/               # Example TeX files
 ├── tests/
-│   ├── integration_test.rs   # Integration tests
+│   ├── integration_test.rs # Integration tests
 │   ├── round_trip_test.rs  # PDF regression tests
 │   ├── html_render_test.rs # HTML rendering tests
-│   └── docx_epub_test.rs  # DOCX/EPUB structural tests
+│   ├── docx_epub_test.rs   # DOCX/EPUB structural tests
+│   └── sqrt_audit_test.rs  # Radical rendering audit tests
+├── docs/                   # Extended documentation
 ├── output/                 # Generated PDFs (gitignored)
 ├── README.md               # User documentation
-├── TODO.md                 # Task tracking
-└── ARCHITECTURE.md         # This file
+├── ARCHITECTURE.md         # This file
+├── SPEC.md                 # Interface specification
+└── TODO.md                 # Task tracking
 ```

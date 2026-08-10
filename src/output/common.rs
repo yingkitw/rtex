@@ -506,3 +506,127 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::TexElement;
+
+    #[test]
+    fn test_escape_html_basic() {
+        assert_eq!(escape_html("hello"), "hello");
+        assert_eq!(escape_html("a & b"), "a &amp; b");
+        assert_eq!(escape_html("a < b > c"), "a &lt; b &gt; c");
+        assert_eq!(escape_html("\"quote\""), "&quot;quote&quot;");
+        assert_eq!(escape_html("it's"), "it&#39;s");
+    }
+
+    #[test]
+    fn test_escape_html_empty() {
+        assert_eq!(escape_html(""), "");
+    }
+
+    #[test]
+    fn test_escape_xml_same_as_html() {
+        assert_eq!(escape_xml("a & b"), "a &amp; b");
+    }
+
+    #[test]
+    fn test_extract_metadata_full() {
+        let elements = vec![
+            TexElement::Command { name: "title".into(), args: vec!["My Doc".into()] },
+            TexElement::Command { name: "author".into(), args: vec!["Alice".into()] },
+            TexElement::Command { name: "date".into(), args: vec!["2024".into()] },
+        ];
+        let meta = extract_metadata(&elements);
+        assert_eq!(meta.title, Some("My Doc".to_string()));
+        assert_eq!(meta.author, Some("Alice".to_string()));
+        assert_eq!(meta.date, Some("2024".to_string()));
+    }
+
+    #[test]
+    fn test_extract_metadata_empty() {
+        let meta = extract_metadata(&[]);
+        assert_eq!(meta.title, None);
+        assert_eq!(meta.author, None);
+        assert_eq!(meta.date, None);
+    }
+
+    #[test]
+    fn test_extract_metadata_partial() {
+        let elements = vec![
+            TexElement::Command { name: "title".into(), args: vec!["T".into()] },
+        ];
+        let meta = extract_metadata(&elements);
+        assert_eq!(meta.title, Some("T".to_string()));
+        assert_eq!(meta.author, None);
+    }
+
+    #[test]
+    fn test_format_math_inline_greek() {
+        let result = format_math_inline("\\alpha + \\beta");
+        assert_eq!(result, "α + β");
+    }
+
+    #[test]
+    fn test_format_math_inline_plain() {
+        assert_eq!(format_math_inline("x + y"), "x + y");
+    }
+
+    #[test]
+    fn test_plain_text_simple() {
+        let elements = vec![
+            TexElement::Text("Hello ".into()),
+            TexElement::Text("world".into()),
+        ];
+        assert_eq!(plain_text_from_elements(&elements), "Hello world");
+    }
+
+    #[test]
+    fn test_plain_text_with_section() {
+        let elements = vec![
+            TexElement::Section { level: 1, title: "Intro".into() },
+            TexElement::Text("Body text".into()),
+        ];
+        let result = plain_text_from_elements(&elements);
+        assert!(result.contains("Intro"));
+        assert!(result.contains("Body text"));
+    }
+
+    #[test]
+    fn test_plain_text_with_math() {
+        let elements = vec![
+            TexElement::MathInline("\\alpha".into()),
+        ];
+        let result = plain_text_from_elements(&elements);
+        assert!(result.contains('α'));
+    }
+
+    #[test]
+    fn test_plain_text_with_citation() {
+        let elements = vec![
+            TexElement::Citation { keys: vec!["smith2020".into(), "jones2021".into()] },
+        ];
+        let result = plain_text_from_elements(&elements);
+        assert!(result.contains("smith2020"));
+        assert!(result.contains("jones2021"));
+    }
+
+    #[test]
+    fn test_plain_text_empty() {
+        assert_eq!(plain_text_from_elements(&[]), "");
+    }
+
+    #[test]
+    fn test_plain_text_with_line_break() {
+        let elements = vec![
+            TexElement::Text("Line 1".into()),
+            TexElement::LineBreak,
+            TexElement::Text("Line 2".into()),
+        ];
+        let result = plain_text_from_elements(&elements);
+        assert!(result.contains("Line 1"));
+        assert!(result.contains("Line 2"));
+        assert!(result.contains('\n'));
+    }
+}

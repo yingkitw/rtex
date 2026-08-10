@@ -132,6 +132,19 @@ impl TexParser {
         Some(TexElement::Citation { keys })
     }
 
+    /// Parse `\nocite{key1,key2}` — adds entries to bibliography without printing text.
+    pub(super) fn parse_nocite(&mut self) -> Option<TexElement> {
+        self.position += "\\nocite".len();
+        self.skip_whitespace_and_comments();
+        let keys_str = self.parse_braced_content()?;
+        let keys: Vec<String> = keys_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Some(TexElement::Citation { keys })
+    }
+
     /// Parse `\label{key}`.
     pub(super) fn parse_label(&mut self) -> Option<TexElement> {
         self.position += "\\label".len();
@@ -140,9 +153,22 @@ impl TexParser {
         Some(TexElement::Label { key })
     }
 
-    /// Parse `\ref{key}`.
+    /// Parse `\ref{key}`, `\eqref{key}`, `\autoref{key}`, `\nameref{key}`, `\cref{key}`, `\Cref{key}`.
     pub(super) fn parse_ref(&mut self) -> Option<TexElement> {
-        self.position += "\\ref".len();
+        let remaining = &self.content[self.position..];
+        let cmd_len = [
+            "\\eqref", "\\autoref", "\\nameref", "\\cref", "\\Cref", "\\ref",
+        ]
+        .iter()
+        .find_map(|cmd| {
+            if remaining.starts_with(cmd) {
+                Some(cmd.len())
+            } else {
+                None
+            }
+        })
+        .unwrap_or("\\ref".len());
+        self.position += cmd_len;
         self.skip_whitespace_and_comments();
         let key = self.parse_braced_content()?;
         Some(TexElement::Ref { key })
@@ -434,6 +460,21 @@ impl TexParser {
         Some(TexElement::Command {
             name: name.to_string(),
             args: vec![text],
+        })
+    }
+
+    /// Parse `\resizebox{width}{height}{content}`.
+    pub(super) fn parse_resizebox(&mut self) -> Option<TexElement> {
+        self.position += "\\resizebox".len();
+        self.skip_whitespace_and_comments();
+        let width = self.parse_braced_content()?;
+        self.skip_whitespace_and_comments();
+        let height = self.parse_braced_content()?;
+        self.skip_whitespace_and_comments();
+        let content = self.parse_braced_content()?;
+        Some(TexElement::Command {
+            name: "resizebox".to_string(),
+            args: vec![width, height, content],
         })
     }
 

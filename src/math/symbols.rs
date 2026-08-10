@@ -43,7 +43,11 @@ pub fn replace_math_symbols(text: &str) -> String {
                     }
 
                     // Text commands: strip the command and consume the braced argument
-                    if matches!(name.as_str(), "text" | "mathrm" | "mathscr" | "mathnormal") {
+                    if matches!(
+                        name.as_str(),
+                        "text" | "mathrm" | "mathscr" | "mathnormal" | "boldsymbol" | "pmb"
+                        | "operatorname"
+                    ) {
                         if let Some(&'{') = iter.peek() {
                             iter.next(); // consume opening brace
                             while let Some(&c) = iter.peek() {
@@ -651,13 +655,13 @@ pub fn lookup_symbol(name: &str) -> Option<&'static str> {
         "vphantom" => "",
         "smash" => "",
 
-        // Over/under commands
-        "overline" => "",
-        "underline" => "",
-        "widehat" => "",
-        "widetilde" => "",
-        "overrightarrow" => "",
-        "overleftarrow" => "",
+        // Math style switches — no-op in Unicode output
+        "displaystyle" => "",
+        "textstyle" => "",
+        "scriptstyle" => "",
+        "scriptscriptstyle" => "",
+
+        // Over/under commands (accents handled by format_accents in math_formatter)
         "overbrace" => "",
         "underbrace" => "",
         "overset" => "",
@@ -683,14 +687,165 @@ pub fn lookup_symbol(name: &str) -> Option<&'static str> {
         "Vmatrix" => "",
         "smallmatrix" => "",
 
-        // Accents
-        "check" => "",
-        "breve" => "",
-        "acute" => "",
-        "grave" => "",
-        "mathring" => "",
-        "dddot" => "",
-        "ddddot" => "",
+        // Function names (typeset in upright text)
+        "sin" => "sin",
+        "cos" => "cos",
+        "tan" => "tan",
+        "cot" => "cot",
+        "sec" => "sec",
+        "csc" => "csc",
+        "arcsin" => "arcsin",
+        "arccos" => "arccos",
+        "arctan" => "arctan",
+        "sinh" => "sinh",
+        "cosh" => "cosh",
+        "tanh" => "tanh",
+        "coth" => "coth",
+        "log" => "log",
+        "ln" => "ln",
+        "lg" => "lg",
+        "exp" => "exp",
+        "lim" => "lim",
+        "min" => "min",
+        "max" => "max",
+        "sup" => "sup",
+        "inf" => "inf",
+        "det" => "det",
+        "dim" => "dim",
+        "deg" => "deg",
+
+        // Common aliases
+        "le" => "≤",
+        "ge" => "≥",
+        "ne" => "≠",
+        "dots" => "…",
+        "empty" => "∅",
+        "varnothing" => "∅",
+        "lnot" => "¬",
+
+        // Negated relations
+        "ncong" => "≇",
+        "nsim" => "≁",
+        "napprox" => "≉",
+        "nasymp" => "≭",
+        "nmid" => "∤",
+        "nparallel" => "∦",
+        "nshortmid" => "∤",
+        "nshortparallel" => "∦",
+        "nsqsubset" => "⋢",
+        "nsqsupset" => "⋣",
+        "nsqsubseteq" => "⋤",
+        "nsqsupseteq" => "⋥",
+        "ntriangleleft" => "⋪",
+        "ntriangleright" => "⋫",
+        "ntrianglelefteq" => "⋬",
+        "ntrianglerighteq" => "⋭",
+        "nexists" => "∄",
+        "nsubseteqq" => "⊈",
+        "nsupseteqq" => "⊉",
+
+        // Misc missing symbols
+        "Join" => "⋈",
+        "smile" => "⌣",
+        "frown" => "⌢",
+        "smallsmile" => "⌣",
+        "smallfrown" => "⌢",
+        "coloneq" => "≔",
+        "eqcolon" => "≕",
+        "coloneqq" => "≕",
+        "shortmid" => "∣",
+        "shortparallel" => "∥",
+        "bigtimes" => "⨯",
+        "varpropto" => "∝",
+        "digamma" => "ϝ",
+        "Digamma" => "Ϝ",
+        "backepsilon" => "϶",
+        "Epsilon" => "Ε",
+
+        // Additional negated relations (not already defined above)
+        "nleqslant" => "≰",
+        "ngeqslant" => "≱",
+        "nleqq" => "≦",
+        "ngeqq" => "≧",
+        "nsubset" => "⊄",
+        "nsupset" => "⊅",
+
+        // Additional arrows (not already defined above)
+        "dashrightarrow" => "⇢",
+        "dashleftarrow" => "⇠",
+        "dasharrow" => "⇢",
+        "multimap" => "⊸",
+        "upuparrows" => "⇈",
+        "downdownarrows" => "⇊",
+        "twoheadmapsto" => "⤤",
+        "leftsquigarrow" => "⇜",
+        "xrightarrow" => "→",
+        "xleftarrow" => "←",
+        "xRightarrow" => "⇒",
+        "xLeftarrow" => "⇐",
+        "xleftrightarrow" => "↔",
+        "xLeftrightarrow" => "⇔",
+
+        // Additional operators (not already defined above)
+        "dotminus" => "∸",
+        "ldotp" => ".",
+        "cdotp" => "·",
+        "bmod" => "mod",
+        "mod" => "mod",
+        "pod" => "mod",
+
+        // Additional special symbols (not already defined above)
+        "checkmark" => "✓",
+        "ballotbox" => "☐",
+        "maltese" => "✠",
+
+        // Sized delimiters
+        "bigl" => "",
+        "bigr" => "",
+        "Bigl" => "",
+        "Bigr" => "",
+        "biggl" => "",
+        "biggr" => "",
+        "Biggl" => "",
+        "Biggr" => "",
+
+        // Additional function names (not already defined above)
+        "arcsec" => "arcsec",
+        "arccsc" => "arccsc",
+        "arccot" => "arccot",
+        "arcsinh" => "arcsinh",
+        "arccosh" => "arccosh",
+        "arctanh" => "arctanh",
+
+        // Subset/superset variants (not already defined above)
+        "Subset" => "⋐",
+        "Supset" => "⋑",
+
+        // Additional geometry
+        "vartriangle" => "△",
+        "blacktriangle" => "▲",
+        "blacktriangledown" => "▼",
+        "Box" => "□",
+        "Diamond" => "◇",
+
+        // Negation prefix and placement control
+        "not" => "¬",
+        "limits" => "",
+        "nolimits" => "",
+        "displaylimits" => "",
+
+        // Math lap commands (smash overlap)
+        "mathclap" => "",
+        "mathllap" => "",
+        "mathrlap" => "",
+
+        // Boxed and substack (handled in MathML dispatch, no-op in Unicode)
+        "boxed" => "",
+        "substack" => "",
+
+        // Row separator in matrices
+        "cr" => "",
+
         _ => return None,
     })
 }
@@ -825,5 +980,177 @@ mod tests {
         // Math alphabets are preserved so format_math_alphabets can transform them
         assert_eq!(replace_math_symbols("\\mathbb{R}"), "\\mathbb{R}");
         assert_eq!(replace_math_symbols("\\mathfrak{g}"), "\\mathfrak{g}");
+    }
+
+    #[test]
+    fn test_function_names() {
+        assert_eq!(replace_math_symbols("\\sin"), "sin");
+        assert_eq!(replace_math_symbols("\\cos"), "cos");
+        assert_eq!(replace_math_symbols("\\tan"), "tan");
+        assert_eq!(replace_math_symbols("\\log"), "log");
+        assert_eq!(replace_math_symbols("\\ln"), "ln");
+        assert_eq!(replace_math_symbols("\\lim"), "lim");
+        assert_eq!(replace_math_symbols("\\max"), "max");
+        assert_eq!(replace_math_symbols("\\min"), "min");
+        assert_eq!(replace_math_symbols("\\arctan"), "arctan");
+        assert_eq!(replace_math_symbols("\\det"), "det");
+    }
+
+    #[test]
+    fn test_negated_relations() {
+        assert_eq!(replace_math_symbols("\\ncong"), "≇");
+        assert_eq!(replace_math_symbols("\\nsim"), "≁");
+        assert_eq!(replace_math_symbols("\\napprox"), "≉");
+        assert_eq!(replace_math_symbols("\\nmid"), "∤");
+        assert_eq!(replace_math_symbols("\\nparallel"), "∦");
+        assert_eq!(replace_math_symbols("\\nexists"), "∄");
+        assert_eq!(replace_math_symbols("\\ntriangleleft"), "⋪");
+        assert_eq!(replace_math_symbols("\\ntrianglerighteq"), "⋭");
+    }
+
+    #[test]
+    fn test_common_aliases() {
+        assert_eq!(replace_math_symbols("\\le"), "≤");
+        assert_eq!(replace_math_symbols("\\ge"), "≥");
+        assert_eq!(replace_math_symbols("\\ne"), "≠");
+        assert_eq!(replace_math_symbols("\\dots"), "…");
+        assert_eq!(replace_math_symbols("\\varnothing"), "∅");
+        assert_eq!(replace_math_symbols("\\lnot"), "¬");
+    }
+
+    #[test]
+    fn test_misc_symbols() {
+        assert_eq!(replace_math_symbols("\\Join"), "⋈");
+        assert_eq!(replace_math_symbols("\\smile"), "⌣");
+        assert_eq!(replace_math_symbols("\\frown"), "⌢");
+        assert_eq!(replace_math_symbols("\\coloneq"), "≔");
+        assert_eq!(replace_math_symbols("\\bigtimes"), "⨯");
+        assert_eq!(replace_math_symbols("\\digamma"), "ϝ");
+        assert_eq!(replace_math_symbols("\\backepsilon"), "϶");
+    }
+
+    #[test]
+    fn test_boldsymbol_strips_braces() {
+        assert_eq!(replace_math_symbols("\\boldsymbol{x}"), "x");
+        // \boldsymbol strips command + braces, inner content is raw
+        assert_eq!(replace_math_symbols("\\boldsymbol{\\alpha}"), "\\alpha");
+    }
+
+    #[test]
+    fn test_pmb_strips_braces() {
+        assert_eq!(replace_math_symbols("\\pmb{x}"), "x");
+    }
+
+    #[test]
+    fn test_operatorname_strips_braces() {
+        assert_eq!(replace_math_symbols("\\operatorname{Tr}"), "Tr");
+    }
+
+    #[test]
+    fn test_displaystyle_noop() {
+        assert_eq!(replace_math_symbols("\\displaystyle"), "");
+        assert_eq!(replace_math_symbols("\\textstyle"), "");
+        assert_eq!(replace_math_symbols("\\scriptstyle"), "");
+        assert_eq!(replace_math_symbols("\\scriptscriptstyle"), "");
+    }
+
+    #[test]
+    fn test_additional_negated_relations() {
+        assert_eq!(replace_math_symbols("\\nleqslant"), "≰");
+        assert_eq!(replace_math_symbols("\\ngeqslant"), "≱");
+        assert_eq!(replace_math_symbols("\\nleqq"), "≦");
+        assert_eq!(replace_math_symbols("\\ngeqq"), "≧");
+        assert_eq!(replace_math_symbols("\\nsubset"), "⊄");
+        assert_eq!(replace_math_symbols("\\nsupset"), "⊅");
+    }
+
+    #[test]
+    fn test_additional_arrows() {
+        assert_eq!(replace_math_symbols("\\dashrightarrow"), "⇢");
+        assert_eq!(replace_math_symbols("\\dashleftarrow"), "⇠");
+        assert_eq!(replace_math_symbols("\\multimap"), "⊸");
+        assert_eq!(replace_math_symbols("\\upuparrows"), "⇈");
+        assert_eq!(replace_math_symbols("\\downdownarrows"), "⇊");
+        assert_eq!(replace_math_symbols("\\leftsquigarrow"), "⇜");
+    }
+
+    #[test]
+    fn test_additional_operators() {
+        assert_eq!(replace_math_symbols("\\dotminus"), "∸");
+        assert_eq!(replace_math_symbols("\\ldotp"), ".");
+        assert_eq!(replace_math_symbols("\\cdotp"), "·");
+        assert_eq!(replace_math_symbols("\\bmod"), "mod");
+        assert_eq!(replace_math_symbols("\\mod"), "mod");
+        assert_eq!(replace_math_symbols("\\pod"), "mod");
+    }
+
+    #[test]
+    fn test_additional_special_symbols() {
+        assert_eq!(replace_math_symbols("\\checkmark"), "✓");
+        assert_eq!(replace_math_symbols("\\ballotbox"), "☐");
+        assert_eq!(replace_math_symbols("\\maltese"), "✠");
+    }
+
+    #[test]
+    fn test_sized_delimiters() {
+        assert_eq!(replace_math_symbols("\\bigl"), "");
+        assert_eq!(replace_math_symbols("\\bigr"), "");
+        assert_eq!(replace_math_symbols("\\Bigl"), "");
+        assert_eq!(replace_math_symbols("\\Biggr"), "");
+    }
+
+    #[test]
+    fn test_additional_function_names() {
+        assert_eq!(replace_math_symbols("\\arcsec"), "arcsec");
+        assert_eq!(replace_math_symbols("\\arccsc"), "arccsc");
+        assert_eq!(replace_math_symbols("\\arccot"), "arccot");
+        assert_eq!(replace_math_symbols("\\arcsinh"), "arcsinh");
+        assert_eq!(replace_math_symbols("\\arccosh"), "arccosh");
+        assert_eq!(replace_math_symbols("\\arctanh"), "arctanh");
+    }
+
+    #[test]
+    fn test_subset_superset_variants() {
+        assert_eq!(replace_math_symbols("\\Subset"), "⋐");
+        assert_eq!(replace_math_symbols("\\Supset"), "⋑");
+    }
+
+    #[test]
+    fn test_additional_geometry() {
+        assert_eq!(replace_math_symbols("\\vartriangle"), "△");
+        assert_eq!(replace_math_symbols("\\blacktriangle"), "▲");
+        assert_eq!(replace_math_symbols("\\blacktriangledown"), "▼");
+        assert_eq!(replace_math_symbols("\\Box"), "□");
+        assert_eq!(replace_math_symbols("\\Diamond"), "◇");
+    }
+
+    #[test]
+    fn test_xarrow_aliases() {
+        assert_eq!(replace_math_symbols("\\xrightarrow"), "→");
+        assert_eq!(replace_math_symbols("\\xleftarrow"), "←");
+        assert_eq!(replace_math_symbols("\\xRightarrow"), "⇒");
+        assert_eq!(replace_math_symbols("\\xLeftarrow"), "⇐");
+    }
+
+    #[test]
+    fn test_not_and_limits() {
+        assert_eq!(replace_math_symbols("\\not"), "¬");
+        assert_eq!(replace_math_symbols("\\limits"), "");
+        assert_eq!(replace_math_symbols("\\nolimits"), "");
+        assert_eq!(replace_math_symbols("\\displaylimits"), "");
+    }
+
+    #[test]
+    fn test_math_lap_commands() {
+        assert_eq!(replace_math_symbols("\\mathclap"), "");
+        assert_eq!(replace_math_symbols("\\mathllap"), "");
+        assert_eq!(replace_math_symbols("\\mathrlap"), "");
+    }
+
+    #[test]
+    fn test_boxed_substack_cr() {
+        assert_eq!(replace_math_symbols("\\boxed"), "");
+        assert_eq!(replace_math_symbols("\\substack"), "");
+        assert_eq!(replace_math_symbols("\\cr"), "");
     }
 }

@@ -142,4 +142,47 @@ mod tests {
         assert_eq!(to_subscript('c'), None);
         assert_eq!(to_subscript('Z'), None);
     }
+
+    #[test]
+    fn test_subscript_punctuation() {
+        assert_eq!(to_subscript('+'), Some('₊'));
+        assert_eq!(to_subscript('-'), Some('₋'));
+        assert_eq!(to_subscript('='), Some('₌'));
+        assert_eq!(to_subscript('('), Some('₍'));
+        assert_eq!(to_subscript(')'), Some('₎'));
+    }
+
+    #[test]
+    fn test_superscript_equals() {
+        assert_eq!(to_superscript('='), Some('⁼'));
+        assert_eq!(to_superscript(')'), Some('⁾'));
+    }
+
+    #[test]
+    fn test_superscript_all_digits() {
+        for d in '0'..='9' {
+            assert!(to_superscript(d).is_some(), "digit {d} should have superscript");
+        }
+    }
+
+    #[test]
+    fn test_subscript_all_digits() {
+        for d in '0'..='9' {
+            assert!(to_subscript(d).is_some(), "digit {d} should have subscript");
+        }
+    }
+
+    #[test]
+    fn test_superscript_uppercase_none() {
+        for c in 'A'..='Z' {
+            assert_eq!(to_superscript(c), None, "uppercase {c} should not have superscript");
+        }
+    }
+
+    #[test]
+    fn test_subscript_uppercase_none() {
+        for c in 'A'..='Z' {
+            assert_eq!(to_subscript(c), None, "uppercase {c} should not have subscript");
+        }
+    }
 }

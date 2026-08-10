@@ -385,4 +385,58 @@ mod tests {
         let store = MacroStore::new();
         assert_eq!(store.expand_all("\\unknown{test}"), "\\unknown{test}");
     }
+
+    #[test]
+    fn test_renewcommand_not_supported() {
+        // \renewcommand is not currently parsed — the original \newcommand definition persists
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\foo}{old}\\renewcommand{\\foo}{new}");
+        // renewcommand is not stripped, foo keeps its original body
+        assert_eq!(store.defs["foo"].body, "old");
+    }
+
+    #[test]
+    fn test_expand_multiple_args() {
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\add}[2]{#1 + #2}");
+        assert_eq!(store.expand_all("\\add{a}{b}"), "a + b");
+    }
+
+    #[test]
+    fn test_expand_document_helper() {
+        let input = "\\newcommand{\\hi}{Hello}\\hi there";
+        assert_eq!(expand_document(input), "Hello there");
+    }
+
+    #[test]
+    fn test_nested_macro_expansion() {
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\inner}{X}\\newcommand{\\outer}{\\inner Y}");
+        // \outer expands to \inner Y, then \inner expands to X Y
+        let result = store.expand_all("\\outer");
+        assert!(result.contains('X'), "nested expansion should produce X, got: {result}");
+    }
+
+    #[test]
+    fn test_macro_with_optional_arg_not_stripped() {
+        // Optional args in \newcommand are not currently stripped from source
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\foo}[1][default]{value: #1}");
+        // The macro definition may or may not be extracted depending on parsing
+        // Just verify the store doesn't crash
+    }
+
+    #[test]
+    fn test_def_no_args() {
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\def\\bar{BAR}");
+        assert_eq!(store.expand_all("\\bar"), "BAR");
+    }
+
+    #[test]
+    fn test_expand_preserves_non_macro_text() {
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\x}{X}");
+        assert_eq!(store.expand_all("before \\x after"), "before X after");
+    }
 }

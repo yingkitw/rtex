@@ -340,6 +340,10 @@ impl TexParser {
             return self.parse_includegraphics();
         }
 
+        if remaining.starts_with("\\nocite") {
+            return self.parse_nocite();
+        }
+
         if remaining.starts_with("\\cite") {
             return self.parse_cite();
         }
@@ -348,7 +352,13 @@ impl TexParser {
             return self.parse_label();
         }
 
-        if remaining.starts_with("\\ref") {
+        if remaining.starts_with("\\eqref")
+            || remaining.starts_with("\\autoref")
+            || remaining.starts_with("\\nameref")
+            || remaining.starts_with("\\cref")
+            || remaining.starts_with("\\Cref")
+            || (remaining.starts_with("\\ref") && !remaining.starts_with("\\reflectbox"))
+        {
             return self.parse_ref();
         }
 
@@ -478,6 +488,23 @@ impl TexParser {
             ("\\o", "ø"),
             ("\\i", "ı"),
             ("\\j", "ȷ"),
+            ("\\textexclamdown", "¡"),
+            ("\\textquestiondown", "¿"),
+            ("\\textquotedblleft", "„"),
+            ("\\textquotedblright", "''"),
+            ("\\textquoteleft", "‘"),
+            ("\\textquoteright", "’"),
+            ("\\textendash", "–"),
+            ("\\textemdash", "—"),
+            ("\\textbullet", "•"),
+            ("\\textperiodcentered", "·"),
+            ("\\guillemotleft", "«"),
+            ("\\guillemotright", "»"),
+            ("\\guilsinglleft", "‹"),
+            ("\\guilsinglright", "›"),
+            ("\\textvisiblespace", "␣"),
+            ("\\textcompwordmark", "­"),
+            ("\\textasciicircum", "^"),
         ];
         for (prefix, ch) in &text_chars {
             if let Some(after) = remaining.strip_prefix(prefix) {
@@ -531,6 +558,44 @@ impl TexParser {
             return self.parse_simple_braced_command("textmd", 8);
         }
 
+        // Additional text commands
+        if remaining.starts_with("\\textcircled{") {
+            return self.parse_simple_braced_command("textcircled", 13);
+        }
+        if remaining.starts_with("\\hl{") {
+            return self.parse_simple_braced_command("hl", 4);
+        }
+        if remaining.starts_with("\\st{") {
+            return self.parse_simple_braced_command("st", 4);
+        }
+        if remaining.starts_with("\\uline{") {
+            return self.parse_simple_braced_command("uline", 7);
+        }
+        if remaining.starts_with("\\uuline{") {
+            return self.parse_simple_braced_command("uuline", 8);
+        }
+        if remaining.starts_with("\\uwave{") {
+            return self.parse_simple_braced_command("uwave", 7);
+        }
+        if remaining.starts_with("\\dotuline{") {
+            return self.parse_simple_braced_command("dotuline", 10);
+        }
+
+        // \color{name} — color declaration (switches color for subsequent text)
+        if remaining.starts_with("\\color{") {
+            return self.parse_simple_braced_command("color", 7);
+        }
+
+        // \normalcolor — reset color declaration
+        if remaining.starts_with("\\normalcolor") {
+            self.position += "\\normalcolor".len();
+            return Some(TexElement::Command {
+                name: "normalcolor".to_string(),
+                args: vec![],
+            });
+        }
+
+        // \hspace* already handled below, but also add \phantom* variants
         // Phantom commands (invisible spacing)
         if remaining.starts_with("\\phantom{") {
             return self.parse_simple_braced_command("phantom", 9);
@@ -714,6 +779,32 @@ impl TexParser {
             return self.parse_simple_braced_command("footnotetext", 13);
         }
 
+        // \tag{...} and \tag*{...} — equation tags
+        if remaining.starts_with("\\tag*{") {
+            return self.parse_simple_braced_command("tag*", 6);
+        }
+        if remaining.starts_with("\\tag{") {
+            return self.parse_simple_braced_command("tag", 5);
+        }
+
+        // \intertext{...} — text between align lines
+        if remaining.starts_with("\\intertext{") {
+            return self.parse_simple_braced_command("intertext", 11);
+        }
+        if remaining.starts_with("\\shortintertext{") {
+            return self.parse_simple_braced_command("shortintertext", 15);
+        }
+
+        // \reflectbox{...} — reflect content
+        if remaining.starts_with("\\reflectbox{") {
+            return self.parse_simple_braced_command("reflectbox", 12);
+        }
+
+        // \resizebox{width}{height}{content}
+        if remaining.starts_with("\\resizebox{") {
+            return self.parse_resizebox();
+        }
+
         // Table commands
         if remaining.starts_with("\\multicolumn{") {
             return self.parse_multicolumn();
@@ -759,6 +850,30 @@ impl TexParser {
             "\\pagewidth", "\\paperwidth", "\\paperheight", "\\textheight",
             "\\unitlength", "\\tabcolsep", "\\arraycolsep", "\\arrayrulewidth",
             "\\doublerulesep", "\\arraystretch",
+            "\\pagestyle", "\\thispagestyle", "\\pagenumbering", "\\definecolor",
+            "\\DeclareMathOperator", "\\numberwithin", "\\counterwithin",
+            "\\renewcommand", "\\providecommand", "\\DeclareRobustCommand",
+            "\\hypersetup", "\\urlstyle", "\\babelhyphenation",
+            "\\frenchspacing", "\\nonfrenchspacing",
+            "\\thicklines", "\\thinlines",
+            "\\baselineskip", "\\topskip", "\\bottomskip",
+            "\\parindent", "\\parskip", "\\headheight", "\\headsep",
+            "\\footskip", "\\topmargin", "\\bottommargin",
+            "\\leftmargin", "\\rightmargin", "\\oddsidemargin", "\\evensidemargin",
+            "\\marginparwidth", "\\marginparsep", "\\marginparpush",
+            "\\floatsep", "\\intextsep", "\\textfloatsep",
+            "\\abovecaptionskip", "\\belowcaptionskip",
+            "\\counterwithout",
+            "\\let", "\\edef", "\\xdef", "\\global",
+            "\\mathversion", "\\restoremathversion",
+            "\\sloppypar", "endsloppypar",
+            "\\nonumber", "\\notag", "\\qedhere",
+            "\\theoremstyle", "\\swapnumbers", "\\qedsymbol",
+            "\\theoremheaderfont", "\\theorembodyfont", "\\newtheoremstyle",
+            "\\settowidth", "\\settodepth", "\\settoheight",
+            "\\sbox", "\\savebox", "\\usebox", "\\adjustbox",
+            "\\span", "\\hide",
+            "\\captionof", "\\subfloat", "\\subcaption", "\\subcaptionbox",
         ];
         for prefix in &skip_cmds {
             if remaining.starts_with(prefix) {
@@ -850,6 +965,68 @@ impl TexParser {
                 name: "centering".to_string(),
                 args: vec![],
             });
+        }
+
+        // Page break commands
+        let page_break_cmds = [
+            ("\\newpage", "newpage"),
+            ("\\clearpage", "clearpage"),
+            ("\\pagebreak", "pagebreak"),
+            ("\\noindent", "noindent"),
+            ("\\indent", "indent"),
+            ("\\newline", "newline"),
+            ("\\raggedright", "raggedright"),
+            ("\\raggedleft", "raggedleft"),
+            ("\\onecolumn", "onecolumn"),
+            ("\\twocolumn", "twocolumn"),
+        ];
+        for (prefix, name) in &page_break_cmds {
+            if remaining.starts_with(prefix) {
+                // Ensure we don't match a prefix of a longer command
+                let after = &remaining[prefix.len()..];
+                if after.starts_with(|c: char| c.is_alphabetic()) {
+                    continue;
+                }
+                self.position += prefix.len();
+                // Optional [length] for \pagebreak and \newline
+                self.skip_whitespace_and_comments();
+                if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+                    self.position += 1;
+                    let _ = self.read_until(']');
+                    self.position += 1;
+                }
+                return Some(TexElement::Command {
+                    name: name.to_string(),
+                    args: vec![],
+                });
+            }
+        }
+
+        // Margin notes — consume braced argument, produce no output
+        if remaining.starts_with("\\marginpar") {
+            self.position += "\\marginpar".len();
+            self.skip_whitespace_and_comments();
+            // Optional [outer note] argument
+            if self.position < self.content.len() && self.content[self.position..].starts_with('[') {
+                self.position += 1;
+                let _ = self.read_until(']');
+                self.position += 1;
+                self.skip_whitespace_and_comments();
+            }
+            if self.position < self.content.len() && self.content[self.position..].starts_with('{') {
+                let _ = self.parse_braced_content();
+            }
+            return None;
+        }
+
+        // Reverse/normal margin par — skip
+        if remaining.starts_with("\\reversemarginpar") || remaining.starts_with("\\normalmarginpar") {
+            self.position += if remaining.starts_with("\\reversemarginpar") {
+                "\\reversemarginpar".len()
+            } else {
+                "\\normalmarginpar".len()
+            };
+            return None;
         }
 
         // Deprecated font declarations (still widely used)

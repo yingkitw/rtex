@@ -172,4 +172,56 @@ mod tests {
 
         assert_eq!(table.rows[0].cells, vec!["$x$", "$y$"]);
     }
+
+    #[test]
+    fn test_table_parse_booktabs_rules() {
+        let spec = "lcr";
+        let content = "\\toprule\nA & B & C \\\\\n\\midrule\n1 & 2 & 3 \\\\\n\\bottomrule";
+        let table = Table::parse(spec, content);
+
+        assert_eq!(table.rows.len(), 5);
+        assert!(table.rows[0].is_separator); // toprule
+        assert!(!table.rows[1].is_separator); // data
+        assert!(table.rows[2].is_separator); // midrule
+        assert!(!table.rows[3].is_separator); // data
+        assert!(table.rows[4].is_separator); // bottomrule
+    }
+
+    #[test]
+    fn test_table_parse_empty_content() {
+        let table = Table::parse("ccc", "");
+        assert!(table.rows.is_empty());
+        assert_eq!(table.columns.len(), 3);
+    }
+
+    #[test]
+    fn test_table_parse_at_spacing() {
+        let spec = "l@{}r";
+        let table = Table::parse(spec, "A & B \\\\");
+        assert_eq!(table.columns, vec![Align::Left, Align::Right]);
+    }
+
+    #[test]
+    fn test_table_parse_skips_non_table_commands() {
+        let spec = "cc";
+        let content = "\\caption{Test}\nA & B \\\\\n\\label{tab:1}";
+        let table = Table::parse(spec, content);
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0].cells, vec!["A", "B"]);
+    }
+
+    #[test]
+    fn test_table_parse_empty_lines() {
+        let spec = "cc";
+        let content = "\n\nA & B \\\\\n\n";
+        let table = Table::parse(spec, content);
+        assert_eq!(table.rows.len(), 1);
+    }
+
+    #[test]
+    fn test_table_parse_p_column() {
+        let spec = "p{5cm}c";
+        let table = Table::parse(spec, "A & B \\\\");
+        assert_eq!(table.columns, vec![Align::Left, Align::Center]);
+    }
 }
