@@ -8,7 +8,7 @@ All foundational phases are done. Key milestones:
 - **PDF generation** — vendored pdfrs engine with DejaVu Sans font embedding and subsetting
 - **Multi-format output** — PDF, HTML, DOCX, EPUB from single parsed AST
 - **Math support** — 618 Unicode symbols, fractions, radicals, scripts, accents, alphabets, matrix environments, function names, MathML export
-- **LaTeX coverage** — 300+ commands, multi-line math (`align`/`gather`/`multline`/`cases`), theorems, `description` lists, `\href`, unnumbered sections, `\binom`/`\tfrac`/`\dfrac`, 27 special characters, 40+ skip-commands, counter formatting, `\input`/`\include` file splicing, page break commands (`\newpage`/`\clearpage`/`\pagebreak`/`\noindent`/`\newline`/`\raggedright`/`\raggedleft`/`\onecolumn`/`\twocolumn`), `\marginpar`
+- **LaTeX coverage** — 450+ commands, multi-line math (`align`/`gather`/`multline`/`cases`), theorems, `description` lists, `\href`, unnumbered sections, `\binom`/`\tfrac`/`\dfrac`, 42+ special characters, 55+ skip-commands, counter formatting, `\input`/`\include` file splicing, page break commands (`\newpage`/`\clearpage`/`\pagebreak`/`\noindent`/`\newline`/`\raggedright`/`\raggedleft`/`\onecolumn`/`\twocolumn`), `\marginpar`
 - **Bibliography & cross-references** — `thebibliography`, `\cite`, `\label`/`\ref`/`\pageref` with `RefStore`
 - **Macros** — `\newcommand`, `\renewcommand`, `\def` with iterative expansion
 - **Images** — PNG/JPEG/SVG via `\includegraphics` with dimension parsing
@@ -37,6 +37,15 @@ All foundational phases are done. Key milestones:
 - **Expanded skip commands** — `\let`, `\edef`, `\xdef`, `\global`, `\frenchspacing`, `\nonfrenchspacing`, `\thicklines`, `\thinlines`, `\baselineskip`, `\topskip`, `\bottomskip`, `\parindent`, `\parskip`, `\headheight`, `\headsep`, `\footskip`, `\topmargin`, `\bottommargin`, `\leftmargin`, `\rightmargin`, `\oddsidemargin`, `\evensidemargin`, `\marginparwidth`, `\marginparsep`, `\marginparpush`, `\floatsep`, `\intextsep`, `\textfloatsep`, `\abovecaptionskip`, `\belowcaptionskip`, `\counterwithout`, `\mathversion`, `\restoremathversion`, `\sloppypar`
 - **Final command batch (400+ target reached)** — `\not`, `\limits`, `\nolimits`, `\displaylimits`, `\mathclap`/`\mathllap`/`\mathrlap`, `\boxed`, `\substack`, `\cr`, `\tag`/`\tag*`, `\intertext`/`\shortintertext`, `\reflectbox`, `\resizebox`, 20+ additional skip commands (`\nonumber`, `\notag`, `\theoremstyle`, `\qedhere`, `\swapnumbers`, `\qedsymbol`, `\settowidth`, `\settodepth`, `\settoheight`, `\sbox`, `\savebox`, `\usebox`, `\adjustbox`, `\captionof`, `\subfloat`, `\subcaption`)
 - **Bug fix** — `\ref` check no longer shadows `\reflectbox` (prefix collision fix)
+- **Biblatex citation commands** — `\textcite`, `\parencite`, `\footcite`, `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite` with kind-aware rendering (parenthetical, footnote, author-only, etc.); `\printbibliography` with optional `[...]` arg consumption; `\addbibresource{file.bib}`
+- **Missing common environments** — `tabular*`, `tabularx`, `array`, `comment`, `subfigure`/`subfig`, `table*`
+- **Table and figure commands** — `\multirow`, `\rowcolor`, `\cellcolor`, `\caption*`, `\floatplacement`, `\floatbarrier`
+- **Spacing and text commands** — `\fill` (spacing), `\stretch{n}` (skip), `\textellipsis` (Unicode ellipsis), HTML rendering for `\dotfill`, `\strut`, `\mathstrut`
+- **Additional environments** — `multicols`, `wrapfigure`, `wraptable`, `tabbing`, `algorithm`/`algorithm*`, `algorithmic`, `alltt`
+- **Penalty and hyphenation skip commands** — `\widowpenalty`, `\clubpenalty`, `\interlinepenalty`, `\hyphenpenalty`, `\exhyphenpenalty`, `\brokenpenalty`, `\floatingpenalty`, `\hyphenation`, `\tolerance`, `\pretolerance`, `\emergencystretch`, `\hbadness`, `\vbadness`
+- **Text symbols** — `\textunderscore`, `\textdegree`, `\textcelsius`, `\textmu`, `\textohm`, `\textnumero`, `\textestimated`, `\textbrokenbar`, `\textordfeminine`, `\textordmasculine`, `\textacutedbl`, `\textgravedbl`, `\texttildelow`, `\textcent`, `\texteuro`, `\textyen`, `\textcurrency`
+- **siunitx commands** — `\SI{num}{unit}`, `\si{unit}`, `\unit{unit}`, `\num{num}`, `\SIrange{start}{end}{unit}`, `\sisetup{opts}` (skip) with HTML and PDF rendering
+- **Inline verbatim and misc commands** — `\verb<delim>text<delim>`, `\verb*`, `\lstinline<delim>text<delim>`, `\smash{text}`, `\nolinkurl{url}`
 
 ## Pending
 
@@ -52,7 +61,7 @@ All foundational phases are done. Key milestones:
 
 ### Known Technical Debt
 
-- [ ] Refactor `parse_next()` (668 lines) into sub-functions — blocked by borrow checker (`remaining` borrows from `self.content`, conflicts with `&mut self` calls); deferred until Polonius
+- [ ] Refactor `parse_next()` (1015 lines) into sub-functions — blocked by borrow checker (`remaining` borrows from `self.content`, conflicts with `&mut self` calls); deferred until Polonius
 
 ## Competitive Intelligence
 
@@ -93,18 +102,18 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 648 (see `cargo test`)
+- Tests: 717 (see `cargo test`)
 - PDF: vendored pdfrs (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
-- LaTeX commands: 400+
+- LaTeX commands: 450+
 - Documentation: README / ARCHITECTURE / SPEC aligned with current implementation
 - File size: ~750 bytes for ASCII-only PDFs; ~385 KB for Unicode/math (DejaVu subset)
 - Clippy: 10 warnings (pre-existing, in pdfrs and parser)
 
 ### Target Goals
-- Tests: 648 ✓ (target was 600+)
+- Tests: 717 ✓ (target was 600+)
 - Math symbols: 618 ✓ (target was 600+)
-- LaTeX commands: 400+ ✓ (target was 400+)
+- LaTeX commands: 450+ ✓ (target was 400+)
 - File size: <100 KB for ASCII-only; <500 KB for Unicode/math
 - PDF standards: PDF/A compliance
 - Math: MathML in all output formats, not just HTML

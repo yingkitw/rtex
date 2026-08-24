@@ -34,6 +34,9 @@ Broader feature tour (formatting, href, description lists, display math).
 ### `quadratic.tex`
 Focused quadratic-formula / fraction layout check.
 
+### `extended.tex`
+Extended features: siunitx units, inline verbatim (`\verb`, `\lstinline`), multi-column layout, wrapping floats, tabbing, algorithm pseudocode, alltt, text symbols, smash, penalty commands.
+
 ## Usage
 
 ```bash

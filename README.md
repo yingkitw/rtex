@@ -3,8 +3,8 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Tests](https://img.shields.io/badge/tests-520%2B-brightgreen.svg)](TODO.md)
-[![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-300%2B-informational.svg)](TODO.md)
+[![Tests](https://img.shields.io/badge/tests-717%2B-brightgreen.svg)](TODO.md)
+[![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-450%2B-informational.svg)](TODO.md)
 [![Math symbols](https://img.shields.io/badge/math%20symbols-618%2B-informational.svg)](TODO.md)
 [![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
 [![LSP](https://img.shields.io/badge/LSP-rtex--lsp-blueviolet.svg)](docs/LSP.md)
@@ -58,7 +58,7 @@ See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for the full honesty 
   - Document structure (\part, \chapter, \section, \subsection, \appendix)
   - Text formatting (\textbf, \textit, \texttt, \underline, \emph, \textsc, \sout, \overline)
   - Lists (itemize, enumerate with optional \item[label], description-style labels)
-  - Mathematical equations (inline and display, 566+ Unicode symbols)
+  - Mathematical equations (inline and display, 618+ Unicode symbols)
   - Math alphabets (\mathbb, \mathcal, \mathfrak, \mathbf, \mathit, \mathsf, \mathtt)
   - Math accents (\vec, \hat, \tilde, \bar, \dot, \ddot)
   - Tables (tabular with alignment, booktabs rules)
@@ -70,7 +70,7 @@ See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for the full honesty 
   - Title, author, and date metadata
   - Table of contents, list of figures, list of tables
   - Font size commands, colors, alignment, page breaks, horizontal/vertical rules
-  - **300+ LaTeX commands supported**
+  - **450+ LaTeX commands supported**
 - Multi-line math (`align`, `align*`, `gather`, `gather*`, `multline`, `cases`) including cases nested inside `\[…\]`
 - `description` environment for definition lists
 - Theorem-like blocks (`theorem`, `lemma`, `proof`, `definition`, `corollary`, `proposition`, `remark`, `example`)
@@ -256,7 +256,7 @@ cargo test
 ```
 
 The test suite includes:
-- 520+ comprehensive tests (520 passing, 3 ignored)
+- 717+ comprehensive tests (717 passing, 3 ignored)
 - PDF generation verification
 - File size validation
 - PDF header verification
@@ -265,7 +265,7 @@ The test suite includes:
 - Output directory creation tests
 - Round-trip tests for deterministic conversion
 - Math formatter tests (fractions, roots, symbols, accents, alphabets)
-- Parser tests for 300+ LaTeX commands
+- Parser tests for 450+ LaTeX commands
 
 All tests run without any external dependencies!
 

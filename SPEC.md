@@ -8,7 +8,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 
 - CLI conversion of `.tex` files to PDF, HTML, DOCX, or EPUB
 - Library API for in-process and WASM embedding
-- 300+ LaTeX commands, 618 math symbols, PDF generation via vendored pdfrs engine
+- 450+ LaTeX commands, 618 math symbols, PDF generation via vendored pdfrs engine
 - Bibliography, cross-references, tables, graphics, macros
 - Incremental compilation, watch mode, LSP editor support
 - On-demand CTAN package fetching for missing `.sty`/`.cls` files
@@ -27,6 +27,12 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 - MathML dispatch: `\mod`, `\pod`, `\boxed`, `\substack`, `\limits`/`\nolimits`, `\boldsymbol` with `mathvariant="bold"`
 - Text commands: `\textcircled`, `\hl`, `\st`, `\uline`, `\uuline`, `\uwave`, `\dotuline`, `\color`, `\normalcolor`
 - 30+ additional skip commands: `\let`, `\edef`, `\xdef`, `\global`, `\parindent`, `\parskip`, `\floatsep`, etc.
+- Biblatex citation commands: `\textcite`, `\parencite`, `\footcite`, `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite` with kind-aware rendering
+- `\printbibliography` (with optional `[...]` args), `\addbibresource{file.bib}`
+- Missing common environments: `tabular*`, `tabularx`, `array`, `comment`, `subfigure`/`subfig`, `table*`
+- Table and figure commands: `\multirow`, `\rowcolor`, `\cellcolor`, `\caption*`, `\floatplacement`, `\floatbarrier`
+- Additional environments: `multicols`, `wrapfigure`, `wraptable`, `tabbing`, `algorithm`/`algorithm*`, `algorithmic`, `alltt`
+- Penalty and hyphenation skip commands: `\widowpenalty`, `\clubpenalty`, `\interlinepenalty`, `\hyphenpenalty`, `\exhyphenpenalty`, `\brokenpenalty`, `\floatingpenalty`, `\hyphenation`, `\tolerance`, `\pretolerance`, `\emergencystretch`, `\hbadness`, `\vbadness`
 
 ### Out of scope (current)
 
@@ -51,7 +57,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 ## Quality Bar
 
 - `cargo build` and `cargo test` pass (warnings noted; eliminate when practical)
-- 520+ automated tests including round-trip and example PDF verification
+- 717+ automated tests including round-trip and example PDF verification
 - Public APIs documented with rustdoc
 - User-facing docs in `README.md`, `docs/USER_GUIDE.md`, `ARCHITECTURE.md`
 - Surgical changes: no speculative features beyond `TODO.md`

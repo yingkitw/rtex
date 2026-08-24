@@ -53,7 +53,7 @@ impl TexParser {
     pub(super) fn parse_text_command(&mut self) -> Option<TexElement> {
         let remaining = &self.content[self.position..];
 
-        let (_cmd_name, cmd_len) = if remaining.starts_with("\\texttt{") {
+        let (cmd_name, cmd_len) = if remaining.starts_with("\\texttt{") {
             ("texttt", 7)
         } else if remaining.starts_with("\\textbf{") {
             ("textbf", 7)
@@ -68,7 +68,7 @@ impl TexParser {
         self.position += cmd_len;
 
         self.parse_braced_content().map(|arg| TexElement::Command {
-            name: _cmd_name.to_string(),
+            name: cmd_name.to_string(),
             args: vec![arg],
         })
     }
@@ -129,7 +129,7 @@ impl TexParser {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        Some(TexElement::Citation { keys })
+        Some(TexElement::Citation { keys, kind: "cite".to_string() })
     }
 
     /// Parse `\nocite{key1,key2}` — adds entries to bibliography without printing text.
@@ -142,7 +142,21 @@ impl TexParser {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        Some(TexElement::Citation { keys })
+        Some(TexElement::Citation { keys, kind: "nocite".to_string() })
+    }
+
+    /// Parse biblatex citation variants: `\textcite`, `\parencite`, `\footcite`,
+    /// `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite`.
+    pub(super) fn parse_cite_variant(&mut self, cmd_name: &str) -> Option<TexElement> {
+        self.position += cmd_name.len();
+        self.skip_whitespace_and_comments();
+        let keys_str = self.parse_braced_content()?;
+        let keys: Vec<String> = keys_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Some(TexElement::Citation { keys, kind: cmd_name[1..].to_string() })
     }
 
     /// Parse `\label{key}`.
@@ -317,6 +331,39 @@ impl TexParser {
             name: "url".to_string(),
             args: vec![text],
         })
+    }
+
+    /// Parse `\verb<delim>text<delim>` or `\lstinline<delim>text<delim>`.
+    /// The delimiter is the character immediately after the command name
+    /// (any non-letter, non-whitespace character, commonly `|`, `!`, `+`, etc.).
+    pub(super) fn parse_verb(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
+        let cmd_len = if remaining.starts_with("\\lstinline") {
+            "\\lstinline".len()
+        } else {
+            "\\verb".len()
+        };
+
+        self.position += cmd_len;
+
+        // \verb* uses a star variant (visible spaces) — consume the *
+        if self.position < self.content.len() && self.content[self.position..].starts_with('*') {
+            self.position += 1;
+        }
+
+        if self.position >= self.content.len() {
+            return None;
+        }
+
+        // Read the delimiter character (first char after \verb or \verb*)
+        let delim = self.content[self.position..].chars().next()?;
+        self.position += delim.len_utf8();
+
+        // Read until the delimiter appears again
+        let text = self.read_until(delim);
+        self.position += delim.len_utf8(); // skip closing delimiter
+
+        Some(TexElement::CodeBlock(text))
     }
 
     /// Parse `\href{url}{text}` (hyperref).

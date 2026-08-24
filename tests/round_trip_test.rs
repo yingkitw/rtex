@@ -1399,3 +1399,182 @@ Main text.
     let pdf = fs::read(&output).expect("must read PDF");
     validate_pdf_structure(&pdf).expect("include PDF structure invalid");
 }
+
+// ==================== Extended features round-trip tests ====================
+
+#[test]
+fn test_siunitx_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{siunitx}
+\begin{document}
+The speed is \SI{299792458}{\meter\per\second}.
+Range: \SIrange{0}{100}{\celsius}.
+Unit: \si{\kilo\gram}.
+Number: \num{12345}.
+\sisetup{detect-all}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("siunitx must convert");
+    validate_pdf_structure(&pdf).expect("siunitx PDF structure invalid");
+}
+
+#[test]
+fn test_verb_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Use \verb|printf("hello")| here.
+Use \verb!code with |pipe|! here.
+Use \verb*|visible spaces| here.
+Use \lstinline|for(int i=0;i<n;i++)| here.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("verb must convert");
+    validate_pdf_structure(&pdf).expect("verb PDF structure invalid");
+}
+
+#[test]
+fn test_text_symbols_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+Degree: \textdegree C.
+Euro: \texteuro.
+Mu: \textmu.
+Underscore: \textunderscore.
+Ohm: \textohm.
+Numero: \textnumero.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("text symbols must convert");
+    validate_pdf_structure(&pdf).expect("text symbols PDF structure invalid");
+}
+
+#[test]
+fn test_multicols_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{multicol}
+\begin{document}
+\begin{multicols}{2}
+This is column text that flows across multiple columns.
+It should render without crashing.
+\end{multicols}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("multicols must convert");
+    validate_pdf_structure(&pdf).expect("multicols PDF structure invalid");
+}
+
+#[test]
+fn test_wrapfigure_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{wrapfig}
+\begin{document}
+\begin{wrapfigure}{r}{0.4\textwidth}
+Figure content here.
+\end{wrapfigure}
+Wrapping text around the figure.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("wrapfigure must convert");
+    validate_pdf_structure(&pdf).expect("wrapfigure PDF structure invalid");
+}
+
+#[test]
+fn test_wraptable_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{wrapfig}
+\begin{document}
+\begin{wraptable}{r}{0.5\textwidth}
+\begin{tabular}{|c|c|}
+\hline
+A & B \\
+\hline
+1 & 2 \\
+\hline
+\end{tabular}
+\end{wraptable}
+Text after table.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("wraptable must convert");
+    validate_pdf_structure(&pdf).expect("wraptable PDF structure invalid");
+}
+
+#[test]
+fn test_tabbing_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\begin{tabbing}
+Name \= Score \= Grade \\
+Alice \> 95 \> A \\
+Bob \> 82 \> B \\
+\end{tabbing}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("tabbing must convert");
+    validate_pdf_structure(&pdf).expect("tabbing PDF structure invalid");
+}
+
+#[test]
+fn test_algorithm_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\begin{document}
+\begin{algorithm}
+\caption{Euclidean Algorithm}
+\begin{algorithmic}
+\STATE $r \gets a \bmod b$
+\WHILE{$r \neq 0$}
+\STATE $a \gets b$
+\ENDWHILE
+\end{algorithmic}
+\end{algorithm}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("algorithm must convert");
+    validate_pdf_structure(&pdf).expect("algorithm PDF structure invalid");
+}
+
+#[test]
+fn test_alltt_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\usepackage{alltt}
+\begin{document}
+\begin{alltt}
+  def hello():
+      print("Hello, World!")
+      return 42
+\end{alltt}
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("alltt must convert");
+    validate_pdf_structure(&pdf).expect("alltt PDF structure invalid");
+}
+
+#[test]
+fn test_smash_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\smash{x} in text mode.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("smash must convert");
+    validate_pdf_structure(&pdf).expect("smash PDF structure invalid");
+}
+
+#[test]
+fn test_nolinkurl_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+See \nolinkurl{https://example.com} for details.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("nolinkurl must convert");
+    validate_pdf_structure(&pdf).expect("nolinkurl PDF structure invalid");
+}
+
+#[test]
+fn test_penalty_commands_renders_pdf() {
+    let latex = r#"\documentclass{article}
+\begin{document}
+\widowpenalty=10000
+\clubpenalty=10000
+\hyphenpenalty=100
+\tolerance=200
+\emergencystretch=3em
+\hbadness=10000
+\vbadness=10000
+Text after penalty commands.
+\end{document}"#;
+    let pdf = convert_latex_to_bytes(latex).expect("penalty commands must convert");
+    validate_pdf_structure(&pdf).expect("penalty commands PDF structure invalid");
+}

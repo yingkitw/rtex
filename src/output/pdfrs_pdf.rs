@@ -471,8 +471,16 @@ fn push_tex_element(
         TexElement::ColoredText { text, .. } => {
             writer.push_plain(text);
         }
-        TexElement::Citation { keys } => {
-            writer.push_plain(&format!("[{}]", keys.join(", ")));
+        TexElement::Citation { keys, kind } => {
+            let label = match kind.as_str() {
+                "nocite" => String::new(),
+                "parencite" => format!("({})", keys.join(", ")),
+                "footcite" => format!("[{}]", keys.join(", ")),
+                _ => format!("[{}]", keys.join(", ")),
+            };
+            if !label.is_empty() {
+                writer.push_plain(&label);
+            }
         }
         TexElement::Bibliography { entries } => {
             writer.flush_rich();
@@ -596,6 +604,21 @@ fn push_tex_element(
             | "textrm" | "textsf" | "textsl" | "textup" | "textmd"
             | "textnormal" | "fbox" | "overline" | "footnotetext"
             | "phantom" | "vphantom" | "hphantom" if !args.is_empty() => {
+                writer.push_plain(&args[0]);
+            }
+            "SI" if args.len() >= 2 => {
+                writer.push_plain(&args[0]);
+                writer.push_plain(" ");
+                writer.push_plain(&args[1]);
+            }
+            "SIrange" if args.len() >= 3 => {
+                writer.push_plain(&args[0]);
+                writer.push_plain("–");
+                writer.push_plain(&args[1]);
+                writer.push_plain(" ");
+                writer.push_plain(&args[2]);
+            }
+            "si" | "unit" | "num" if !args.is_empty() => {
                 writer.push_plain(&args[0]);
             }
             _ => {

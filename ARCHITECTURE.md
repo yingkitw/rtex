@@ -37,9 +37,9 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
 - `mod.rs`: Core parser struct, element types, and main dispatch
   - `TexParser`: Parses LaTeX source into structured elements
   - `TexElement`: Enum representing parsed LaTeX elements (Text, Command, Section, Math, Lists, Theorem, Table, CodeBlock, Image, ColoredText, Citation, Bibliography, Label/Ref/PageRef, Center, Quote, Abstract, LineBreak, FlushLeft, FlushRight, Footnote, Caption, TableOfContents, ListOfFigures, ListOfTables)
-  - Environment parsing (itemize, enumerate, description, equation, align, gather, multline, cases, center, quote, abstract, figure, flushleft, flushright, minipage, displaymath, math, eqnarray, split, aligned, gathered, lstlisting, verbatim, tabular, table, thebibliography, theorem-like)
-  - 27 special character commands (`\copyright`, `\pounds`, `\LaTeX`, `\AA`, `\ss`, etc.)
-  - 40+ skip-commands silently consumed (`\setlength`, `\setcounter`, `\ignorespaces`, font declarations, dimension commands)
+  - Environment parsing (itemize, enumerate, description, equation, align, gather, multline, cases, center, quote, abstract, figure, flushleft, flushright, minipage, displaymath, math, eqnarray, split, aligned, gathered, lstlisting, verbatim, tabular, tabular*, tabularx, array, table, table*, thebibliography, theorem-like, comment, subfigure, multicols, wrapfigure, wraptable, tabbing, algorithm, algorithmic, alltt)
+  - 42+ special character commands (`\copyright`, `\pounds`, `\LaTeX`, `\AA`, `\ss`, `\textdegree`, `\textmu`, `\texteuro`, etc.)
+  - 55+ skip-commands silently consumed (`\setlength`, `\setcounter`, `\ignorespaces`, font declarations, dimension commands, penalty commands, hyphenation)
   - Counter formatting (`\value`, `\arabic`, `\roman`, `\alph`, `\the<counter>`)
   - `\\` line break with optional `[length]` and `*` variants
   - Plugin command/environment dispatch

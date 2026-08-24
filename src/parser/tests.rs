@@ -468,7 +468,7 @@ See \cite{smith2024} for details.
         let elements = parser.parse();
 
         assert!(elements.iter().any(|element| {
-            matches!(element, TexElement::Citation { keys } if keys == &["smith2024"])
+            matches!(element, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "cite")
         }));
     }
 
@@ -484,7 +484,7 @@ See \cite{smith2024, jones2023}.
         let elements = parser.parse();
 
         assert!(elements.iter().any(|element| {
-            matches!(element, TexElement::Citation { keys } if keys == &["smith2024", "jones2023"])
+            matches!(element, TexElement::Citation { keys, kind } if keys == &["smith2024", "jones2023"] && kind == "cite")
         }));
     }
 
@@ -1242,6 +1242,7 @@ More text"#;
             "\\vfill",
             "\\hrulefill",
             "\\dotfill",
+            "\\fill",
             "\\medskip",
             "\\bigskip",
             "\\smallskip",
@@ -1263,6 +1264,7 @@ More text"#;
                 "\\vfill" => "vfill",
                 "\\hrulefill" => "hrulefill",
                 "\\dotfill" => "dotfill",
+                "\\fill" => "fill",
                 "\\medskip" => "medskip",
                 "\\bigskip" => "bigskip",
                 "\\smallskip" => "smallskip",
@@ -1906,7 +1908,7 @@ More text
 \end{document}"#;
         let mut parser = TexParser::new(content.to_string());
         let elements = parser.parse();
-        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys } if *keys == vec!["key1".to_string(), "key2".to_string()])),
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if *keys == vec!["key1".to_string(), "key2".to_string()] && kind == "nocite")),
             "Expected nocite to produce Citation element");
     }
 
@@ -2184,5 +2186,546 @@ Hello
         let elements = parser.parse();
         assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("mybox"))),
             "\\sbox should be consumed");
+    }
+
+    #[test]
+    fn parser_parses_textcite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\textcite{smith2024} showed that.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "textcite")),
+            "Expected textcite Citation");
+    }
+
+    #[test]
+    fn parser_parses_parencite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\parencite{jones2023} found that.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["jones2023"] && kind == "parencite")),
+            "Expected parencite Citation");
+    }
+
+    #[test]
+    fn parser_parses_footcite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\footcite{doe2021} noted that.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["doe2021"] && kind == "footcite")),
+            "Expected footcite Citation");
+    }
+
+    #[test]
+    fn parser_parses_citeauthor() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\citeauthor{smith2024} argued that.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "citeauthor")),
+            "Expected citeauthor Citation");
+    }
+
+    #[test]
+    fn parser_parses_citeyear() {
+        let content = r#"\documentclass{article}
+\begin{document}
+In \citeyear{smith2024} it was shown.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "citeyear")),
+            "Expected citeyear Citation");
+    }
+
+    #[test]
+    fn parser_parses_citetitle() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\citetitle{smith2024} is a great paper.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "citetitle")),
+            "Expected citetitle Citation");
+    }
+
+    #[test]
+    fn parser_parses_fullcite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\fullcite{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "fullcite")),
+            "Expected fullcite Citation");
+    }
+
+    #[test]
+    fn parser_parses_printbibliography() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Text.
+\printbibliography
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "printbibliography" && args.is_empty())),
+            "Expected printbibliography command");
+    }
+
+    #[test]
+    fn parser_parses_printbibliography_with_opts() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Text.
+\printbibliography[title={References}]
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "printbibliography" && args.is_empty())),
+            "Expected printbibliography command with optional args consumed");
+    }
+
+    #[test]
+    fn parser_parses_addbibresource() {
+        let content = r#"\addbibresource{refs.bib}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "addbibresource" && args == &["refs.bib"])),
+            "Expected addbibresource command");
+    }
+
+    #[test]
+    fn parser_parses_tabular_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{tabular*}{\textwidth}{lc}
+A & B \\
+C & D \\
+\end{tabular*}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Table(_))),
+            "Expected Table from tabular*");
+    }
+
+    #[test]
+    fn parser_parses_tabularx() {
+        let content = r#"\documentclass{article}
+\usepackage{tabularx}
+\begin{document}
+\begin{tabularx}{\textwidth}{lX}
+A & B \\
+C & D \\
+\end{tabularx}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Table(_))),
+            "Expected Table from tabularx");
+    }
+
+    #[test]
+    fn parser_parses_array_env() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\[
+\left( \begin{array}{cc} a & b \\ c & d \end{array} \right)
+\]
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Table(_) | TexElement::MathDisplay(_))),
+            "Expected Table or MathDisplay from array env");
+    }
+
+    #[test]
+    fn parser_skips_comment_env() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Before.
+\begin{comment}
+This should be ignored.
+\end{comment}
+After.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("should be ignored"))),
+            "comment environment content should be discarded");
+    }
+
+    #[test]
+    fn parser_parses_subfigure() {
+        let content = r#"\documentclass{article}
+\usepackage{subfigure}
+\begin{document}
+\begin{subfigure}{0.5\textwidth}
+\includegraphics{img1.png}
+\caption{First}
+\end{subfigure}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "subfigure")),
+            "Expected subfigure command");
+    }
+
+    #[test]
+    fn parser_parses_caption_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\caption*{Unnumbered caption}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "caption*" && args == &["Unnumbered caption"])),
+            "Expected caption* command");
+    }
+
+    #[test]
+    fn parser_parses_multirow() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{tabular}{|c|c|}
+\multirow{2}{*}{A} & B \\
+ & C \\
+\end{tabular}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Table(_))),
+            "Expected Table with multirow");
+    }
+
+    #[test]
+    fn parser_parses_rowcolor() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{tabular}{|c|c|}
+\rowcolor{red} A & B \\
+C & D \\
+\end{tabular}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Table(_))),
+            "Expected Table with rowcolor");
+    }
+
+    #[test]
+    fn parser_skips_floatbarrier() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Before \floatbarrier after.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("floatbarrier"))),
+            "\\floatbarrier should be consumed");
+    }
+
+    #[test]
+    fn parser_parses_textellipsis() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Hello\textellipsis world
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains('…'))),
+            "\\textellipsis should produce ellipsis character");
+    }
+
+    #[test]
+    fn parser_skips_stretch() {
+        let content = r#"\documentclass{article}
+\begin{document}
+A \stretch{1} B
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("stretch"))),
+            "\\stretch should be consumed");
+    }
+
+    #[test]
+    fn parser_parses_multicols() {
+        let content = r#"\documentclass{article}
+\usepackage{multicol}
+\begin{document}
+\begin{multicols}{2}
+Column text here.
+\end{multicols}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "multicols")),
+            "Expected multicols command");
+    }
+
+    #[test]
+    fn parser_parses_wrapfigure() {
+        let content = r#"\documentclass{article}
+\usepackage{wrapfig}
+\begin{document}
+\begin{wrapfigure}{r}{0.5\textwidth}
+\includegraphics{img.png}
+\caption{Test}
+\end{wrapfigure}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
+            "Expected Center from wrapfigure");
+    }
+
+    #[test]
+    fn parser_parses_wraptable() {
+        let content = r#"\documentclass{article}
+\usepackage{wrapfig}
+\begin{document}
+\begin{wraptable}{r}{0.5\textwidth}
+\begin{tabular}{|c|c|}
+A & B \\
+\end{tabular}
+\end{wraptable}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Table(_))),
+            "Expected Table from wraptable");
+    }
+
+    #[test]
+    fn parser_parses_tabbing() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{tabbing}
+foo \= bar \= baz \\
+   \> 1  \> 2
+\end{tabbing}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
+            "Expected Center from tabbing");
+    }
+
+    #[test]
+    fn parser_parses_algorithm() {
+        let content = r#"\documentclass{article}
+\usepackage{algorithm}
+\begin{document}
+\begin{algorithm}
+\caption{My Algorithm}
+\end{algorithm}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
+            "Expected Center from algorithm");
+    }
+
+    #[test]
+    fn parser_parses_algorithmic() {
+        let content = r#"\documentclass{article}
+\usepackage{algorithmic}
+\begin{document}
+\begin{algorithmic}
+\STATE $x \gets 1$
+\end{algorithmic}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Center(_))),
+            "Expected Center from algorithmic");
+    }
+
+    #[test]
+    fn parser_parses_alltt() {
+        let content = r#"\documentclass{article}
+\usepackage{alltt}
+\begin{document}
+\begin{alltt}
+  line 1
+  line 2
+\end{alltt}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::CodeBlock(_))),
+            "Expected CodeBlock from alltt");
+    }
+
+    #[test]
+    fn parser_parses_text_symbols() {
+        let test_cases = [
+            ("\\textunderscore", "_"),
+            ("\\textdegree", "°"),
+            ("\\textmu", "µ"),
+            ("\\texteuro", "€"),
+            ("\\textcent", "¢"),
+            ("\\textyen", "¥"),
+            ("\\textnumero", "№"),
+            ("\\textohm", "Ω"),
+            ("\\textbrokenbar", "¦"),
+            ("\\textordfeminine", "ª"),
+            ("\\textordmasculine", "º"),
+        ];
+        for (cmd, expected) in &test_cases {
+            let mut parser = TexParser::new(cmd.to_string());
+            let elements = parser.parse();
+            assert!(elements.iter().any(|e| matches!(e, TexElement::Text(t) if t == *expected)),
+                "Command {} should produce Text({})", cmd, expected);
+        }
+    }
+
+    #[test]
+    fn parser_parses_si() {
+        let content = r#"\documentclass{article}
+\usepackage{siunitx}
+\begin{document}
+\SI{5}{\meter}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "SI" && args == &["5", "\\meter"])),
+            "Expected SI command with number and unit");
+    }
+
+    #[test]
+    fn parser_parses_si_unit() {
+        let content = r#"\documentclass{article}
+\usepackage{siunitx}
+\begin{document}
+\si{\kilo\gram}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "si" && args == &["\\kilo\\gram"])),
+            "Expected si command with unit");
+    }
+
+    #[test]
+    fn parser_parses_num() {
+        let content = r#"\documentclass{article}
+\usepackage{siunitx}
+\begin{document}
+\num{12345}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "num" && args == &["12345"])),
+            "Expected num command");
+    }
+
+    #[test]
+    fn parser_parses_sirange() {
+        let content = r#"\documentclass{article}
+\usepackage{siunitx}
+\begin{document}
+\SIrange{0}{100}{\celsius}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "SIrange" && args.len() == 3)),
+            "Expected SIrange command with 3 args");
+    }
+
+    #[test]
+    fn parser_skips_sisetup() {
+        let content = r#"\documentclass{article}
+\usepackage{siunitx}
+\begin{document}
+\sisetup{detect-all}
+Text.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("sisetup") || t.contains("detect"))),
+            "\\sisetup should be consumed");
+    }
+
+    #[test]
+    fn parser_parses_verb() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Use \verb|printf("hello")| here.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::CodeBlock(t) if t == "printf(\"hello\")")),
+            "Expected CodeBlock with verbatim content");
+    }
+
+    #[test]
+    fn parser_parses_verb_bang_delim() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\verb!code with |pipe|!
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::CodeBlock(t) if t.contains("pipe"))),
+            "Expected CodeBlock with verbatim content using ! delimiter");
+    }
+
+    #[test]
+    fn parser_parses_verb_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\verb*|a b c|
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::CodeBlock(t) if t == "a b c")),
+            "Expected CodeBlock from \\verb*");
+    }
+
+    #[test]
+    fn parser_parses_lstinline() {
+        let content = r#"\documentclass{article}
+\begin{document}
+Use \lstinline|for(int i=0;i<n;i++)| here.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::CodeBlock(t) if t.contains("for(int"))),
+            "Expected CodeBlock from \\lstinline");
+    }
+
+    #[test]
+    fn parser_parses_smash() {
+        let content = r#"\smash{x}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "smash" && args == &["x"])),
+            "Expected smash command with content");
+    }
+
+    #[test]
+    fn parser_parses_nolinkurl() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\nolinkurl{https://example.com}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "nolinkurl" && args == &["https://example.com"])),
+            "Expected nolinkurl command");
     }
 }

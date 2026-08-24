@@ -64,7 +64,7 @@ pub enum TexElement {
     /// Colored text from `\textcolor{color}{text}`.
     ColoredText { color: String, text: String },
     /// A citation command `\cite{key1,key2}`.
-    Citation { keys: Vec<String> },
+    Citation { keys: Vec<String>, kind: String },
     /// A bibliography list from `thebibliography`.
     Bibliography { entries: Vec<BibEntry> },
     /// A label definition `\label{key}`.
@@ -344,6 +344,30 @@ impl TexParser {
             return self.parse_nocite();
         }
 
+        // Biblatex citation variants — must be checked before \cite
+        // since \citeauthor, \citeyear, \citetitle start with \cite
+        if remaining.starts_with("\\textcite") {
+            return self.parse_cite_variant("\\textcite");
+        }
+        if remaining.starts_with("\\parencite") {
+            return self.parse_cite_variant("\\parencite");
+        }
+        if remaining.starts_with("\\footcite") {
+            return self.parse_cite_variant("\\footcite");
+        }
+        if remaining.starts_with("\\citeauthor") {
+            return self.parse_cite_variant("\\citeauthor");
+        }
+        if remaining.starts_with("\\citeyear") {
+            return self.parse_cite_variant("\\citeyear");
+        }
+        if remaining.starts_with("\\citetitle") {
+            return self.parse_cite_variant("\\citetitle");
+        }
+        if remaining.starts_with("\\fullcite") {
+            return self.parse_cite_variant("\\fullcite");
+        }
+
         if remaining.starts_with("\\cite") {
             return self.parse_cite();
         }
@@ -503,8 +527,24 @@ impl TexParser {
             ("\\guilsinglleft", "‹"),
             ("\\guilsinglright", "›"),
             ("\\textvisiblespace", "␣"),
-            ("\\textcompwordmark", "­"),
-            ("\\textasciicircum", "^"),
+            ("\\textcompwordmark", "\u{ad}"),
+            ("\\textunderscore", "_"),
+            ("\\textdegree", "°"),
+            ("\\textcelsius", "℃"),
+            ("\\textmu", "µ"),
+            ("\\textohm", "Ω"),
+            ("\\textnumero", "№"),
+            ("\\textestimated", "℮"),
+            ("\\textbrokenbar", "¦"),
+            ("\\textordfeminine", "ª"),
+            ("\\textordmasculine", "º"),
+            ("\\textacutedbl", "\u{34}"),
+            ("\\textgravedbl", "\u{36}"),
+            ("\\texttildelow", "\u{3f}"),
+            ("\\textcent", "¢"),
+            ("\\texteuro", "€"),
+            ("\\textyen", "¥"),
+            ("\\textcurrency", "¤"),
         ];
         for (prefix, ch) in &text_chars {
             if let Some(after) = remaining.strip_prefix(prefix) {
@@ -524,6 +564,17 @@ impl TexParser {
         }
         if remaining.starts_with("\\href{") {
             return self.parse_href();
+        }
+        if remaining.starts_with("\\nolinkurl{") {
+            return self.parse_simple_braced_command("nolinkurl", 11);
+        }
+
+        // \verb<delim>text<delim> — inline verbatim
+        if remaining.starts_with("\\verb") && !remaining.starts_with("\\verbatim") {
+            return self.parse_verb();
+        }
+        if remaining.starts_with("\\lstinline") {
+            return self.parse_verb();
         }
 
         // Additional text formatting commands
@@ -606,6 +657,9 @@ impl TexParser {
         if remaining.starts_with("\\hphantom{") {
             return self.parse_simple_braced_command("hphantom", 10);
         }
+        if remaining.starts_with("\\smash{") {
+            return self.parse_simple_braced_command("smash", 7);
+        }
 
         // Raise box
         if remaining.starts_with("\\raisebox{") {
@@ -652,6 +706,7 @@ impl TexParser {
             ("\\vfill", "vfill"),
             ("\\hrulefill", "hrulefill"),
             ("\\dotfill", "dotfill"),
+            ("\\fill", "fill"),
             ("\\medskip", "medskip"),
             ("\\bigskip", "bigskip"),
             ("\\smallskip", "smallskip"),
@@ -711,6 +766,37 @@ impl TexParser {
         }
         if remaining.starts_with("\\bibliographystyle{") {
             return self.parse_simple_braced_command("bibliographystyle", 19);
+        }
+        // \addbibresource{file.bib} — biblatex resource declaration
+        if remaining.starts_with("\\addbibresource{") {
+            return self.parse_simple_braced_command("addbibresource", 16);
+        }
+        // \printbibliography — biblatex bibliography output (no args or optional args)
+        if remaining.starts_with("\\printbibliography")
+            && !remaining.starts_with("\\printbibliography{")
+        {
+            self.position += "\\printbibliography".len();
+            // Consume optional [...] args
+            self.skip_whitespace_and_comments();
+            while self.position < self.content.len()
+                && self.content[self.position..].starts_with('[')
+            {
+                // Skip until matching ]
+                let rest = &self.content[self.position..];
+                if let Some(end_rel) = rest.find(']') {
+                    self.position += end_rel + 1;
+                } else {
+                    break;
+                }
+                self.skip_whitespace_and_comments();
+            }
+            return Some(TexElement::Command {
+                name: "printbibliography".to_string(),
+                args: vec![],
+            });
+        }
+        if remaining.starts_with("\\printbibliography{") {
+            return self.parse_simple_braced_command("printbibliography", 19);
         }
 
         // Appendix marker
@@ -874,6 +960,11 @@ impl TexParser {
             "\\sbox", "\\savebox", "\\usebox", "\\adjustbox",
             "\\span", "\\hide",
             "\\captionof", "\\subfloat", "\\subcaption", "\\subcaptionbox",
+            "\\stretch",
+            "\\widowpenalty", "\\clubpenalty", "\\interlinepenalty",
+            "\\hyphenpenalty", "\\exhyphenpenalty", "\\brokenpenalty",
+            "\\floatingpenalty", "\\hyphenation", "\\tolerance",
+            "\\pretolerance", "\\emergencystretch", "\\hbadness", "\\vbadness",
         ];
         for prefix in &skip_cmds {
             if remaining.starts_with(prefix) {
@@ -933,6 +1024,103 @@ impl TexParser {
         // Caption
         if remaining.starts_with("\\caption{") {
             return self.parse_caption();
+        }
+        // \caption*{text} — unnumbered caption
+        if remaining.starts_with("\\caption*{") {
+            return self.parse_simple_braced_command("caption*", 10);
+        }
+
+        // Table color commands — \rowcolor{color}, \cellcolor{color}
+        if remaining.starts_with("\\rowcolor{") {
+            return self.parse_simple_braced_command("rowcolor", 10);
+        }
+        if remaining.starts_with("\\cellcolor{") {
+            return self.parse_simple_braced_command("cellcolor", 11);
+        }
+
+        // \multirow{num}{width}{text} — multi-row table cell
+        if remaining.starts_with("\\multirow{") {
+            self.position += "\\multirow".len();
+            self.skip_whitespace_and_comments();
+            let num = self.parse_braced_content()?;
+            self.skip_whitespace_and_comments();
+            let width = self.parse_braced_content()?;
+            self.skip_whitespace_and_comments();
+            let text = self.parse_braced_content()?;
+            return Some(TexElement::Command {
+                name: "multirow".to_string(),
+                args: vec![num, width, text],
+            });
+        }
+
+        // \floatplacement — skip with optional args
+        if remaining.starts_with("\\floatplacement") {
+            self.position += "\\floatplacement".len();
+            self.skip_whitespace_and_comments();
+            while self.position < self.content.len()
+                && self.content[self.position..].starts_with('[')
+            {
+                let rest = &self.content[self.position..];
+                if let Some(end_rel) = rest.find(']') {
+                    self.position += end_rel + 1;
+                } else {
+                    break;
+                }
+                self.skip_whitespace_and_comments();
+            }
+            while self.position < self.content.len()
+                && self.content[self.position..].starts_with('{')
+            {
+                let _ = self.parse_braced_content();
+                self.skip_whitespace_and_comments();
+            }
+            return None;
+        }
+        // \floatbarrier — no args, no output
+        if remaining.starts_with("\\floatbarrier") {
+            self.position += "\\floatbarrier".len();
+            return None;
+        }
+
+        // siunitx commands
+        if remaining.starts_with("\\sisetup") {
+            self.position += "\\sisetup".len();
+            self.skip_whitespace_and_comments();
+            let _ = self.parse_braced_content();
+            return None;
+        }
+        if remaining.starts_with("\\SIrange{") {
+            self.position += "\\SIrange".len();
+            self.skip_whitespace_and_comments();
+            let start = self.parse_braced_content().unwrap_or_default();
+            self.skip_whitespace_and_comments();
+            let end = self.parse_braced_content().unwrap_or_default();
+            self.skip_whitespace_and_comments();
+            let unit = self.parse_braced_content().unwrap_or_default();
+            return Some(TexElement::Command {
+                name: "SIrange".to_string(),
+                args: vec![start, end, unit],
+            });
+        }
+        if remaining.starts_with("\\SI{") {
+            self.position += "\\SI".len();
+            self.skip_whitespace_and_comments();
+            let number = self.parse_braced_content().unwrap_or_default();
+            self.skip_whitespace_and_comments();
+            let unit = self.parse_braced_content().unwrap_or_default();
+            return Some(TexElement::Command {
+                name: "SI".to_string(),
+                args: vec![number, unit],
+            });
+        }
+        if remaining.starts_with("\\si{") {
+            return self.parse_simple_braced_command("si", 4);
+        }
+        if remaining.starts_with("\\unit{") {
+            return self.parse_simple_braced_command("unit", 6);
+        }
+        if remaining.starts_with("\\num{") {
+            return self.parse_simple_braced_command("num", 5);
         }
 
         // Font size commands
@@ -1397,13 +1585,18 @@ impl TexParser {
             "lstlisting" => self.parse_lstlisting(),
             "verbatim" => self.parse_lstlisting(),
             "tabular" => self.parse_tabular(),
+            "tabular*" => self.parse_tabular_star(),
+            "tabularx" => self.parse_tabularx(),
+            "array" => self.parse_array_env(),
             "table" => self.parse_table(),
+            "table*" => self.parse_table(),
             "thebibliography" => self.parse_thebibliography(),
             "center" => self.parse_center(),
             "quote" | "quotation" => self.parse_quote(&env_name),
             "abstract" => self.parse_abstract(),
             "figure" => self.parse_figure(),
             "figure*" => self.parse_figure(),
+            "subfigure" | "subfig" => self.parse_subfigure(&env_name),
             "flushleft" => self.parse_flushleft(),
             "flushright" => self.parse_flushright(),
             "minipage" => self.parse_minipage(),
@@ -1414,6 +1607,14 @@ impl TexParser {
             "split" => self.parse_math_lines(MathLineKind::Align),
             "aligned" => self.parse_math_lines(MathLineKind::Align),
             "gathered" => self.parse_math_lines(MathLineKind::Gather),
+            "comment" => self.parse_comment_env(),
+            "multicols" => self.parse_multicols(),
+            "wrapfigure" => self.parse_wrapfigure(),
+            "wraptable" => self.parse_wraptable(),
+            "tabbing" => self.parse_tabbing(),
+            "algorithm" | "algorithm*" => self.parse_algorithm(&env_name),
+            "algorithmic" => self.parse_algorithmic(),
+            "alltt" => self.parse_alltt(),
             _ => {
                 if let Some(elem) = self.try_plugin_environment(&env_name) {
                     return Some(elem);
@@ -1763,12 +1964,96 @@ impl TexParser {
         Some(TexElement::Table(Table::parse(spec, body)))
     }
 
-    /// Parse `\begin{table} … \end{table}` (extracts the inner tabular).
-    fn parse_table(&mut self) -> Option<TexElement> {
-        let content = self.read_until_str("\\end{table}");
-        self.position += "\\end{table}".len();
+    /// Parse `\begin{tabular*}{width}{col spec} … \end{tabular*}`.
+    fn parse_tabular_star(&mut self) -> Option<TexElement> {
+        // Skip the width argument {width}
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        let raw = self.read_until_str("\\end{tabular*}");
+        self.position += "\\end{tabular*}".len();
+        let (spec, body) = if let Some(end) = raw.find('}') {
+            (&raw[..=end], &raw[end + 1..])
+        } else {
+            ("", raw.as_str())
+        };
+        Some(TexElement::Table(Table::parse(spec, body)))
+    }
 
-        // Look for tabular environment within table
+    /// Parse `\begin{tabularx}{width}{col spec} … \end{tabularx}`.
+    fn parse_tabularx(&mut self) -> Option<TexElement> {
+        // Skip the width argument {width}
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        let raw = self.read_until_str("\\end{tabularx}");
+        self.position += "\\end{tabularx}".len();
+        let (spec, body) = if let Some(end) = raw.find('}') {
+            (&raw[..=end], &raw[end + 1..])
+        } else {
+            ("", raw.as_str())
+        };
+        Some(TexElement::Table(Table::parse(spec, body)))
+    }
+
+    /// Parse `\begin{array}{col spec} … \end{array}` — math array environment.
+    fn parse_array_env(&mut self) -> Option<TexElement> {
+        let raw = self.read_until_str("\\end{array}");
+        self.position += "\\end{array}".len();
+        let (spec, body) = if let Some(end) = raw.find('}') {
+            (&raw[..=end], &raw[end + 1..])
+        } else {
+            ("", raw.as_str())
+        };
+        Some(TexElement::Table(Table::parse(spec, body)))
+    }
+
+    /// Parse `\begin{comment} … \end{comment}` — content is silently discarded.
+    fn parse_comment_env(&mut self) -> Option<TexElement> {
+        self.skip_until("\\end{comment}");
+        None
+    }
+
+    /// Parse `\begin{multicols}{n} … \end{multicols}` — multi-column layout.
+    fn parse_multicols(&mut self) -> Option<TexElement> {
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        let end_marker = "\\end{multicols}";
+        let content = self.read_until_str(end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::Command {
+            name: "multicols".to_string(),
+            args: vec![inner
+                .iter()
+                .map(|e| format!("{e:?}"))
+                .collect::<Vec<_>>()
+                .join("")],
+        })
+    }
+
+    /// Parse `\begin{wrapfigure}{pos}{width} … \end{wrapfigure}` — wrapping figure.
+    fn parse_wrapfigure(&mut self) -> Option<TexElement> {
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        let end_marker = "\\end{wrapfigure}";
+        let content = self.read_until_str(end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::Center(inner))
+    }
+
+    /// Parse `\begin{wraptable}{pos}{width} … \end{wraptable}` — wrapping table.
+    fn parse_wraptable(&mut self) -> Option<TexElement> {
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        let end_marker = "\\end{wraptable}";
+        let content = self.read_until_str(end_marker);
+        self.position += end_marker.len();
         if let Some(tabular_start) = content.find("\\begin{tabular}") {
             let after_begin = &content[tabular_start + "\\begin{tabular}".len()..];
             let (spec, body_with_end) = if let Some(end) = after_begin.find('}') {
@@ -1779,6 +2064,110 @@ impl TexParser {
             if let Some(tabular_end) = body_with_end.find("\\end{tabular}") {
                 let body = &body_with_end[..tabular_end];
                 return Some(TexElement::Table(Table::parse(spec, body)));
+            }
+        }
+        Some(TexElement::Text(String::new()))
+    }
+
+    /// Parse `\begin{tabbing} … \end{tabbing}` — tab stop alignment.
+    fn parse_tabbing(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{tabbing}";
+        let content = self.read_until_str(end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::Center(inner))
+    }
+
+    /// Parse `\begin{algorithm} … \end{algorithm}` — algorithm float.
+    fn parse_algorithm(&mut self, env_name: &str) -> Option<TexElement> {
+        let end_marker = format!("\\end{{{env_name}}}");
+        let content = self.read_until_str(&end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::Center(inner))
+    }
+
+    /// Parse `\begin{algorithmic} … \end{algorithmic}` — algorithmic pseudocode.
+    fn parse_algorithmic(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{algorithmic}";
+        let content = self.read_until_str(end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::Center(inner))
+    }
+
+    /// Parse `\begin{alltt} … \end{alltt}` — like verbatim but allows commands.
+    fn parse_alltt(&mut self) -> Option<TexElement> {
+        let end_marker = "\\end{alltt}";
+        let content = self.read_until_str(end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::CodeBlock(inner
+            .iter()
+            .map(|e| match e {
+                TexElement::Text(t) => t.clone(),
+                _ => format!("{e:?}"),
+            })
+            .collect::<Vec<_>>()
+            .join("")))
+    }
+
+    /// Parse `\begin{subfigure}{width} … \end{subfigure}` — sub-figure container.
+    fn parse_subfigure(&mut self, env_name: &str) -> Option<TexElement> {
+        // Skip the width argument {width}
+        self.skip_whitespace_and_comments();
+        let _ = self.parse_braced_content();
+        let end_marker = format!("\\end{{{env_name}}}");
+        let content = self.read_until_str(&end_marker);
+        self.position += end_marker.len();
+        let mut sub_parser = TexParser::new(content);
+        let inner = sub_parser.parse();
+        Some(TexElement::Command {
+            name: "subfigure".to_string(),
+            args: vec![inner
+                .iter()
+                .map(|e| format!("{e:?}"))
+                .collect::<Vec<_>>()
+                .join("")],
+        })
+    }
+
+    /// Parse `\begin{table} … \end{table}` (extracts the inner tabular).
+    fn parse_table(&mut self) -> Option<TexElement> {
+        let content = self.read_until_str("\\end{table}");
+        self.position += "\\end{table}".len();
+
+        // Look for tabular, tabular*, or tabularx within table
+        for (begin_marker, end_marker) in &[
+            ("\\begin{tabular*}", "\\end{tabular*}"),
+            ("\\begin{tabularx}", "\\end{tabularx}"),
+            ("\\begin{tabular}", "\\end{tabular}"),
+        ] {
+            if let Some(tabular_start) = content.find(begin_marker) {
+                let after_begin = &content[tabular_start + begin_marker.len()..];
+                // For tabular* and tabularx, skip the width arg {width}
+                let after_width = if begin_marker.contains('*') || begin_marker.contains('x') {
+                    if let Some(width_end) = after_begin.find('}') {
+                        &after_begin[width_end + 1..]
+                    } else {
+                        after_begin
+                    }
+                } else {
+                    after_begin
+                };
+                let (spec, body_with_end) = if let Some(end) = after_width.find('}') {
+                    (&after_width[..=end], &after_width[end + 1..])
+                } else {
+                    ("", after_width)
+                };
+                if let Some(tabular_end) = body_with_end.find(end_marker) {
+                    let body = &body_with_end[..tabular_end];
+                    return Some(TexElement::Table(Table::parse(spec, body)));
+                }
             }
         }
 

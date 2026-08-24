@@ -181,8 +181,22 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
                 escape_html(text)
             ));
         }
-        TexElement::Citation { keys } => {
-            out.push_str(&format!("[{}]", escape_html(&keys.join(", "))));
+        TexElement::Citation { keys, kind } => {
+            let joined = escape_html(&keys.join(", "));
+            match kind.as_str() {
+                "nocite" => {}
+                "parencite" => out.push_str(&format!("({joined})")),
+                "footcite" => {
+                    out.push_str("<sup class=\"footnote\">");
+                    out.push_str(&joined);
+                    out.push_str("</sup>");
+                }
+                "citeauthor" => out.push_str(&joined),
+                "citeyear" => out.push_str(&joined),
+                "citetitle" => out.push_str(&joined),
+                "fullcite" => out.push_str(&joined),
+                _ => out.push_str(&format!("[{joined}]")),
+            }
         }
         TexElement::Bibliography { entries } => render_bibliography_html(entries, out),
         TexElement::Label { key } => {
@@ -284,8 +298,10 @@ fn render_command_html(name: &str, args: &[String], out: &mut String) {
             ));
         }
         "newline" | "linebreak" => out.push_str("<br />\n"),
-        "hfill" => out.push_str("<span class=\"hfill\"></span>"),
+        "hfill" | "fill" => out.push_str("<span class=\"hfill\"></span>"),
         "hrulefill" => out.push_str("<hr />\n"),
+        "dotfill" => out.push_str("<span class=\"dotfill\">…</span>"),
+        "strut" | "mathstrut" => {}
         "textsc" if !args.is_empty() => {
             out.push_str("<span style=\"font-variant:small-caps\">");
             out.push_str(&escape_html(&args[0]));
@@ -352,6 +368,24 @@ fn render_command_html(name: &str, args: &[String], out: &mut String) {
         }
         "hspace" | "hspace*" | "vspace" | "vspace*" | "quad" | "qquad" => {
             out.push(' ');
+        }
+        "SI" if args.len() >= 2 => {
+            out.push_str(&escape_html(&args[0]));
+            out.push(' ');
+            out.push_str(&escape_html(&args[1]));
+        }
+        "SIrange" if args.len() >= 3 => {
+            out.push_str(&escape_html(&args[0]));
+            out.push_str("–");
+            out.push_str(&escape_html(&args[1]));
+            out.push(' ');
+            out.push_str(&escape_html(&args[2]));
+        }
+        "si" | "unit" if !args.is_empty() => {
+            out.push_str(&escape_html(&args[0]));
+        }
+        "num" if !args.is_empty() => {
+            out.push_str(&escape_html(&args[0]));
         }
         "footnotemark" | "cline" | "rule" | "phantom" | "vphantom" | "hphantom" => {}
         "raisebox" if args.len() >= 2 => {
@@ -471,10 +505,22 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
                 }
             }
             TexElement::ColoredText { text, .. } => out.push_str(text),
-            TexElement::Citation { keys } => {
-                out.push('[');
-                out.push_str(&keys.join(", "));
-                out.push(']');
+            TexElement::Citation { keys, kind } => {
+                if kind == "nocite" {
+                    // nocite produces no visible text
+                } else if kind == "parencite" {
+                    out.push('(');
+                    out.push_str(&keys.join(", "));
+                    out.push(')');
+                } else if kind == "footcite" {
+                    out.push('[');
+                    out.push_str(&keys.join(", "));
+                    out.push(']');
+                } else {
+                    out.push('[');
+                    out.push_str(&keys.join(", "));
+                    out.push(']');
+                }
             }
             TexElement::Bibliography { entries } => {
                 for entry in entries {
@@ -605,7 +651,7 @@ mod tests {
     #[test]
     fn test_plain_text_with_citation() {
         let elements = vec![
-            TexElement::Citation { keys: vec!["smith2020".into(), "jones2021".into()] },
+            TexElement::Citation { keys: vec!["smith2020".into(), "jones2021".into()], kind: "cite".to_string() },
         ];
         let result = plain_text_from_elements(&elements);
         assert!(result.contains("smith2020"));

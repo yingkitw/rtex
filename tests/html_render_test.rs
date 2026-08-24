@@ -663,3 +663,126 @@ fn html_hrulefill() {
     let html = render_html(&doc(r"Above\hrulefill Below"));
     assert_contains(&html, "<hr", "hrulefill produces <hr>");
 }
+
+// ==================== siunitx commands ====================
+
+#[test]
+fn html_siunitx_SI() {
+    let html = render_html(&doc(r"\SI{5}{\meter}"));
+    assert_contains(&html, "5", "SI number in HTML");
+    assert_contains(&html, "\\meter", "SI unit in HTML");
+}
+
+#[test]
+fn html_siunitx_SIrange() {
+    let html = render_html(&doc(r"\SIrange{0}{100}{\celsius}"));
+    assert_contains(&html, "0", "SIrange start in HTML");
+    assert_contains(&html, "100", "SIrange end in HTML");
+}
+
+#[test]
+fn html_siunitx_si() {
+    let html = render_html(&doc(r"\si{\kilo\gram}"));
+    assert_contains(&html, "\\kilo\\gram", "si unit in HTML");
+}
+
+#[test]
+fn html_siunitx_num() {
+    let html = render_html(&doc(r"\num{12345}"));
+    assert_contains(&html, "12345", "num in HTML");
+}
+
+#[test]
+fn html_siunitx_sisetup_skipped() {
+    let html = render_html(&doc(r"\sisetup{detect-all}Text."));
+    assert_not_contains(&html, "sisetup", "sisetup should be skipped");
+    assert_not_contains(&html, "detect", "sisetup args should be skipped");
+}
+
+// ==================== Inline verbatim ====================
+
+#[test]
+fn html_verb() {
+    let html = render_html(&doc(r#"Use \verb|printf("hello")| here."#));
+    assert_contains(&html, "printf", "verb content in HTML");
+}
+
+#[test]
+fn html_lstinline() {
+    let html = render_html(&doc(r#"Use \lstinline|for(int i=0)| here."#));
+    assert_contains(&html, "for(int", "lstinline content in HTML");
+}
+
+// ==================== Text symbols ====================
+
+#[test]
+fn html_text_symbols() {
+    let html = render_html(&doc(r"\textdegree\textmu\texteuro\textyen\textcent"));
+    assert_contains(&html, "°", "textdegree in HTML");
+    assert_contains(&html, "µ", "textmu in HTML");
+    assert_contains(&html, "€", "texteuro in HTML");
+    assert_contains(&html, "¥", "textyen in HTML");
+    assert_contains(&html, "¢", "textcent in HTML");
+}
+
+// ==================== New environments ====================
+
+#[test]
+fn html_multicols() {
+    let html = render_html(&doc(r"\begin{multicols}{2}Column text.\end{multicols}"));
+    assert_contains(&html, "Column text.", "multicols content in HTML");
+}
+
+#[test]
+fn html_wrapfigure() {
+    let html = render_html(&doc(r"\begin{wrapfigure}{r}{0.4\textwidth}Figure content.\end{wrapfigure}"));
+    assert_contains(&html, "Figure content.", "wrapfigure content in HTML");
+}
+
+#[test]
+fn html_wraptable() {
+    let html = render_html(&doc(
+        r"\begin{wraptable}{r}{0.5\textwidth}\begin{tabular}{|c|c|}A & B \\\end{tabular}\end{wraptable}",
+    ));
+    assert_contains(&html, "<table", "wraptable produces table in HTML");
+}
+
+#[test]
+fn html_tabbing() {
+    let html = render_html(&doc(r"\begin{tabbing}Name \= Score \\ Alice \> 95 \\\end{tabbing}"));
+    assert_contains(&html, "Alice", "tabbing content in HTML");
+}
+
+#[test]
+fn html_algorithm() {
+    let html = render_html(&doc(r"\begin{algorithm}\caption{My Algo}\end{algorithm}"));
+    assert_contains(&html, "My Algo", "algorithm content in HTML");
+}
+
+#[test]
+fn html_algorithmic() {
+    let html = render_html(&doc(r"\begin{algorithmic}Step 1\end{algorithmic}"));
+    assert_contains(&html, "Step 1", "algorithmic content in HTML");
+}
+
+#[test]
+fn html_alltt() {
+    let html = render_html(&doc(r"\begin{alltt}line 1\nline 2\end{alltt}"));
+    assert_contains(&html, "line", "alltt content in HTML");
+}
+
+// ==================== Smash ====================
+
+#[test]
+fn html_smash() {
+    let html = render_html(&doc(r"$\smash{x}$"));
+    assert_contains(&html, "smash", "smash in math in HTML");
+}
+
+// ==================== nolinkurl ====================
+
+#[test]
+fn html_nolinkurl() {
+    let html = render_html(&doc(r"\nolinkurl{https://example.com}"));
+    assert_contains(&html, "https://example.com", "nolinkurl content in HTML");
+}

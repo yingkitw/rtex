@@ -1,0 +1,115 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+\usepackage{multicol}
+\usepackage{wrapfig}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{alltt}
+\usepackage{listings}
+
+\title{Extended Features Example}
+\author{rtex}
+
+\begin{document}
+\maketitle
+
+\section{SI Units (siunitx)}
+
+The speed of light is \SI{299792458}{\meter\per\second}.
+The range is \SIrange{0}{100}{\celsius}.
+The unit \si{\kilo\gram} is kilograms.
+The number \num{1234567} is formatted.
+
+\section{Inline Verbatim}
+
+Use \verb|printf("hello")| to print.
+Use \verb!code with |pipe|! with bang delimiter.
+Use \lstinline|for(int i=0;i<n;i++)| for inline code.
+
+\section{Multi-Column Layout}
+
+\begin{multicols}{2}
+This is the first column. It contains some text that should flow
+into multiple columns when rendered. The multicols environment
+is commonly used in newsletters and compact layouts.
+
+This continues the text in the multi-column layout. It should
+flow naturally across the specified number of columns.
+\end{multicols}
+
+\section{Wrapping Floats}
+
+\begin{wrapfigure}{r}{0.4\textwidth}
+\centering
+Placeholder image.
+\caption{Wrapped figure}
+\end{wrapfigure}
+
+This text wraps around the figure placed on the right side
+of the page. The wrapfigure environment is useful for
+embedding figures within flowing text.
+
+\begin{wraptable}{l}{0.3\textwidth}
+\begin{tabular}{|c|c|}
+\hline
+A & B \\
+\hline
+1 & 2 \\
+\hline
+\end{tabular}
+\caption{Wrapped table}
+\end{wraptable}
+
+\section{Tabbing}
+
+\begin{tabbing}
+Name \= Score \= Grade \\
+Alice \> 95 \> A \\
+Bob \> 82 \> B \\
+\end{tabbing}
+
+\section{Algorithm}
+
+\begin{algorithm}
+\caption{Euclidean Algorithm}
+\begin{algorithmic}
+\STATE $r \gets a \bmod b$
+\WHILE{$r \neq 0$}
+\STATE $a \gets b$
+\STATE $b \gets r$
+\STATE $r \gets a \bmod b$
+\ENDWHILE
+\RETURN $b$
+\end{algorithmic}
+\end{algorithm}
+
+\section{AllTT Environment}
+
+\begin{alltt}
+  def hello():
+      print("Hello, World!")
+      return 42
+\end{alltt}
+
+\section{Text Symbols}
+
+Temperature: \textdegree C, or \textcelsius.
+Currency: \texteuro, \textyen, \textcent, \textcurrency.
+Misc: \textunderscore, \textmu, \textohm, \textnumero, \textbrokenbar.
+
+\section{Math Smash}
+
+The expression $\smash{x}$ has zero height in math mode.
+
+\section{Penalty and Hyphenation}
+
+\widowpenalty=10000
+\clubpenalty=10000
+\hyphenpenalty=100
+\tolerance=200
+
+These commands control line breaking behavior but produce no output.
+
+\end{document}
