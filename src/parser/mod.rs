@@ -952,7 +952,7 @@ impl TexParser {
             "\\counterwithout",
             "\\let", "\\edef", "\\xdef", "\\global",
             "\\mathversion", "\\restoremathversion",
-            "\\sloppypar", "endsloppypar",
+            "\\sloppypar", "\\endsloppypar",
             "\\nonumber", "\\notag", "\\qedhere",
             "\\theoremstyle", "\\swapnumbers", "\\qedsymbol",
             "\\theoremheaderfont", "\\theorembodyfont", "\\newtheoremstyle",
@@ -1582,8 +1582,8 @@ impl TexParser {
             "multline" => self.parse_math_lines(MathLineKind::Multline),
             "multline*" => self.parse_math_lines(MathLineKind::Multline),
             "cases" => self.parse_math_lines(MathLineKind::Cases),
-            "lstlisting" => self.parse_lstlisting(),
-            "verbatim" => self.parse_lstlisting(),
+            "lstlisting" => self.parse_lstlisting(&env_name),
+            "verbatim" => self.parse_lstlisting(&env_name),
             "tabular" => self.parse_tabular(),
             "tabular*" => self.parse_tabular_star(),
             "tabularx" => self.parse_tabularx(),
@@ -1933,7 +1933,7 @@ impl TexParser {
     }
 
     /// Parse `\begin{lstlisting}` or `\begin{verbatim}`.
-    fn parse_lstlisting(&mut self) -> Option<TexElement> {
+    fn parse_lstlisting(&mut self, env_name: &str) -> Option<TexElement> {
         // Strip the optional `[language=...]` argument on the begin line.
         self.skip_whitespace_and_comments();
         if self.content[self.position..].starts_with('[') {
@@ -1942,9 +1942,9 @@ impl TexParser {
             self.position += 1;
             self.skip_whitespace_and_comments();
         }
-        // `verbatim` uses the same closing marker as `lstlisting`.
-        let content = self.read_until_str("\\end{lstlisting}");
-        self.position += "\\end{lstlisting}".len();
+        let end_marker = format!("\\end{{{env_name}}}");
+        let content = self.read_until_str(&end_marker);
+        self.position += end_marker.len();
 
         Some(TexElement::CodeBlock(content.trim().to_string()))
     }

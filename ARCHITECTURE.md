@@ -29,7 +29,7 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
 - `NativeTexConverter`: Pure Rust implementation
   - Reads TeX files directly
   - Parses LaTeX syntax using custom parser
-  - Generates PDF via the pdfrs engine (from crates.io)
+  - Generates PDF via the vendored pdfrs engine (`vendor/pdfrs`)
   - No external process calls
 
 ### TeX Parser (`src/parser/`)

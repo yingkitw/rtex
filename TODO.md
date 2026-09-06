@@ -46,6 +46,11 @@ All foundational phases are done. Key milestones:
 - **Text symbols** — `\textunderscore`, `\textdegree`, `\textcelsius`, `\textmu`, `\textohm`, `\textnumero`, `\textestimated`, `\textbrokenbar`, `\textordfeminine`, `\textordmasculine`, `\textacutedbl`, `\textgravedbl`, `\texttildelow`, `\textcent`, `\texteuro`, `\textyen`, `\textcurrency`
 - **siunitx commands** — `\SI{num}{unit}`, `\si{unit}`, `\unit{unit}`, `\num{num}`, `\SIrange{start}{end}{unit}`, `\sisetup{opts}` (skip) with HTML and PDF rendering
 - **Inline verbatim and misc commands** — `\verb<delim>text<delim>`, `\verb*`, `\lstinline<delim>text<delim>`, `\smash{text}`, `\nolinkurl{url}`
+- **verbatim end-tag fix (2026-09-06)** — `parse_lstlisting` now derives the end marker from the environment name, so `\begin{verbatim}` stops at `\end{verbatim}` instead of swallowing the rest of the document
+- **endsloppypar skip fix (2026-09-06)** — added the missing backslash so `\endsloppypar` is now consumed by the skip-command list
+- **`\renewcommand` support (2026-09-06)** — the macro engine now extracts `\renewcommand` and overrides existing definitions
+- **`\providecommand` support (2026-09-06)** — the macro engine now extracts `\providecommand`, defining only when the name is absent
+- **Table `*{n}{spec}` column repetition (2026-09-06)** — `parse_column_spec` expands `*{n}{spec}` (incl. nesting) before parsing, e.g. `*{3}{l}` → `lll`
 
 ## Pending
 
@@ -102,16 +107,17 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 717 (see `cargo test`)
+- Tests: 728 (see `cargo test`; 724 run by default, 3 ignored, rest feature-gated)
 - PDF: vendored pdfrs (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - LaTeX commands: 450+
+- Macros: `\newcommand`, `\renewcommand`, `\providecommand`, `\def`
 - Documentation: README / ARCHITECTURE / SPEC aligned with current implementation
 - File size: ~750 bytes for ASCII-only PDFs; ~385 KB for Unicode/math (DejaVu subset)
 - Clippy: 10 warnings (pre-existing, in pdfrs and parser)
 
 ### Target Goals
-- Tests: 717 ✓ (target was 600+)
+- Tests: 728 ✓ (target was 600+)
 - Math symbols: 618 ✓ (target was 600+)
 - LaTeX commands: 450+ ✓ (target was 400+)
 - File size: <100 KB for ASCII-only; <500 KB for Unicode/math

@@ -57,7 +57,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 ## Quality Bar
 
 - `cargo build` and `cargo test` pass (warnings noted; eliminate when practical)
-- 717+ automated tests including round-trip and example PDF verification
+- 721+ automated tests including round-trip and example PDF verification
 - Public APIs documented with rustdoc
 - User-facing docs in `README.md`, `docs/USER_GUIDE.md`, `ARCHITECTURE.md`
 - Surgical changes: no speculative features beyond `TODO.md`

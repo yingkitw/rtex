@@ -34,8 +34,8 @@ Runs both fast and slow tests.
 
 ### Unit Tests
 - `src/error.rs` - Error handling tests
-- `src/config.rs` - Configuration tests
-- Individual module tests
+- `src/tests.rs` - Conversion pipeline tests
+- Module-level tests in `parser/`, `math/`, `output/`, `cache.rs`, `incremental.rs`, `streaming.rs`, `watch.rs`
 
 ### Integration Tests
 - `src/tests.rs` - Full conversion pipeline tests
@@ -91,9 +91,8 @@ fn test_something_slow() {
 
 ## Test Coverage Goals
 
-- **Current:** ~30% coverage
-- **Target:** 80% coverage
-- **Priority:** Fast unit tests for all modules
+- **Priority:** Fast unit tests for all modules; integration tests in `tests/` for end-to-end workflows
+- Run `cargo test` for the fast suite; `cargo test -- --ignored` for PDF-generating tests
 
 ## Performance Guidelines
 

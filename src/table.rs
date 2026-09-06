@@ -83,10 +83,11 @@ impl Table {
 /// Parse a LaTeX column specification string into alignment values.
 ///
 /// Ignores `|`, `@{}`, and `p{width}` — treats `p` as left-aligned.
+/// Expands `*{n}{spec}` repetition (e.g. `*{3}{l}` → `lll`) before parsing.
 fn parse_column_spec(spec: &str) -> Vec<Align> {
+    let expanded = expand_repetitions(spec.trim());
     let mut result = Vec::new();
-    let mut chars = spec
-        .trim()
+    let mut chars = expanded
         .trim_start_matches('{')
         .trim_end_matches('}')
         .chars();
@@ -124,6 +125,61 @@ fn parse_column_spec(spec: &str) -> Vec<Align> {
         }
     }
 
+    result
+}
+
+/// Read a balanced `{...}` group starting at `s[start]`.
+/// Returns `(inner, end)` where `end` is the index just after the closing `}`.
+fn read_braced_group(s: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = s.as_bytes();
+    if start >= bytes.len() || bytes[start] != b'{' {
+        return None;
+    }
+    let mut depth = 0;
+    let mut content_start = None;
+    for (offset, ch) in s[start..].char_indices() {
+        let idx = start + offset;
+        if ch == '{' {
+            depth += 1;
+            if depth == 1 {
+                content_start = Some(idx + ch.len_utf8());
+            }
+        } else if ch == '}' {
+            depth -= 1;
+            if depth == 0 {
+                let cs = content_start?;
+                return Some((s[cs..idx].to_string(), idx + ch.len_utf8()));
+            }
+        }
+    }
+    None
+}
+
+/// Expand `*{n}{spec}` repetitions in a column spec.
+///
+/// `*{3}{l}` becomes `lll`; `*{2}{|c|}` becomes `|c||c|`. Nesting is supported.
+/// Malformed `*` forms are emitted literally so the caller can ignore them.
+fn expand_repetitions(spec: &str) -> String {
+    let mut result = String::with_capacity(spec.len());
+    let mut i = 0;
+    while i < spec.len() {
+        let rest = &spec[i..];
+        if rest.starts_with('*')
+            && let Some((n_str, after_n)) = read_braced_group(spec, i + 1)
+            && let Ok(n) = n_str.trim().parse::<usize>()
+            && let Some((sub, after_sub)) = read_braced_group(spec, after_n)
+        {
+            let expanded = expand_repetitions(&sub);
+            for _ in 0..n {
+                result.push_str(&expanded);
+            }
+            i = after_sub;
+            continue;
+        }
+        let ch = spec[i..].chars().next().unwrap();
+        result.push(ch);
+        i += ch.len_utf8();
+    }
     result
 }
 
@@ -223,5 +279,34 @@ mod tests {
         let spec = "p{5cm}c";
         let table = Table::parse(spec, "A & B \\\\");
         assert_eq!(table.columns, vec![Align::Left, Align::Center]);
+    }
+
+    #[test]
+    fn test_parse_column_spec_repetition() {
+        assert_eq!(parse_column_spec("*{3}{l}"), vec![Align::Left, Align::Left, Align::Left]);
+        assert_eq!(
+            parse_column_spec("l*{2}{c}r"),
+            vec![Align::Left, Align::Center, Align::Center, Align::Right]
+        );
+        // `|` inside the repeated spec is ignored, columns still counted
+        assert_eq!(
+            parse_column_spec("*{2}{|c|}"),
+            vec![Align::Center, Align::Center]
+        );
+    }
+
+    #[test]
+    fn test_parse_column_spec_nested_repetition() {
+        assert_eq!(
+            parse_column_spec("*{2}{*{2}{l}}"),
+            vec![Align::Left, Align::Left, Align::Left, Align::Left]
+        );
+    }
+
+    #[test]
+    fn test_table_parse_repetition_spec() {
+        let table = Table::parse("*{3}{l}", "1 & 2 & 3 \\\\");
+        assert_eq!(table.columns.len(), 3);
+        assert_eq!(table.rows[0].cells, vec!["1", "2", "3"]);
     }
 }

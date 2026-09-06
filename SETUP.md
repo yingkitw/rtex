@@ -7,7 +7,7 @@
 **No external dependencies required!** rtex is a native Rust implementation that doesn't need pdflatex or any LaTeX installation.
 
 ```bash
-cd /Users/yingkitw/Desktop/myproject/latex-rs
+cd rtex
 cargo build --release
 ```
 
@@ -34,7 +34,7 @@ cargo run --release -- examples/math.tex
 By default, all PDFs are generated in the `output/` directory, which is:
 - Created automatically if it doesn't exist
 - Ignored by git (see `.gitignore`)
-- Located at: `/Users/yingkitw/Desktop/myproject/latex-rs/output/`
+- Located at: `output/` (relative to the project root)
 
 ## Custom Output Location
 
@@ -65,7 +65,7 @@ rustup update
 Run the test suite:
 ```bash
 cargo test
-# Should show: 317 passed
+# Should show: 700+ passed
 ```
 
 Generate a test PDF:

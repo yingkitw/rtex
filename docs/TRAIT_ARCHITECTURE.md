@@ -2,272 +2,106 @@
 
 ## Overview
 
-rtex uses a trait-based architecture for modularity, testability, and extensibility. This design is inspired by minitex's atomic traits pattern.
+rtex uses a small set of traits for its extension and reporting seams. The
+bulk of the codebase is concrete structs (`TexParser`, `MathFormatter`,
+`NativeTexConverter`); traits are introduced only where polymorphism is
+genuinely useful — the converter entry point, the plugin system, and
+progress reporting.
+
+This keeps the design lean (KISS) while preserving the testability and
+extensibility benefits of a trait-based design.
 
 ## Core Traits
 
-### 1. `TexParser`
-Parses LaTeX content into structured elements.
+### 1. `TexConverter` — conversion entry point
+
+Defined in `src/lib.rs`. The single conversion contract used by the CLI,
+library callers, and WASM bindings.
 
 ```rust
-pub trait TexParser: Send + Sync {
-    fn parse(&self, content: &str) -> Result<Vec<TexElement>>;
-    fn parse_command(&self, content: &str, position: usize) -> Result<Option<TexElement>>;
+pub trait TexConverter {
+    fn convert(&self, input: &Path, output: &Path) -> Result<(), LatexError>;
+    // convenience helpers provided as default methods
 }
 ```
 
-**Benefits:**
-- Easy to test with mock implementations
-- Can swap parsers for different LaTeX dialects
-- Enables parallel parsing
+**Implementation:** `NativeTexConverter` (pure Rust, no external TeX).
 
-### 2. `MathFormatter`
-Formats mathematical expressions from LaTeX to display format.
+**Why a trait:** allows alternative converters (e.g. a future engine
+delegating to xelatex/lualatex) without changing call sites, and makes
+mocking in tests trivial.
+
+### 2. `Plugin` — command/environment/transform extension
+
+Defined in `src/plugins.rs`. The extension point for user-supplied
+commands, environments, and AST transforms.
 
 ```rust
-pub trait MathFormatter: Send + Sync {
-    fn format(&self, math: &str) -> String;
-    fn format_inline(&self, math: &str) -> String;
-    fn format_display(&self, math: &str) -> String;
+pub trait Plugin: Send {
+    fn name(&self) -> &str;
+    // hooks for commands, environments, and post-parse transforms
 }
 ```
 
-**Benefits:**
-- Pluggable math renderers
-- Easy to add new symbol sets
-- Testable in isolation
+**Built-in plugins:** text command and math command plugins live in
+`src/plugins.rs` (single module, not a directory).
 
-### 3. `PdfBuilder`
-Builds PDF documents from parsed elements.
+**Why a trait:** keeps the parser core stable while letting users add
+domain-specific LaTeX commands without forking the parser.
+
+### 3. `ProgressReporter` — streaming progress
+
+Defined in `src/streaming.rs`. Decouples progress reporting from the
+streaming converter so the same converter works headless (no-op) or with
+a console/CI reporter.
 
 ```rust
-pub trait PdfBuilder: Send + Sync {
-    fn build(&mut self, elements: Vec<TexElement>, output_path: &Path) -> Result<()>;
-    fn set_title(&mut self, title: String);
-    fn set_author(&mut self, author: String);
-    fn set_date(&mut self, date: String);
+pub trait ProgressReporter: Send {
+    fn report(&self, stage: &str, percent: u8);
 }
 ```
 
-**Benefits:**
-- Can swap PDF libraries
-- Easy to test without generating files
-- Supports different output formats
+**Implementations:** `ConsoleReporter` (stderr), `NoOpReporter` (silent).
 
-### 4. `FontProvider`
-Manages font loading and character support.
+## Concrete Core (not traits)
 
-```rust
-pub trait FontProvider: Send + Sync {
-    fn load_font(&self, path: &Path) -> Result<Vec<u8>>;
-    fn default_font(&self) -> Result<Vec<u8>>;
-    fn supports_character(&self, font_data: &[u8], ch: char) -> bool;
-}
-```
+These are structs, intentionally — they have a single implementation and
+wrapping them in traits would add indirection without benefit:
 
-**Benefits:**
-- Pluggable font sources
-- Easy to test font fallback
-- Supports custom fonts
-
-### 5. `Cache<K, V>`
-Generic caching operations.
-
-```rust
-pub trait Cache<K, V>: Send + Sync {
-    fn get(&self, key: &K) -> Option<&V>;
-    fn insert(&mut self, key: K, value: V);
-    fn clear(&mut self);
-    fn size(&self) -> usize;
-}
-```
-
-**Benefits:**
-- Pluggable cache implementations
-- Easy to test with mock cache
-- Performance optimization
-
-### 6. `TextLayout`
-Text layout and wrapping operations.
-
-```rust
-pub trait TextLayout: Send + Sync {
-    fn wrap_text(&self, text: &str, max_width: usize) -> Vec<String>;
-    fn text_width(&self, text: &str) -> f32;
-    fn line_height(&self, font_size: f32) -> f32;
-}
-```
-
-**Benefits:**
-- Different layout algorithms
-- Easy to test layout logic
-- Supports multiple languages
+- **`TexParser`** (`src/parser/mod.rs`) — recursive-descent parser producing
+  `Vec<TexElement>`. 1015-line `parse_next()` is monolithic by necessity
+  (borrow checker; see `TODO.md` Known Technical Debt).
+- **`MathFormatter`** (`src/math_formatter.rs`) — orchestrates math
+  formatting by delegating to `math/{symbols,scripts,radicals,fractions}`
+  submodules. 618+ Unicode symbol mappings.
+- **`NativeTexConverter`** — wires parser → `output::render_elements` →
+  format-specific renderer.
 
 ## Design Principles
 
-### 1. Single Responsibility
-Each trait has one clear purpose.
+1. **Traits at the seams, structs at the core.** A trait earns its place
+   only when there is a real second implementation or a testing seam.
+2. **Single responsibility.** Each trait has one purpose (convert, extend,
+   report).
+3. **Thread safety where it matters.** `Plugin: Send` so plugins can be
+   stored alongside the parser; `ProgressReporter: Send` for streaming.
+4. **Testability.** `TexConverter` enables mock converters; `Plugin`
+   enables in-process test plugins; `ProgressReporter` enables silent tests.
 
-### 2. Composability
-Traits can be combined to build features.
+## Extension Points
 
-```rust
-struct DocumentProcessor<P, F, B>
-where
-    P: TexParser,
-    F: MathFormatter,
-    B: PdfBuilder,
-{
-    parser: P,
-    formatter: F,
-    builder: B,
-}
-```
-
-### 3. Dependency Injection
-Dependencies are passed as trait objects or generics.
-
-```rust
-fn process_document<P: TexParser>(parser: &P, content: &str) -> Result<Vec<TexElement>> {
-    parser.parse(content)
-}
-```
-
-### 4. Thread Safety
-All traits require `Send + Sync` for parallel processing.
-
-### 5. Testability
-Easy to create mock implementations for testing.
-
-```rust
-struct MockMathFormatter;
-
-impl MathFormatter for MockMathFormatter {
-    fn format(&self, math: &str) -> String {
-        format!("[MATH: {}]", math)
-    }
-}
-```
-
-## Usage Examples
-
-### Using Traits for Testing
-
-```rust
-#[test]
-fn test_with_mock_formatter() {
-    let formatter = MockMathFormatter;
-    let result = formatter.format("\\alpha");
-    assert_eq!(result, "[MATH: \\alpha]");
-}
-```
-
-### Dependency Injection
-
-```rust
-fn convert_document<P, F, B>(
-    parser: &P,
-    formatter: &F,
-    builder: &mut B,
-    content: &str,
-    output: &Path,
-) -> Result<()>
-where
-    P: TexParser,
-    F: MathFormatter,
-    B: PdfBuilder,
-{
-    let elements = parser.parse(content)?;
-    builder.build(elements, output)?;
-    Ok(())
-}
-```
-
-### Trait Objects for Runtime Polymorphism
-
-```rust
-fn process_with_any_formatter(formatter: &dyn MathFormatter, math: &str) -> String {
-    formatter.format(math)
-}
-```
-
-## Current Implementations
-
-### MathFormatter
-- `MathFormatter` struct implements the trait
-- Supports 150+ mathematical symbols
-- Unicode output
-
-### Future Implementations
-
-#### TexParser
-- `NativeTexParser` - Current implementation
-- `StrictTexParser` - Strict LaTeX compliance
-- `MarkdownTexParser` - Markdown with LaTeX math
-
-#### PDF Rendering
-- `pdfrs_pdf::render_pdf_bytes` - Current implementation (vendored pdfrs engine)
-- `HtmlBuilder` - HTML output
-
-#### Cache
-- `MemoryCache` - In-memory caching
-- `FileCache` - Persistent file cache
-- `NoOpCache` - Disabled caching
-
-## Benefits
-
-### Modularity
-- Clear separation of concerns
-- Easy to understand and maintain
-- Independent development of components
-
-### Testability
-- Mock implementations for unit tests
-- Test components in isolation
-- Fast test execution
-
-### Extensibility
-- Add new implementations without changing existing code
-- Plugin system support
-- Easy to experiment with alternatives
-
-### Performance
-- Thread-safe by design
-- Enables parallel processing
-- Efficient resource management
-
-## Migration Path
-
-### Phase 1: Define Traits ✅
-- Created `src/traits.rs`
-- Defined core traits
-- Added documentation
-
-### Phase 2: Implement Traits (In Progress)
-- ✅ MathFormatter trait implementation
-- ⏳ TexParser trait implementation
-- ⏳ PdfBuilder trait implementation
-
-### Phase 3: Refactor Code
-- Use trait bounds in functions
-- Replace concrete types with trait objects
-- Add dependency injection
-
-### Phase 4: Add Implementations
-- Alternative parsers
-- Alternative builders
-- Caching implementations
-
-## Best Practices
-
-1. **Keep traits small** - Single responsibility
-2. **Use trait bounds** - Generic functions with trait constraints
-3. **Provide default implementations** - Where sensible
-4. **Document trait contracts** - Clear expectations
-5. **Test trait implementations** - Comprehensive test coverage
+- **New output format** — add a variant to `OutputFormat` and a renderer in
+  `src/output/`.
+- **New LaTeX command** — implement `Plugin` and register it, or extend
+  `parser/commands.rs` for built-ins.
+- **New math symbol** — add to `lookup_symbol` in `math/symbols.rs` (check
+  for duplicates against existing entries).
+- **Alternative converter** — implement `TexConverter` and dispatch from
+  the CLI.
 
 ## References
 
-- MiniTeX atomic traits: `src/core/traits.rs`
-- Rust trait documentation
-- Design patterns for trait-based architecture
+- `src/lib.rs` — `TexConverter` trait and `NativeTexConverter`
+- `src/plugins.rs` — `Plugin` trait and built-in plugins
+- `src/streaming.rs` — `ProgressReporter` trait and reporters
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — module relationships and data flow

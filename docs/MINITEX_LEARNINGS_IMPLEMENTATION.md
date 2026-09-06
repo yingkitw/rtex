@@ -1,5 +1,7 @@
 # MiniTeX Best Practices - Implementation Plan for rtex
 
+> **Historical document.** This was a planning doc dated January 2026. References to `src/config.rs` and `lopdf` are outdated — `config.rs` was removed and all PDF generation now uses the vendored [pdfrs](https://crates.io/crates/pdfrs) engine. Kept for reference only.
+
 ## Analysis Date: January 12, 2026
 
 ## Key Learnings from MiniTeX

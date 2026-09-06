@@ -1,6 +1,6 @@
 //! Simple macro expansion engine for user-defined LaTeX commands.
 //!
-//! Supports `\newcommand` (with optional parameter count) and `\def`.
+//! Supports `\newcommand`, `\renewcommand` (with optional parameter count) and `\def`.
 //! Macros are extracted from the source in a first pass, then all
 //! invocations are expanded before the document is parsed.
 
@@ -25,7 +25,7 @@ impl MacroStore {
         Self::default()
     }
 
-    /// Scan `text` for `\newcommand` and `\def` declarations and store them.
+    /// Scan `text` for `\newcommand`, `\renewcommand`, `\providecommand`, and `\def` declarations and store them.
     /// The definitions themselves are removed from the returned string.
     pub fn extract_definitions(&mut self, text: &str) -> String {
         let mut result = String::with_capacity(text.len());
@@ -34,7 +34,9 @@ impl MacroStore {
         while i < text.len() {
             let remaining = &text[i..];
 
-            if remaining.starts_with("\\newcommand")
+            if (remaining.starts_with("\\newcommand")
+                || remaining.starts_with("\\renewcommand")
+                || remaining.starts_with("\\providecommand"))
                 && let Some(skip) = self.parse_newcommand(remaining)
             {
                 i += skip;
@@ -74,10 +76,17 @@ impl MacroStore {
     // Parsing helpers
     // ------------------------------------------------------------------
 
-    /// Parse `\newcommand{\name}[n]{body}` or `\newcommand\name[n]{body}`.
-    /// Returns the number of bytes consumed on success.
+    /// Parse `\newcommand{\name}[n]{body}`, `\renewcommand{...}`, `\providecommand{...}`,
+    /// or `\newcommand\name[n]{body}`. Returns the number of bytes consumed on success.
+    /// `\providecommand` only inserts a definition when the name is not already defined.
     fn parse_newcommand(&mut self, text: &str) -> Option<usize> {
-        let start = "\\newcommand".len();
+        let (start, only_if_absent) = if text.starts_with("\\providecommand") {
+            ("\\providecommand".len(), true)
+        } else if text.starts_with("\\renewcommand") {
+            ("\\renewcommand".len(), false)
+        } else {
+            ("\\newcommand".len(), false)
+        };
         let rest = text.get(start..)?;
 
         // Skip optional whitespace
@@ -126,14 +135,17 @@ impl MacroStore {
         let (body, end) = extract_braced(rest, pos)?;
         pos = end;
 
-        self.defs.insert(
-            name.clone(),
-            MacroDef {
-                name,
-                param_count,
-                body,
-            },
-        );
+        // `\providecommand` only defines when the name is not already defined.
+        if !only_if_absent || !self.defs.contains_key(&name) {
+            self.defs.insert(
+                name.clone(),
+                MacroDef {
+                    name,
+                    param_count,
+                    body,
+                },
+            );
+        }
 
         Some(start + pos)
     }
@@ -199,9 +211,17 @@ impl MacroStore {
         while i < text.len() {
             let remaining = &text[i..];
 
-            if remaining.starts_with("\\newcommand") || remaining.starts_with("\\def") {
+            if remaining.starts_with("\\newcommand")
+                || remaining.starts_with("\\renewcommand")
+                || remaining.starts_with("\\providecommand")
+                || remaining.starts_with("\\def")
+            {
                 // Should have been stripped during extraction, but skip just in case.
-                let cmd = if remaining.starts_with("\\newcommand") {
+                let cmd = if remaining.starts_with("\\providecommand") {
+                    "\\providecommand"
+                } else if remaining.starts_with("\\renewcommand") {
+                    "\\renewcommand"
+                } else if remaining.starts_with("\\newcommand") {
                     "\\newcommand"
                 } else {
                     "\\def"
@@ -387,12 +407,29 @@ mod tests {
     }
 
     #[test]
-    fn test_renewcommand_not_supported() {
-        // \renewcommand is not currently parsed — the original \newcommand definition persists
+    fn test_renewcommand_overrides_definition() {
+        // \renewcommand overrides an existing \newcommand definition
         let mut store = MacroStore::new();
         store.extract_definitions("\\newcommand{\\foo}{old}\\renewcommand{\\foo}{new}");
-        // renewcommand is not stripped, foo keeps its original body
-        assert_eq!(store.defs["foo"].body, "old");
+        assert_eq!(store.defs["foo"].body, "new");
+        assert_eq!(store.expand_all("\\foo"), "new");
+    }
+
+    #[test]
+    fn test_providecommand_defines_when_absent() {
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\providecommand{\\foo}{bar}");
+        assert_eq!(store.defs["foo"].body, "bar");
+        assert_eq!(store.expand_all("\\foo"), "bar");
+    }
+
+    #[test]
+    fn test_providecommand_does_not_override_existing() {
+        // \providecommand must not overwrite a prior \newcommand definition.
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\foo}{first}\\providecommand{\\foo}{second}");
+        assert_eq!(store.defs["foo"].body, "first", "providecommand must keep the existing definition");
+        assert_eq!(store.expand_all("\\foo"), "first");
     }
 
     #[test]

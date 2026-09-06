@@ -11,7 +11,7 @@ Thank you for your interest in contributing! This guide covers how to get starte
 2. **Clone and build**
    ```bash
    git clone <repository>
-   cd latex-rs
+   cd rtex
    cargo build
    ```
 
@@ -24,39 +24,50 @@ Thank you for your interest in contributing! This guide covers how to get starte
 
 ```
 src/
-  lib.rs              # Core conversion logic and public API
+  lib.rs              # Core conversion logic, TexConverter trait, public API
   main.rs             # CLI entry point (binary: rtex)
-  error.rs            # Structured error types with Position tracking
-  config.rs           # Configuration system with quality presets
-  common.rs           # Shared traits (Clear, Stats)
-  color.rs            # Color struct with RGB and named color parsing
-  table.rs            # Table parsing and PDF rendering
-  macros.rs           # Macro definition and expansion system
-  layout.rs           # LayoutState for text alignment and indentation
-  page_layout.rs      # Page dimensions, margins, orientation helpers
-  math_formatter.rs   # Math expression formatting orchestrator
+  error.rs            # LatexError + Position (thiserror)
+  table.rs            # Table parsing and rendering
+  macros.rs           # \newcommand / \renewcommand / \def macro expansion
+  math_formatter.rs   # Math formatting orchestrator (struct, not a trait)
+  intermediate.rs     # Intermediate artifact writer (.expanded.tex, .ast.json)
+  cache.rs            # DocumentCache with TTL/LRU
+  incremental.rs      # Incremental compilation (source-hash tracking)
+  streaming.rs        # StreamingConverter + ProgressReporter trait
+  watch.rs            # File watch mode for auto-rebuild
+  plugins.rs          # Plugin trait and built-in plugins
+  utils.rs            # Shared utilities (extract_braced, etc.)
+  wasm.rs             # wasm-bindgen exports (feature: wasm)
+  tests.rs            # Inline unit tests
+  example_tests.rs    # Example file compilation tests
   parser/
     mod.rs            # TexParser, TexElement enum, environment dispatch
     text.rs           # Raw text accumulation
-    math.rs           # Inline/display math parsing
-    commands.rs       # Section, URL, rule, footnote, caption parsers
-    plugin.rs         # Plugin trait for extensible commands
+    math.rs           # Inline and display math delimiter parsing
+    commands.rs       # Backslash command handlers (sections, refs, footnotes, ...)
   math/
-    symbols.rs        # 566+ LaTeX-to-Unicode mappings
+    symbols.rs        # 618+ LaTeX-to-Unicode mappings
     scripts.rs        # Superscript/subscript Unicode conversion
-    radicals.rs       # Square root formatting with Unicode
-    fractions.rs      # Fraction → Unicode fraction or parenthesized form
-  pdf/
-    mod.rs            # PDF module re-exports
-    core.rs           # ContentStream, PdfGenerator, PdfObj, HEX_TABLE
-    builder.rs        # PdfBuilder, LayoutState, text block rendering
-    text_renderer.rs  # Text normalization and wrapping utilities
-    font_subset.rs    # Font subsetting to only used characters
-  bin/
-    debug_*.rs          # Debug/test binaries
-  plugins/
-    text_commands.rs  # Built-in text command plugins
-    math_commands.rs  # Built-in math command plugins
+    radicals.rs       # Square root (\sqrt) formatting
+    fractions.rs      # Fraction -> Unicode or parenthesized form
+    mathml.rs         # LaTeX math -> presentation MathML for HTML
+  output/
+    mod.rs            # Output dispatcher (PDF, HTML, DOCX, EPUB)
+    common.rs         # Shared output utilities (DocumentMeta)
+    pdfrs_pdf.rs      # PDF generation via vendored pdfrs (sole PDF backend)
+    html.rs            # HTML output backend
+    docx.rs            # DOCX output backend
+    epub.rs            # EPUB output backend
+  packages/           # CTAN package scanning and fetching
+  lsp/                # Language Server Protocol support (feature: lsp)
+    server.rs         # stdio LSP loop (rtex-lsp binary)
+    diagnostics.rs    # Error/warning diagnostics
+    completion.rs      # Autocomplete candidates
+    hover.rs           # Hover documentation
+    symbols.rs         # Document symbol outline
+  bin/                # Debug/test binaries (feature: dev-bins)
+vendor/
+  pdfrs/              # Vendored pdfrs PDF engine (local path dependency)
 ```
 
 ## Coding Guidelines

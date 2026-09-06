@@ -3,13 +3,13 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Tests](https://img.shields.io/badge/tests-717%2B-brightgreen.svg)](TODO.md)
+[![Tests](https://img.shields.io/badge/tests-721%2B-brightgreen.svg)](TODO.md)
 [![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-450%2B-informational.svg)](TODO.md)
 [![Math symbols](https://img.shields.io/badge/math%20symbols-618%2B-informational.svg)](TODO.md)
 [![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
 [![LSP](https://img.shields.io/badge/LSP-rtex--lsp-blueviolet.svg)](docs/LSP.md)
 [![No TeX Live](https://img.shields.io/badge/TeX%20Live-not%20required-critical.svg)](#why-rtex)
-[![Repository](https://img.shields.io/badge/github-yingkitw%2Frtex-181717?logo=github)](https://github.com/yingkitw/rtex)
+[![Repository](https://img.shields.io/badge/github-yingkitw%2Flatex--rs-181717?logo=github)](https://github.com/yingkitw/latex-rs)
 
 A native TeX-to-document converter written in Rust. **No LaTeX installation required.**
 
@@ -256,7 +256,7 @@ cargo test
 ```
 
 The test suite includes:
-- 717+ comprehensive tests (717 passing, 3 ignored)
+- 721+ comprehensive tests (508 lib unit + 213 integration)
 - PDF generation verification
 - File size validation
 - PDF header verification

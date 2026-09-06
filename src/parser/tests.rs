@@ -140,6 +140,34 @@ int main() {
     }
 
     #[test]
+    fn verbatim_does_not_swallow_following_content() {
+        // Regression: parse_lstlisting used to always search for \end{lstlisting},
+        // so a verbatim block consumed everything after \end{verbatim}.
+        let content = r#"\documentclass{article}
+\begin{document}
+\begin{verbatim}
+raw code
+\end{verbatim}
+\section{After}
+Text after verbatim.
+\end{document}
+"#;
+
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+
+        let code = elements.iter().find_map(|e| {
+            if let TexElement::CodeBlock(c) = e { Some(c) } else { None }
+        });
+        let code = code.expect("expected a CodeBlock");
+        assert_eq!(code, "raw code", "verbatim block should contain only its body");
+        assert!(
+            elements.iter().any(|e| matches!(e, TexElement::Section { title, .. } if title == "After")),
+            "section after verbatim must still be parsed"
+        );
+    }
+
+    #[test]
     fn parser_parses_tableofcontents() {
         let content = r#"\documentclass{article}
 \begin{document}
@@ -2048,6 +2076,23 @@ Hello
         let elements = parser.parse();
         assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("oldsection"))),
             "\\let should be consumed");
+    }
+
+    #[test]
+    fn parser_skips_endsloppypar() {
+        // Regression: "endsloppypar" was missing its backslash in the skip list,
+        // so \endsloppypar fell through to unknown-command handling and leaked.
+        let content = r#"\documentclass{article}
+\begin{document}
+\sloppypar
+Loose text.
+\endsloppypar
+After.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(!elements.iter().any(|e| matches!(e, TexElement::Text(t) if t.contains("endsloppypar") || t.contains("sloppypar"))),
+            "\\sloppypar and \\endsloppypar should be consumed, not leaked into text");
     }
 
     #[test]

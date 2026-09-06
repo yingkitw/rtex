@@ -15,7 +15,7 @@ A **native subset LaTeX converter** — not a replacement for pdflatex/xelatex/l
 |------|--------|
 | TikZ / PGF / PGFPlots | Not supported |
 | Beamer / complex document classes | Partial (`article`-style only) |
-| Raw TeX `\catcode` / glue / boxes | Primitives exist in `src/tex/` but not wired to layout |
+| Raw TeX `\catcode` / glue / boxes | Primitives are not wired to layout |
 | Full package execution | `.sty` files are cached/fetched but not interpreted as TeX macros |
 | Algorithm2e, minted, etc. | Not supported unless parsed as plain text |
 | PDF/A, tagged PDF, ICC profiles | Not implemented |
@@ -23,7 +23,7 @@ A **native subset LaTeX converter** — not a replacement for pdflatex/xelatex/l
 
 ## Math
 
-- 566 LaTeX math commands map to Unicode via `MathFormatter`
+- 618 LaTeX math commands map to Unicode via `MathFormatter`
 - Multi-line math environments (`align`, `align*`, `gather`, `gather*`, `multline`,
   `multline*`, `cases`) are parsed and rendered via the pdfrs engine.
   `align` preserves `&` alignment markers and renders as aligned columns;
