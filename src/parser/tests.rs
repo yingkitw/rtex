@@ -2109,6 +2109,44 @@ Hello
     }
 
     #[test]
+    fn parser_converts_text_ligatures() {
+        // Regression: LaTeX text-mode ligatures (---, --, ``, '') were passed
+        // through as literal characters instead of their Unicode equivalents.
+        let content = "Pages 10--20 show ``quotes'' and an em---dash.";
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        let joined: String = elements
+            .iter()
+            .filter_map(|e| match e {
+                TexElement::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(joined.contains('\u{2013}'), "en-dash: {joined:?}");
+        assert!(joined.contains('\u{2014}'), "em-dash: {joined:?}");
+        assert!(joined.contains('\u{201C}'), "left double quote: {joined:?}");
+        assert!(joined.contains('\u{201D}'), "right double quote: {joined:?}");
+        assert!(!joined.contains("--"), "raw -- should be gone: {joined:?}");
+    }
+
+    #[test]
+    fn parser_preserves_ligatures_in_math() {
+        // `--` inside inline math is two minus signs, not an en-dash.
+        let content = "See $a -- b$ here.";
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        let joined: String = elements
+            .iter()
+            .filter_map(|e| match e {
+                TexElement::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(joined.contains("$a -- b$"), "math span preserved verbatim: {joined:?}");
+        assert!(!joined.contains('\u{2013}'), "no en-dash in math: {joined:?}");
+    }
+
+    #[test]
     fn parser_skips_floatsep() {
         let content = r#"\documentclass{article}
 \floatsep{12pt}

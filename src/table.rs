@@ -45,10 +45,23 @@ impl Table {
                 || line.starts_with("\\midrule")
                 || line.starts_with("\\bottomrule")
                 || line.starts_with("\\hline")
+                || line.starts_with("\\cline")
+                || line.starts_with("\\cmidrule")
             {
                 rows.push(Row {
                     cells: vec![],
                     is_separator: true,
+                });
+                continue;
+            }
+
+            // A full-width \multicolumn row has no `&` and would otherwise be
+            // skipped as a command line — handle it explicitly.
+            if line.starts_with("\\multicolumn") && !line.contains('&') {
+                let cells = expand_multicolumn(line);
+                rows.push(Row {
+                    cells,
+                    is_separator: false,
                 });
                 continue;
             }
@@ -61,13 +74,7 @@ impl Table {
             if line.contains('&') {
                 let cells: Vec<String> = line
                     .split('&')
-                    .map(|s| {
-                        s.trim()
-                            .trim_end_matches("\\\\")
-                            .trim()
-                            .replace("\\$", "$")
-                            .to_string()
-                    })
+                    .flat_map(expand_multicolumn)
                     .collect();
                 rows.push(Row {
                     cells,
@@ -80,10 +87,30 @@ impl Table {
     }
 }
 
+/// Consume a balanced `{...}` group from a char iterator, assuming the next
+/// char to read is `{`. Used for `p`/`m`/`b{width}` and `@`/`>`/`<{...}` column
+/// spec forms so their braced argument does not leak spurious alignment
+/// columns (e.g. the `c` in `m{3cm}` or the `r` in `>{\raggedright}`).
+fn consume_braced(chars: &mut std::str::Chars<'_>) {
+    let mut depth = 0;
+    for c in chars.by_ref() {
+        if c == '{' {
+            depth += 1;
+        } else if c == '}' {
+            depth -= 1;
+            if depth == 0 {
+                break;
+            }
+        }
+    }
+}
+
 /// Parse a LaTeX column specification string into alignment values.
 ///
-/// Ignores `|`, `@{}`, and `p{width}` — treats `p` as left-aligned.
-/// Expands `*{n}{spec}` repetition (e.g. `*{3}{l}` → `lll`) before parsing.
+/// Ignores `|`, `@{}`, `p`/`m`/`b{width}` (treated as left-aligned), and
+/// `>`/`<` decorators (argument consumed, no column produced). `X`
+/// (tabularx) is approximated as left-aligned. Expands `*{n}{spec}`
+/// repetition (e.g. `*{3}{l}` → `lll`) before parsing.
 fn parse_column_spec(spec: &str) -> Vec<Align> {
     let expanded = expand_repetitions(spec.trim());
     let mut result = Vec::new();
@@ -97,29 +124,17 @@ fn parse_column_spec(spec: &str) -> Vec<Align> {
             'l' => result.push(Align::Left),
             'c' => result.push(Align::Center),
             'r' => result.push(Align::Right),
-            'p' => {
-                // p{width} — consume until matching }
-                let mut depth = 0;
-                for c in chars.by_ref() {
-                    if c == '{' {
-                        depth += 1;
-                    } else if c == '}' {
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
-                    }
-                }
+            // Paragraph-style columns: p/m/b{width} — consume the width, treat as left.
+            'p' | 'm' | 'b' => {
+                consume_braced(&mut chars);
                 result.push(Align::Left);
             }
+            // tabularx X column — expand-to-fill; approximated as left-aligned.
+            'X' => result.push(Align::Left),
             '|' | ' ' | '\t' => {} // ignore
-            '@' => {
-                // @{} column spacing — skip until }
-                for c in chars.by_ref() {
-                    if c == '}' {
-                        break;
-                    }
-                }
+            // Decorators and spacing that take a {...} argument: @{}, >{...}, <{...}
+            '@' | '>' | '<' => {
+                consume_braced(&mut chars);
             }
             _ => {}
         }
@@ -183,6 +198,49 @@ fn expand_repetitions(spec: &str) -> String {
     result
 }
 
+/// Normalise a raw table cell: trim whitespace, strip a trailing `\\` row break,
+/// and unescape `\$` to `$`.
+fn normalize_cell(s: &str) -> String {
+    s.trim()
+        .trim_end_matches("\\\\")
+        .trim()
+        .replace("\\$", "$")
+        .to_string()
+}
+
+/// Expand a `\multicolumn{n}{align}{content}` cell into `n` cells: the content
+/// followed by `n-1` empty cells. Non-multicolumn cells are normalised as-is.
+/// This keeps `row.cells.len()` aligned with the column count so subsequent
+/// rows line up, without requiring colspan support in the output backends.
+fn expand_multicolumn(cell: &str) -> Vec<String> {
+    let trimmed = cell.trim();
+    let Some(rest) = trimmed.strip_prefix("\\multicolumn") else {
+        return vec![normalize_cell(cell)];
+    };
+    let rest = rest.trim_start();
+    let Some((n_str, after_n)) = read_braced_group(rest, 0) else {
+        return vec![normalize_cell(cell)];
+    };
+    let Ok(n) = n_str.trim().parse::<usize>() else {
+        return vec![normalize_cell(cell)];
+    };
+    let rest = rest[after_n..].trim_start();
+    let Some((_align, after_align)) = read_braced_group(rest, 0) else {
+        return vec![normalize_cell(cell)];
+    };
+    let rest = rest[after_align..].trim_start();
+    let Some((content, _)) = read_braced_group(rest, 0) else {
+        return vec![normalize_cell(cell)];
+    };
+    let n = n.max(1);
+    let mut cells = Vec::with_capacity(n);
+    cells.push(content.trim().to_string());
+    for _ in 1..n {
+        cells.push(String::new());
+    }
+    cells
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,6 +297,34 @@ mod tests {
         assert!(table.rows[0].is_separator); // toprule
         assert!(!table.rows[1].is_separator); // data
         assert!(table.rows[2].is_separator); // midrule
+        assert!(!table.rows[3].is_separator); // data
+        assert!(table.rows[4].is_separator); // bottomrule
+    }
+
+    #[test]
+    fn test_table_parse_cline_as_separator() {
+        let spec = "ll";
+        let content = "A & B \\\\\n\\cline{1-2}\nC & D \\\\";
+        let table = Table::parse(spec, content);
+
+        // \cline{1-2} must become a separator row, not be silently dropped.
+        assert_eq!(table.rows.len(), 3, "cline should produce a separator row");
+        assert!(!table.rows[0].is_separator); // A & B
+        assert!(table.rows[1].is_separator); // \cline{1-2}
+        assert!(!table.rows[2].is_separator); // C & D
+    }
+
+    #[test]
+    fn test_table_parse_cmidrule_as_separator() {
+        let spec = "lll";
+        // booktabs \cmidrule with optional (lr) trim and a brace argument.
+        let content = "\\toprule\nA & B & C \\\\\n\\cmidrule(lr){1-2}\n1 & 2 & 3 \\\\\n\\bottomrule";
+        let table = Table::parse(spec, content);
+
+        assert_eq!(table.rows.len(), 5);
+        assert!(table.rows[0].is_separator); // toprule
+        assert!(!table.rows[1].is_separator); // data
+        assert!(table.rows[2].is_separator); // \cmidrule(lr){1-2}
         assert!(!table.rows[3].is_separator); // data
         assert!(table.rows[4].is_separator); // bottomrule
     }
@@ -308,5 +394,58 @@ mod tests {
         let table = Table::parse("*{3}{l}", "1 & 2 & 3 \\\\");
         assert_eq!(table.columns.len(), 3);
         assert_eq!(table.rows[0].cells, vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn test_table_parse_multicolumn_in_row() {
+        // \multicolumn{2}{c}{Header} spans the first two columns; the third
+        // cell lands in column 3. The row should have 3 cells.
+        let spec = "lll";
+        let content = "\\multicolumn{2}{c}{Header} & x \\\\\n1 & 2 & 3 \\\\";
+        let table = Table::parse(spec, content);
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0].cells, vec!["Header", "", "x"]);
+        assert_eq!(table.rows[1].cells, vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn test_table_parse_multicolumn_full_width() {
+        // A full-width multicolumn row (no &) used to be silently skipped.
+        let spec = "lll";
+        let content = "\\multicolumn{3}{c}{Full title} \\\\\na & b & c \\\\";
+        let table = Table::parse(spec, content);
+        assert_eq!(table.rows.len(), 2, "full-width multicolumn row must be kept");
+        assert_eq!(table.rows[0].cells, vec!["Full title", "", ""]);
+        assert_eq!(table.rows[1].cells, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_table_parse_multicolumn_as_last_cell() {
+        let spec = "lll";
+        let content = "a & \\multicolumn{2}{c}{BC} \\\\";
+        let table = Table::parse(spec, content);
+        assert_eq!(table.rows[0].cells, vec!["a", "BC", ""]);
+    }
+
+    #[test]
+    fn test_parse_column_spec_m_b_columns() {
+        // Regression: m{3cm} and b{3cm} used to leak the inner 'c' as a spurious
+        // Center column. They must consume the width and produce one Left column.
+        assert_eq!(parse_column_spec("m{3cm}l"), vec![Align::Left, Align::Left]);
+        assert_eq!(parse_column_spec("b{2cm}r"), vec![Align::Left, Align::Right]);
+    }
+
+    #[test]
+    fn test_parse_column_spec_tabularx_x() {
+        assert_eq!(parse_column_spec("XXX"), vec![Align::Left, Align::Left, Align::Left]);
+        assert_eq!(parse_column_spec("lXr"), vec![Align::Left, Align::Left, Align::Right]);
+    }
+
+    #[test]
+    fn test_parse_column_spec_decorator_braces() {
+        // >{...} and <{...} decorators used to leak inner l/c/r as spurious columns.
+        assert_eq!(parse_column_spec(">{\\bfseries}l"), vec![Align::Left]);
+        assert_eq!(parse_column_spec("r<{\\hline}"), vec![Align::Right]);
+        assert_eq!(parse_column_spec(">{\\raggedright}p{3cm}"), vec![Align::Left]);
     }
 }

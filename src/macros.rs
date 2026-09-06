@@ -18,6 +18,8 @@ pub struct MacroDef {
 #[derive(Debug, Default)]
 pub struct MacroStore {
     defs: HashMap<String, MacroDef>,
+    /// `\let\new\old` aliases: `\new` expands to `\old`.
+    aliases: HashMap<String, String>,
 }
 
 impl MacroStore {
@@ -45,6 +47,13 @@ impl MacroStore {
 
             if remaining.starts_with("\\def")
                 && let Some(skip) = self.parse_def(remaining)
+            {
+                i += skip;
+                continue;
+            }
+
+            if remaining.starts_with("\\let")
+                && let Some(skip) = self.parse_let(remaining)
             {
                 i += skip;
                 continue;
@@ -200,6 +209,47 @@ impl MacroStore {
         Some(start + pos)
     }
 
+    /// Parse `\let\new\old` or `\let\new=\old` — alias `\new` to `\old`.
+    /// Returns the number of bytes consumed on success.
+    fn parse_let(&mut self, text: &str) -> Option<usize> {
+        let start = "\\let".len();
+        let rest = text.get(start..)?;
+        let mut pos = 0;
+        while pos < rest.len() && rest[pos..].starts_with(|c: char| c.is_whitespace()) {
+            pos += rest[pos..].chars().next()?.len_utf8();
+        }
+        if !rest[pos..].starts_with('\\') {
+            return None;
+        }
+        let new_end = rest[pos + 1..]
+            .find(|c: char| !c.is_alphabetic() && c != '*')
+            .map(|i| pos + 1 + i)
+            .unwrap_or(rest.len());
+        let new_name = rest[pos + 1..new_end].to_string();
+        pos = new_end;
+        while pos < rest.len() && rest[pos..].starts_with(|c: char| c.is_whitespace()) {
+            pos += rest[pos..].chars().next()?.len_utf8();
+        }
+        if rest[pos..].starts_with('=') {
+            pos += 1;
+            while pos < rest.len() && rest[pos..].starts_with(|c: char| c.is_whitespace()) {
+                pos += rest[pos..].chars().next()?.len_utf8();
+            }
+        }
+        if !rest[pos..].starts_with('\\') {
+            return None;
+        }
+        let old_end = rest[pos + 1..]
+            .find(|c: char| !c.is_alphabetic() && c != '*')
+            .map(|i| pos + 1 + i)
+            .unwrap_or(rest.len());
+        let old_name = rest[pos + 1..old_end].to_string();
+        pos = old_end;
+
+        self.aliases.insert(new_name, old_name);
+        Some(start + pos)
+    }
+
     // ------------------------------------------------------------------
     // Expansion helpers
     // ------------------------------------------------------------------
@@ -215,6 +265,7 @@ impl MacroStore {
                 || remaining.starts_with("\\renewcommand")
                 || remaining.starts_with("\\providecommand")
                 || remaining.starts_with("\\def")
+                || remaining.starts_with("\\let")
             {
                 // Should have been stripped during extraction, but skip just in case.
                 let cmd = if remaining.starts_with("\\providecommand") {
@@ -223,6 +274,8 @@ impl MacroStore {
                     "\\renewcommand"
                 } else if remaining.starts_with("\\newcommand") {
                     "\\newcommand"
+                } else if remaining.starts_with("\\let") {
+                    "\\let"
                 } else {
                     "\\def"
                 };
@@ -248,6 +301,15 @@ impl MacroStore {
                     let expanded = self.substitute(&def.body, &args);
                     result.push_str(&expanded);
                     i += 1 + name_end + consumed;
+                    continue;
+                }
+
+                // `\let` alias: emit the aliased command name so the parser
+                // (or a later expansion round) handles it.
+                if let Some(target) = self.aliases.get(name) {
+                    result.push('\\');
+                    result.push_str(target);
+                    i += 1 + name_end;
                     continue;
                 }
             }
@@ -430,6 +492,30 @@ mod tests {
         store.extract_definitions("\\newcommand{\\foo}{first}\\providecommand{\\foo}{second}");
         assert_eq!(store.defs["foo"].body, "first", "providecommand must keep the existing definition");
         assert_eq!(store.expand_all("\\foo"), "first");
+    }
+
+    #[test]
+    fn test_let_alias() {
+        // \let\new\old makes \new expand to \old
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\let\\oldsection\\section");
+        assert_eq!(store.expand_all("\\oldsection"), "\\section");
+    }
+
+    #[test]
+    fn test_let_alias_with_equals() {
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\let\\foo=\\bar");
+        assert_eq!(store.expand_all("\\foo"), "\\bar");
+    }
+
+    #[test]
+    fn test_let_alias_to_macro() {
+        // \let\new\old where \old is itself a macro: alias resolves first,
+        // then the macro expands in a later round.
+        let mut store = MacroStore::new();
+        store.extract_definitions("\\newcommand{\\bar}{BAR}\\let\\foo\\bar");
+        assert_eq!(store.expand_all("\\foo"), "BAR");
     }
 
     #[test]

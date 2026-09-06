@@ -16,6 +16,7 @@ impl MathFormatter {
     pub fn format(math: &str) -> String {
         let mut result = math.to_string();
 
+        result = Self::convert_old_fractions(&result);
         result = Self::format_matrices(&result);
         result = Self::format_sqrt(&result);
         result = Self::format_fractions(&result);
@@ -40,38 +41,44 @@ impl MathFormatter {
         let mut result = String::new();
         let mut index = 0;
 
+        // (environment name, opening delimiter, closing delimiter)
+        const MATRIX_ENVS: &[(&str, char, char)] = &[
+            ("pmatrix", '(', ')'),
+            ("bmatrix", '[', ']'),
+            ("Bmatrix", '{', '}'),
+            ("vmatrix", '|', '|'),
+            ("Vmatrix", '\u{2016}', '\u{2016}'), // ‖ double vertical
+            ("matrix", '\0', '\0'),              // no delimiters
+            ("smallmatrix", '\0', '\0'),        // no delimiters
+        ];
+
         while index < text.len() {
             let remaining = &text[index..];
-            if remaining.starts_with("\\begin{pmatrix}") {
-                let matrix_end = index + "\\begin{pmatrix}".len();
-
-                // Find the matching \end{pmatrix}
-                if let Some(end_pos) = remaining.find("\\end{pmatrix}") {
-                    let matrix_content = &remaining[matrix_end - index..end_pos];
-
-                    // Convert matrix to bracket notation
-                    result.push('[');
-                    result.push_str(matrix_content);
-                    result.push(']');
-
-                    index += end_pos + "\\end{pmatrix}".len();
-                    continue;
+            let mut matched = false;
+            for (env, open, close) in MATRIX_ENVS {
+                let begin = format!("\\begin{{{env}}}");
+                let end = format!("\\end{{{env}}}");
+                if remaining.starts_with(&begin) {
+                    if let Some(rel_end) = Self::find_matching_end(remaining, &begin, &end) {
+                        let body = &remaining[begin.len()..rel_end];
+                        // Recurse so nested matrices of the same/other env get
+                        // their own delimiters instead of leaking raw \begin/\end.
+                        let formatted_body = Self::format_matrices(body);
+                        if *open != '\0' {
+                            result.push(*open);
+                        }
+                        result.push_str(&formatted_body);
+                        if *close != '\0' {
+                            result.push(*close);
+                        }
+                        index += rel_end + end.len();
+                        matched = true;
+                        break;
+                    }
                 }
             }
-
-            if remaining.starts_with("\\begin{bmatrix}") {
-                let matrix_end = index + "\\begin{bmatrix}".len();
-
-                if let Some(end_pos) = remaining.find("\\end{bmatrix}") {
-                    let matrix_content = &remaining[matrix_end - index..end_pos];
-
-                    result.push('[');
-                    result.push_str(matrix_content);
-                    result.push(']');
-
-                    index += end_pos + "\\end{bmatrix}".len();
-                    continue;
-                }
+            if matched {
+                continue;
             }
 
             let ch = remaining
@@ -82,6 +89,124 @@ impl MathFormatter {
             index += ch.len_utf8();
         }
 
+        result
+    }
+
+    /// Find the position (relative to `text`) of the `\end{...}` marker that
+    /// matches the `\begin{...}` marker at the start of `text`, accounting for
+    /// nested environments of the same name. Returns `None` if unbalanced.
+    fn find_matching_end(text: &str, begin: &str, end: &str) -> Option<usize> {
+        let mut depth = 0;
+        let mut search_from = 0;
+        while let Some(rel) = text[search_from..].find('\\') {
+            let pos = search_from + rel;
+            if text[pos..].starts_with(begin) {
+                depth += 1;
+                search_from = pos + begin.len();
+            } else if text[pos..].starts_with(end) {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(pos);
+                }
+                search_from = pos + end.len();
+            } else {
+                search_from = pos + 1;
+            }
+        }
+        None
+    }
+
+    /// Find the `{` and `}` that enclose the keyword at `kw_start..kw_start+kw_len`.
+    /// Returns `(open_index, close_index)` where `text[open] == '{'` and
+    /// `text[close] == '}'`. Returns `None` if there is no enclosing group.
+    fn find_enclosing_braces(text: &str, kw_start: usize, kw_len: usize) -> Option<(usize, usize)> {
+        let bytes = text.as_bytes();
+        // Scan left for the opening brace of the current group.
+        let mut depth = 0;
+        let mut open = None;
+        let mut i = kw_start;
+        while i > 0 {
+            i -= 1;
+            let ch = bytes[i];
+            if ch == b'}' {
+                depth += 1;
+            } else if ch == b'{' {
+                if depth == 0 {
+                    open = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+        }
+        let open = open?;
+        // Scan right for the matching closing brace.
+        let mut depth = 0;
+        let mut close = None;
+        let mut i = kw_start + kw_len;
+        while i < bytes.len() {
+            let ch = bytes[i];
+            if ch == b'{' {
+                depth += 1;
+            } else if ch == b'}' {
+                if depth == 0 {
+                    close = Some(i);
+                    break;
+                }
+                depth -= 1;
+            }
+            i += 1;
+        }
+        Some((open, close?))
+    }
+
+    /// Rewrite old-style TeX fraction/binomial operators to their modern forms.
+    ///
+    /// `{a \over b}` -> `\frac{a}{b}`; `{n \choose k}` (and `\brack`/`\brace`)
+    /// -> `\binom{n}{k}`. Only the explicit-brace form is converted; the
+    /// ambiguous brace-less form is left untouched.
+    fn convert_old_fractions(text: &str) -> String {
+        let ops: &[(&str, &str)] = &[
+            ("\\over", "\\frac"),
+            ("\\choose", "\\binom"),
+            ("\\brack", "\\binom"),
+            ("\\brace", "\\binom"),
+        ];
+        let mut result = text.to_string();
+        loop {
+            // Find the earliest keyword occurrence with a word boundary
+            // (next char not alphabetic), so `\over` does not match `\overline`.
+            let mut earliest: Option<(usize, &str, &str)> = None;
+            for (op, target) in ops {
+                let mut search_from = 0;
+                while let Some(rel) = result[search_from..].find(op) {
+                    let pos = search_from + rel;
+                    let after = pos + op.len();
+                    let next_is_alpha = result
+                        .get(after..)
+                        .and_then(|s| s.chars().next())
+                        .is_some_and(|c| c.is_alphabetic());
+                    if !next_is_alpha {
+                        if earliest.is_none_or(|(p, _, _)| pos < p) {
+                            earliest = Some((pos, op, target));
+                        }
+                        break;
+                    }
+                    search_from = pos + 1;
+                }
+            }
+            let (pos, op, target) = match earliest {
+                Some(e) => e,
+                None => break,
+            };
+            let (open, close) = match Self::find_enclosing_braces(&result, pos, op.len()) {
+                Some(b) => b,
+                None => break, // no enclosing braces — leave the rest untouched
+            };
+            let num = result[open + 1..pos].trim();
+            let den = result[pos + op.len()..close].trim();
+            let replacement = format!("{target}{{{num}}}{{{den}}}");
+            result.replace_range(open..close + 1, &replacement);
+        }
         result
     }
 
@@ -380,6 +505,51 @@ mod tests {
     use super::MathFormatter;
 
     #[test]
+    fn format_pmatrix_uses_parens() {
+        let formatted = MathFormatter::format_matrices("\\begin{pmatrix}a & b \\\\ c & d\\end{pmatrix}");
+        assert_eq!(formatted, "(a & b \\\\ c & d)");
+    }
+
+    #[test]
+    fn format_bmatrix_uses_brackets() {
+        let formatted = MathFormatter::format_matrices("\\begin{bmatrix}a & b \\\\ c & d\\end{bmatrix}");
+        assert_eq!(formatted, "[a & b \\\\ c & d]");
+    }
+
+    #[test]
+    fn format_vmatrix_uses_bars() {
+        let formatted = MathFormatter::format_matrices("\\begin{vmatrix}a & b \\\\ c & d\\end{vmatrix}");
+        assert_eq!(formatted, "|a & b \\\\ c & d|");
+    }
+
+    #[test]
+    fn format_bmatrix_uppercase_uses_braces() {
+        let formatted = MathFormatter::format_matrices("\\begin{Bmatrix}a \\\\ b\\end{Bmatrix}");
+        assert_eq!(formatted, "{a \\\\ b}");
+    }
+
+    #[test]
+    fn format_matrix_plain_no_delimiters() {
+        let formatted = MathFormatter::format_matrices("\\begin{matrix}a & b \\\\ c & d\\end{matrix}");
+        assert_eq!(formatted, "a & b \\\\ c & d");
+    }
+
+    #[test]
+    fn format_vmatrix_double_bars() {
+        let formatted = MathFormatter::format_matrices("\\begin{Vmatrix}x\\end{Vmatrix}");
+        assert_eq!(formatted, "\u{2016}x\u{2016}");
+    }
+
+    #[test]
+    fn format_nested_pmatrix_finds_matching_end() {
+        // Outer pmatrix contains an inner pmatrix — the naive first-occurrence
+        // finder would match the inner \end and truncate the body.
+        let formatted =
+            MathFormatter::format_matrices("\\begin{pmatrix}a \\begin{pmatrix}x\\end{pmatrix} b\\end{pmatrix}");
+        assert_eq!(formatted, "(a (x) b)");
+    }
+
+    #[test]
     fn format_fraction_with_groups() {
         let formatted = MathFormatter::format("\\frac{a+b}{c-d}");
         assert_eq!(formatted, "[a+b] ÷ [c-d]");
@@ -646,5 +816,28 @@ mod tests {
         let formatted = MathFormatter::format("\\displaystyle x^2");
         assert!(formatted.contains('x'));
         assert!(!formatted.contains("displaystyle"));
+    }
+
+    #[test]
+    fn format_over_converts_to_frac() {
+        // {a \over b} should render like \frac{a}{b}
+        let over = MathFormatter::format("{a \\over b}");
+        let frac = MathFormatter::format("\\frac{a}{b}");
+        assert_eq!(over, frac, "{{a \\over b}} should convert to \\frac{{a}}{{b}}");
+    }
+
+    #[test]
+    fn format_choose_converts_to_binom() {
+        let choose = MathFormatter::format("{n \\choose k}");
+        let binom = MathFormatter::format("\\binom{n}{k}");
+        assert_eq!(choose, binom, "{{n \\choose k}} should convert to \\binom{{n}}{{k}}");
+    }
+
+    #[test]
+    fn format_over_does_not_match_overline() {
+        // \overline is an accent, not the \over fraction operator.
+        let formatted = MathFormatter::format("\\overline{x}");
+        assert!(formatted.contains('\u{0305}'), "overline combining char");
+        assert!(!formatted.contains("÷"), "should not be treated as a fraction");
     }
 }

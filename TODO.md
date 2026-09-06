@@ -51,6 +51,9 @@ All foundational phases are done. Key milestones:
 - **`\renewcommand` support (2026-09-06)** — the macro engine now extracts `\renewcommand` and overrides existing definitions
 - **`\providecommand` support (2026-09-06)** — the macro engine now extracts `\providecommand`, defining only when the name is absent
 - **Table `*{n}{spec}` column repetition (2026-09-06)** — `parse_column_spec` expands `*{n}{spec}` (incl. nesting) before parsing, e.g. `*{3}{l}` → `lll`
+- **Table `\multicolumn` in rows (2026-09-06)** — `Table::parse` now expands `\multicolumn{n}{align}{content}` into content + (n-1) empty cells, keeping row cell counts aligned with the column count; full-width multicolumn rows (no `&`) are no longer silently skipped
+- **Table column spec `m`/`b`/`X`/`>`/`<` (2026-09-06)** — `parse_column_spec` now handles `m{...}`/`b{...}` (array package), `X` (tabularx), and `>{...}`/`<{...}` decorators; fixes spurious columns from inner `l`/`c`/`r` chars leaking out of unconsumed braces
+- **`\let` aliasing (2026-09-06)** — the macro engine now handles `\let\new\old` and `\let\new=\old`; `\new` expands to `\old`, so aliasing to built-ins (e.g. `\let\oldsection\section`) works
 
 ## Pending
 
@@ -89,6 +92,10 @@ All foundational phases are done. Key milestones:
 - [x] Theorem-like environments
 - [x] Unnumbered sections
 - [x] Sized fractions and binomial coefficients
+- [x] Old-style fraction/binomial operators (`\over`, `\choose`, `\brack`, `\brace`) → `\frac`/`\binom` rewrite in `MathFormatter`
+- [x] Table `\cline`/`\cmidrule` partial rules now parsed as separator rows (were silently dropped)
+- [x] Unicode-fallback matrix formatting: added `vmatrix`/`Vmatrix`/`Bmatrix`/`matrix`/`smallmatrix`, fixed `pmatrix` delimiters (`( )` not `[ ]`), and depth-counting end finder for nested matrices
+- [x] Text-mode ligatures (`---`→—, `--`→–, `` `` ``→", `''`→") now converted in `parse_text`; inline math spans skipped
 - [x] Comprehensive LaTeX syntax coverage (special chars, skip-commands, counter formatting, file splicing)
 - [x] Divider element (`\hrulefill`)
 
@@ -107,7 +114,7 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 728 (see `cargo test`; 724 run by default, 3 ignored, rest feature-gated)
+- Tests: 757 (see `cargo test`; 733 run by default, 3 ignored, rest feature-gated)
 - PDF: vendored pdfrs (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - LaTeX commands: 450+
@@ -117,7 +124,7 @@ All foundational phases are done. Key milestones:
 - Clippy: 10 warnings (pre-existing, in pdfrs and parser)
 
 ### Target Goals
-- Tests: 728 ✓ (target was 600+)
+- Tests: 737 ✓ (target was 600+)
 - Math symbols: 618 ✓ (target was 600+)
 - LaTeX commands: 450+ ✓ (target was 400+)
 - File size: <100 KB for ASCII-only; <500 KB for Unicode/math
