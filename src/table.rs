@@ -35,7 +35,9 @@ impl Table {
         let columns = parse_column_spec(column_spec);
         let mut rows = Vec::new();
 
-        for line in content.lines() {
+        // Rows are newline-separated; a `\\` row break inside a line
+        // (single-line tables) splits further.
+        for line in content.lines().flat_map(|l| l.split("\\\\")) {
             let line = line.trim();
             if line.is_empty() {
                 continue;

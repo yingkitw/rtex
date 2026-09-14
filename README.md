@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Tests](https://img.shields.io/badge/tests-721%2B-brightgreen.svg)](TODO.md)
+[![Tests](https://img.shields.io/badge/tests-788%2B-brightgreen.svg)](TODO.md)
 [![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-450%2B-informational.svg)](TODO.md)
 [![Math symbols](https://img.shields.io/badge/math%20symbols-618%2B-informational.svg)](TODO.md)
 [![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
@@ -256,7 +256,7 @@ cargo test
 ```
 
 The test suite includes:
-- 721+ comprehensive tests (508 lib unit + 213 integration)
+- 788+ comprehensive tests (579 lib unit + 209 integration; 3 ignored golden-file generators)
 - PDF generation verification
 - File size validation
 - PDF header verification

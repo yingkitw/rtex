@@ -112,6 +112,15 @@ pub enum Element {
     RichParagraph {
         segments: Vec<TextSegment>,
     },
+    /// Justified paragraph: line breaks are chosen by total-fit
+    /// (Knuth–Plass) over a box/glue horizontal list so both edges
+    /// align; the final line is left-aligned (TeX `\parfillskip`).
+    /// `first_line_indent_em` shortens the first line (TeX
+    /// `\parindent`, in em units of the base font).
+    JustifiedParagraph {
+        segments: Vec<TextSegment>,
+        first_line_indent_em: f32,
+    },
     UnorderedListItem {
         text: String,
         depth: u8,

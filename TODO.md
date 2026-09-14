@@ -54,6 +54,15 @@ All foundational phases are done. Key milestones:
 - **Table `\multicolumn` in rows (2026-09-06)** — `Table::parse` now expands `\multicolumn{n}{align}{content}` into content + (n-1) empty cells, keeping row cell counts aligned with the column count; full-width multicolumn rows (no `&`) are no longer silently skipped
 - **Table column spec `m`/`b`/`X`/`>`/`<` (2026-09-06)** — `parse_column_spec` now handles `m{...}`/`b{...}` (array package), `X` (tabularx), and `>{...}`/`<{...}` decorators; fixes spurious columns from inner `l`/`c`/`r` chars leaking out of unconsumed braces
 - **`\let` aliasing (2026-09-06)** — the macro engine now handles `\let\new\old` and `\let\new=\old`; `\new` expands to `\old`, so aliasing to built-ins (e.g. `\let\oldsection\section`) works
+- **Real typesetting engine (2026-09-13)** — box/glue/penalty horizontal-list model with Knuth–Plass total-fit line breaking in `vendor/pdfrs/src/typeset.rs`: paragraphs justify by stretching/shrinking interword glue (TeX defaults: stretch ½, shrink ⅓), final line stays ragged (`\parfillskip`), forced/forbidden penalties honored, greedy fallback guarantees full coverage. Wired via new `Element::JustifiedParagraph`; all rtex PDF paragraphs are now justified
+- **`parse_next()` split (2026-09-13)** — the 1015-line god-function is now a ~60-line ordered dispatcher over 9 `try_*` phase methods; the long-standing "borrow checker blocks splitting" debt is resolved (each phase re-derives `remaining` internally). Covered by regression tests for skip-command and `\input` fall-through
+- **Hyphenation (2026-09-13)** — Liang pattern algorithm with embedded ushyphmax English patterns (4938 patterns + exceptions) in `vendor/pdfrs/src/hyphenate.rs`; `Node::Hyphen` discretionary breakpoints feed the Knuth–Plass breaker, so overfull lines now break mid-word with a hyphen glyph exactly like TeX. Validated against pyphen; text extraction stays word-clean via same-style `Tj` merging
+- **Text command coverage (2026-09-13)** — text accents (`\'e`, `\"{u}`, `\c{c}`, `\v{s}`, `\H{o}`, ... → composed Unicode with combining-mark fallback and `\i`/`\j` dotless bases), escaped control symbols (`\% \& \$ \# \_ \{ \}` — `\%` no longer eats the document as a comment, `\$` no longer opens math), control-word space eating (`\ss e` → "ße"), bare brace groups (`\LaTeX{}` no longer leaks `{`), `~` → space, source-adjacent text concatenation (words never split around symbol commands), `\thanks`/`\and`/`\MakeUppercase`/`\MakeLowercase`/`\euro`/`\nolinebreak`. 15 new regression tests
+- **`\left...\right` delimiter scaling (2026-09-13)** — new `MathPiece::Group` with depth-counted matching, nesting, invisible `.` delims, `\{ \} \langle \rangle \lvert \rvert` tokens; delimiters render scaled to the grouped content height via the extracted recursive `draw_math_pieces` renderer. Previously `\left`/`\right` were silently stripped (normal-size parens around tall fractions). 7 new tests
+- **Math scripts piece (2026-09-13)** — `x^{i+j}` / `a_1` / `a_n^m` in display math render as true superscripts/subscripts at 0.62x size with vertical offsets; operator limits (`\sum_i^n`) unaffected; complex inline scripts documented as an accepted limitation
+- **Widow/club control (2026-09-13)** — `paragraph_line_chunks` implements TeX `\widowpenalty`/`\clubpenalty` semantics: no lone first-line at a page bottom, no lone last-line at a page top; paragraphs near page ends move or split leaving ≥2 lines. 7 unit tests with a coverage-grid sweep
+- **Typesetting fidelity II (2026-09-13)** — `\parindent` first-line indentation (1.5em, suppressed after headings/display-math/`\noindent` via `break_lines_with_first` first-line-width API); TeX operator spacing in display and inline math (thick relations, medium binaries, tight unary minus, thin punctuation; script groups spaced; inline limit notation protected). 10 new typeset/spacing tests
+- **Document constructs (2026-09-13)** — `\newacronym`/`\newglossaryentry` + `\gls`/`\glspl`/`\Gls`/`\GLS`/`\acrshort`/`\acrlong`/`\acrfull` render real terms; `longtable` parses as a Table (was silently dropped); `eqnarray`/`split`/`aligned`/`alignat`/`flalign`/`gathered` end at their own markers (the eqnarray/`\end{align}` end-marker bug); `Table::parse` splits single-line `\\` rows; `\texorpdfstring` keeps the TeX form in titles; `\todo` consumed; `\footref` → Ref. 9 new regression tests
 
 ## Pending
 
@@ -66,10 +75,11 @@ All foundational phases are done. Key milestones:
 - [ ] Internationalization (i18n)
 - [ ] Web interface
 - [ ] GUI application
+- [ ] More hyphenation languages (de, fr, es patterns from hyph-utf8) selected via `\babel`/`\usepackage[lang]{babel}`
 
 ### Known Technical Debt
 
-- [ ] Refactor `parse_next()` (1015 lines) into sub-functions — blocked by borrow checker (`remaining` borrows from `self.content`, conflicts with `&mut self` calls); deferred until Polonius
+- [x] ~~Refactor `parse_next()` (1015 lines) into sub-functions~~ — DONE 2026-09-13 via ordered phase dispatch (the borrow-checker workaround: re-derive `remaining` inside each phase; consume-then-None phases must stop dispatch, not fall through)
 
 ## Competitive Intelligence
 
@@ -114,7 +124,7 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 757 (see `cargo test`; 733 run by default, 3 ignored, rest feature-gated)
+- Tests: 791 (see `cargo test`; 788 passing, 3 ignored golden-file generators)
 - PDF: vendored pdfrs (`vendor/pdfrs`); `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - LaTeX commands: 450+
@@ -124,7 +134,7 @@ All foundational phases are done. Key milestones:
 - Clippy: 10 warnings (pre-existing, in pdfrs and parser)
 
 ### Target Goals
-- Tests: 737 ✓ (target was 600+)
+- Tests: 788 ✓ (target was 600+)
 - Math symbols: 618 ✓ (target was 600+)
 - LaTeX commands: 450+ ✓ (target was 400+)
 - File size: <100 KB for ASCII-only; <500 KB for Unicode/math

@@ -544,6 +544,46 @@ mod tests {
     }
 
     #[test]
+    fn test_justified_paragraph_renders_valid_pdf() {
+        use crate::elements::{Element, TextSegment};
+
+        // A long paragraph that must wrap onto multiple justified lines.
+        let text = "The total-fit line breaker distributes inter-word glue so \
+                    that every line but the last reaches the exact measure, \
+                    matching the typography of Knuth and Plass.";
+        let elements = vec![
+            Element::JustifiedParagraph {
+                segments: vec![TextSegment::Plain(text.to_string())],
+                first_line_indent_em: 0.0,
+            },
+            Element::JustifiedParagraph {
+                segments: vec![
+                    TextSegment::Bold("Styled".to_string()),
+                    TextSegment::Plain(" and justified in one paragraph.".to_string()),
+                ],
+                first_line_indent_em: 0.0,
+            },
+        ];
+        let generator = OptimizedPdfGenerator::new(OptimizationProfile::Archive);
+        let pdf = generator.generate_bytes(&elements).expect("generate");
+        assert!(pdf.starts_with(b"%PDF"));
+        assert!(!pdf.is_empty());
+    }
+
+    #[test]
+    fn test_justified_paragraph_empty_segments_is_noop() {
+        use crate::elements::{Element, TextSegment};
+
+        let elements = vec![Element::JustifiedParagraph {
+            segments: vec![TextSegment::Plain(String::new())],
+            first_line_indent_em: 0.0,
+        }];
+        let generator = OptimizedPdfGenerator::new(OptimizationProfile::Archive);
+        let pdf = generator.generate_bytes(&elements).expect("generate");
+        assert!(pdf.starts_with(b"%PDF"));
+    }
+
+    #[test]
     fn test_preserve_dctdecode_images() {
         use crate::pdf::{PdfDocument, PdfObject, PdfValue};
         use std::collections::HashMap;

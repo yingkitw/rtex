@@ -30,11 +30,10 @@ impl TexParser {
 
         self.skip_whitespace_and_comments();
 
-        self.parse_braced_content()
-            .map(|title| TexElement::Section {
-                level: level as usize,
-                title,
-            })
+        self.parse_braced_content().map(|title| TexElement::Section {
+            level: level as usize,
+            title: clean_title(&title),
+        })
     }
 
     /// Parse a generic one-argument command (\title, \author, \date, …).
@@ -648,5 +647,57 @@ impl TexParser {
             name: "multicolumn".to_string(),
             args: vec![n, align, content],
         })
+    }
+}
+
+/// Clean a section title: keep the TeX form of
+/// `\texorpdfstring{tex}{pdf}` (hyperref), drop accents markers are
+/// already composed by the parser; collapse leftover `~` to spaces.
+pub(super) fn clean_title(title: &str) -> String {
+    let mut out = String::with_capacity(title.len());
+    let mut i = 0usize;
+    while i < title.len() {
+        match title[i..].find("\\texorpdfstring") {
+            Some(rel) => {
+                out.push_str(&title[i..i + rel]);
+                let mut j = i + rel + "\\texorpdfstring".len();
+                let mut kept = String::new();
+                for _ in 0..2 {
+                    let before_trim = &title[j..];
+                    let trimmed = before_trim.trim_start();
+                    j += before_trim.len() - trimmed.len();
+                    if let Some(after) = trimmed.strip_prefix('{') {
+                        if let Some(end) = after.find('}') {
+                            if kept.is_empty() {
+                                kept = after[..end].to_string();
+                            }
+                            j += 1 + end + 1;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                out.push_str(&kept);
+                i = j;
+            }
+            None => {
+                out.push_str(&title[i..]);
+                break;
+            }
+        }
+    }
+    out.replace('~', " ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_title;
+
+    #[test]
+    fn texorpdfstring_keeps_tex_form() {
+        assert_eq!(clean_title(r"Intro\texorpdfstring{~x}{ y}"), "Intro x");
+        assert_eq!(clean_title(r"\texorpdfstring{A}{B}"), "A");
+        assert_eq!(clean_title("plain"), "plain");
+        assert_eq!(clean_title(r"a~b"), "a b");
     }
 }

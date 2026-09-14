@@ -560,7 +560,10 @@ pub(crate) fn render_math_text(expr: &str) -> String {
     // Clean up multiple spaces
     s = re_multi_space().replace_all(&s, " ").to_string();
 
-    s.trim().to_string()
+    // TeX operator spacing (after cleanup so it is not collapsed).
+    super::math_layout::apply_operator_spacing(&s, true)
+        .trim()
+        .to_string()
 }
 
 /// Escape a PDF string literal (for ASCII-only text)

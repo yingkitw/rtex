@@ -227,7 +227,7 @@ impl StreamingPdfGenerator {
                 | Element::MathBlock { expression: text } => {
                     self.add_paragraph(text)?;
                 }
-                Element::RichParagraph { segments } => {
+                Element::RichParagraph { segments } | Element::JustifiedParagraph { segments, .. } => {
                     self.add_rich_paragraph(segments)?;
                 }
                 Element::CodeBlock { code, language } => {

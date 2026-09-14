@@ -28,7 +28,7 @@ fn elements_to_text(elements: &[Element]) -> String {
                 text.push_str(t);
                 text.push('\n');
             }
-            Element::RichParagraph { segments } => {
+            Element::RichParagraph { segments } | Element::JustifiedParagraph { segments, .. } => {
                 for segment in segments {
                     match segment {
                         TextSegment::Plain(t)

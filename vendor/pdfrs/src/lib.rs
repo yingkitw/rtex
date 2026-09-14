@@ -146,6 +146,7 @@ pub mod chart;
 pub mod comprehensive;
 pub mod compression;
 pub mod elements;
+pub mod hyphenate;
 pub mod html;
 pub mod i18n;
 pub mod image;
@@ -168,6 +169,7 @@ pub mod security;
 pub mod streaming;
 pub mod table_renderer;
 pub mod thesis;
+pub mod typeset;
 pub mod vector;
 
 #[cfg(feature = "async")]

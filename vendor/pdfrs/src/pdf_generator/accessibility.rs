@@ -237,7 +237,7 @@ pub fn element_to_structure(element: &Element) -> StructureElement {
         Element::Paragraph { text } => {
             StructureElement::new(StructureType::P).with_actual_text(text.clone())
         }
-        Element::RichParagraph { segments } => {
+        Element::RichParagraph { segments } | Element::JustifiedParagraph { segments, .. } => {
             let text = segments
                 .iter()
                 .map(|s| match s {

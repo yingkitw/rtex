@@ -90,6 +90,35 @@ pub(crate) const FONT_HELVETICA_OBLIQUE: &str = "Helvetica-Oblique";
 pub(crate) const FONT_HELVETICA_BOLD_OBLIQUE: &str = "Helvetica-BoldOblique";
 pub(crate) const FONT_COURIER: &str = "Courier"; // Monospace for code
 
+/// Widow/club chunking for a paragraph of `lines` lines when `capacity`
+/// lines fit on the current page. Returns (line index, needs page
+/// advance) chunks covering all lines:
+/// - fits entirely: one chunk, no break;
+/// - capacity 0 or 1: whole paragraph moves to the next page (club
+///   control — never a lone first line at the bottom);
+/// - otherwise split so the next page receives at least 2 lines
+///   (widow control — never a lone last line at the top).
+///
+/// A paragraph longer than a full page still splits at capacity (the
+/// tail re-splits naturally while drawing).
+pub(super) fn paragraph_line_chunks(lines: usize, capacity: usize) -> Vec<(usize, bool)> {
+    if lines == 0 {
+        return Vec::new();
+    }
+    if lines <= capacity {
+        return vec![(0, false)];
+    }
+    if capacity <= 1 {
+        return vec![(0, true)];
+    }
+    let first_chunk = if lines - capacity == 1 {
+        capacity - 1
+    } else {
+        capacity
+    };
+    vec![(0, false), (first_chunk, true)]
+}
+
 impl ContentStreamBuilder {
     pub(crate) fn new(
         base_font_size: f32,
@@ -1004,12 +1033,397 @@ impl ContentStreamBuilder {
         flush_line(self, &mut line);
     }
 
+    /// Emit a justified paragraph: words become boxes, inter-word
+    /// spaces become stretchable/shrinkable glue, and line breaks are
+    /// chosen by total-fit (Knuth–Plass) so both edges align. The final
+    /// line is set naturally (left-aligned), like TeX's `\parfillskip`.
+    fn emit_justified_paragraph(
+        &mut self,
+        segments: &[TextSegment],
+        first_line_indent_em: f32,
+        font_size: f32,
+    ) {
+        #[derive(Clone)]
+        struct Run {
+            text: String,
+            bold: bool,
+            italic: bool,
+            mono: bool,
+            strike: bool,
+        }
+
+        let mut runs: Vec<Run> = Vec::new();
+        for segment in segments {
+            match segment {
+                TextSegment::Plain(text) => {
+                    if !text.is_empty() {
+                        runs.push(Run {
+                            text: text.clone(),
+                            bold: false,
+                            italic: false,
+                            mono: false,
+                            strike: false,
+                        });
+                    }
+                }
+                TextSegment::Strikethrough(text) => {
+                    if !text.is_empty() {
+                        runs.push(Run {
+                            text: text.clone(),
+                            bold: false,
+                            italic: false,
+                            mono: false,
+                            strike: true,
+                        });
+                    }
+                }
+                TextSegment::Bold(text) => {
+                    runs.push(Run {
+                        text: text.clone(),
+                        bold: true,
+                        italic: false,
+                        mono: false,
+                        strike: false,
+                    });
+                }
+                TextSegment::Italic(text) => {
+                    runs.push(Run {
+                        text: text.clone(),
+                        bold: false,
+                        italic: true,
+                        mono: false,
+                        strike: false,
+                    });
+                }
+                TextSegment::BoldItalic(text) => {
+                    runs.push(Run {
+                        text: text.clone(),
+                        bold: true,
+                        italic: true,
+                        mono: false,
+                        strike: false,
+                    });
+                }
+                TextSegment::Code(code) => {
+                    runs.push(Run {
+                        text: code.clone(),
+                        bold: false,
+                        italic: false,
+                        mono: true,
+                        strike: false,
+                    });
+                }
+                TextSegment::MathInline(expr) => {
+                    runs.push(Run {
+                        text: render_math_text(expr),
+                        bold: false,
+                        italic: true,
+                        mono: false,
+                        strike: false,
+                    });
+                }
+                TextSegment::Link { text, url } => {
+                    runs.push(Run {
+                        text: text.clone(),
+                        bold: false,
+                        italic: false,
+                        mono: false,
+                        strike: false,
+                    });
+                    runs.push(Run {
+                        text: format!(" ({})", url),
+                        bold: false,
+                        italic: false,
+                        mono: false,
+                        strike: false,
+                    });
+                }
+                TextSegment::Citation { key } => {
+                    let marker = self.citation_marker(key);
+                    runs.push(Run {
+                        text: marker,
+                        bold: false,
+                        italic: false,
+                        mono: false,
+                        strike: false,
+                    });
+                }
+            }
+        }
+
+        if runs.is_empty() {
+            return;
+        }
+
+        // Word tokens with style, mirroring emit_rich_paragraph.
+        #[derive(Clone)]
+        struct Token {
+            text: String,
+            bold: bool,
+            italic: bool,
+            mono: bool,
+            strike: bool,
+            space_before: bool,
+        }
+
+        let mut tokens: Vec<Token> = Vec::new();
+        let mut prev_ended_with_space = false;
+        for run in &runs {
+            let starts_with_space = run.text.starts_with(char::is_whitespace);
+            let ends_with_space = run.text.ends_with(char::is_whitespace);
+            let mut first_in_run = true;
+            let mut chars = run.text.chars().peekable();
+            while chars.peek().is_some() {
+                while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                    chars.next();
+                }
+                let mut word = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_whitespace() {
+                        break;
+                    }
+                    word.push(c);
+                    chars.next();
+                }
+                if word.is_empty() {
+                    break;
+                }
+                let space_before = if first_in_run {
+                    !tokens.is_empty() && (starts_with_space || prev_ended_with_space)
+                } else {
+                    true
+                };
+                first_in_run = false;
+                tokens.push(Token {
+                    text: word,
+                    bold: run.bold,
+                    italic: run.italic,
+                    mono: run.mono,
+                    strike: run.strike,
+                    space_before,
+                });
+            }
+            prev_ended_with_space = ends_with_space;
+        }
+        if tokens.is_empty() {
+            return;
+        }
+
+        let measure = |builder: &Self, text: &str, mono: bool| -> f32 {
+            let size = if mono { font_size * 0.9 } else { font_size };
+            if mono {
+                estimated_text_width(text, size, true)
+            } else {
+                builder.estimate_text_width(text, size)
+            }
+        };
+
+        // Box/glue horizontal list: words are boxes, spaces are glue
+        // with TeX's default interword flexibility (stretch 1/2,
+        // shrink 1/3 of the natural space). Alphabetic words are
+        // hyphenated by the Liang patterns into syllable parts
+        // separated by `Node::Hyphen` breakpoints (drawn as "-" only
+        // when the break is taken).
+        let space_w = measure(self, " ", false);
+        let hyphen_w = measure(self, "-", false);
+        let mut nodes: Vec<crate::typeset::Node> = Vec::with_capacity(tokens.len() * 2);
+        let mut runs: Vec<Token> = Vec::with_capacity(tokens.len() * 2);
+        for (i, tok_ref) in tokens.iter().enumerate() {
+            let tok: &Token = tok_ref;
+            if i > 0 && tok.space_before {
+                nodes.push(crate::typeset::Node::Glue {
+                    width: space_w,
+                    stretch: space_w * 0.5,
+                    shrink: space_w / 3.0,
+                });
+            }
+            let points = if tok.mono {
+                Vec::new()
+            } else {
+                crate::hyphenate::hyphenation_points(&tok.text)
+            };
+            if points.is_empty() {
+                nodes.push(crate::typeset::Node::Box {
+                    width: measure(self, &tok.text, tok.mono),
+                });
+                runs.push(tok.clone());
+            } else {
+                let chars: Vec<char> = tok.text.chars().collect();
+                let mut prev = 0usize;
+                for (n, &point) in points.iter().enumerate() {
+                    let part: String = chars[prev..point].iter().collect();
+                    nodes.push(crate::typeset::Node::Box {
+                        width: measure(self, &part, tok.mono),
+                    });
+                    runs.push(Token {
+                        text: part,
+                        space_before: n == 0 && tok.space_before,
+                        ..tok_ref.clone()
+                    });
+                    nodes.push(crate::typeset::Node::Hyphen {
+                        cost: crate::hyphenate::HYPHEN_PENALTY,
+                        pre_width: hyphen_w,
+                    });
+                    prev = point;
+                }
+                let last: String = chars[prev..].iter().collect();
+                nodes.push(crate::typeset::Node::Box {
+                    width: measure(self, &last, tok.mono),
+                });
+                runs.push(Token {
+                    text: last,
+                    space_before: false,
+                    ..tok_ref.clone()
+                });
+            }
+        }
+
+        // Tolerance 2.0 ≈ TeX's loose-but-acceptable default. The
+        // first line is shortened by `\parindent` when indented.
+        let indent = first_line_indent_em * font_size;
+        let first_width = (self.content_width() - indent).max(1.0);
+        let lines = crate::typeset::break_lines_with_first(
+            &nodes,
+            self.content_width(),
+            first_width,
+            2.0,
+        );
+        let lh = line_height(font_size);
+
+        // Widow/club control (TeX `\widowpenalty` / `\clubpenalty`):
+        // never leave a single line at the page bottom (club) or carry
+        // a single line to the next page top (widow). Returns chunk
+        // boundaries (line index, needs page advance first).
+        let capacity = ((self.y - self.layout.margin_bottom) / lh)
+            .floor()
+            .max(0.0) as usize;
+        let chunks = paragraph_line_chunks(lines.len(), capacity);
+
+        // Walk each line: glue advances by its adjusted width, boxes
+        // are drawn at the running x position, and a line ending at a
+        // hyphen break gets the hyphen glyph appended. Consecutive
+        // same-style boxes (the syllable parts of an unbroken word)
+        // are merged into one Tj so text extraction stays word-clean.
+        let mut run_idx = 0usize;
+        for (chunk_no, &(chunk_start, needs_break)) in chunks.iter().enumerate() {
+            if needs_break {
+                self.advance_column_or_page();
+            }
+            let chunk_end = chunks
+                .get(chunk_no + 1)
+                .map(|&(s, _)| s)
+                .unwrap_or(lines.len());
+            for (line_no, line) in lines
+                .iter()
+                .enumerate()
+                .skip(chunk_start)
+                .take(chunk_end - chunk_start)
+            {
+                self.ensure_space(lh);
+            let mut x = if line_no == 0 {
+                self.content_left() + indent
+            } else {
+                self.content_left()
+            };
+            let mut node_idx = line.start;
+            // Buffered run: consecutive boxes sharing a style.
+            let mut buf = String::new();
+            let mut buf_style: Option<(bool, bool, bool, bool)> = None;
+            let mut buf_x = x;
+            macro_rules! flush_buf {
+                ($at_x:expr) => {
+                    if !buf.is_empty() {
+                        let (bold, italic, mono, strike) = buf_style.unwrap();
+                        if mono {
+                            self.set_monospace_font(font_size * 0.9);
+                        } else {
+                            self.set_font_with_style(font_size, bold, italic);
+                        }
+                        self.current.extend_from_slice(
+                            format!("1 0 0 1 {} {} Tm\n", $at_x, self.y).as_bytes(),
+                        );
+                        let encoded = self.encode_text_for_current_font(&buf);
+                        self.current.extend_from_slice(format!("{} Tj\n", encoded).as_bytes());
+                        if strike {
+                            let w = measure(self, &buf, mono);
+                            let strike_y = self.y + font_size * 0.3;
+                            self.draw_line($at_x, strike_y, $at_x + w, strike_y, 0.7, Color::black());
+                        }
+                        buf.clear();
+                    }
+                };
+            }
+            while node_idx < line.end {
+                match nodes[node_idx] {
+                    crate::typeset::Node::Glue {
+                        width,
+                        stretch,
+                        shrink,
+                    } => {
+                        flush_buf!(buf_x);
+                        let adjust = if line.ratio > 0.0 {
+                            line.ratio * stretch
+                        } else {
+                            line.ratio * shrink
+                        };
+                        x += width + adjust;
+                        node_idx += 1;
+                    }
+                    crate::typeset::Node::Penalty { .. }
+                    | crate::typeset::Node::Hyphen { .. } => {
+                        // Untaken breakpoints draw nothing.
+                        node_idx += 1;
+                    }
+                    crate::typeset::Node::Box { .. } => {
+                        let run = &runs[run_idx];
+                        run_idx += 1;
+                        let style = (run.bold, run.italic, run.mono, run.strike);
+                        if !buf.is_empty() && buf_style == Some(style) {
+                            // Same-style continuation: merge into the buffer.
+                            buf.push_str(&run.text);
+                        } else {
+                            flush_buf!(buf_x);
+                            buf_x = x;
+                            buf.push_str(&run.text);
+                            buf_style = Some(style);
+                        }
+                        x += measure(self, &run.text, run.mono);
+                        node_idx += 1;
+                    }
+                }
+            }
+            flush_buf!(buf_x);
+            // Taken hyphen break: append the glyph in the last run's style.
+            if matches!(nodes.get(line.end), Some(crate::typeset::Node::Hyphen { .. }))
+                && let Some(run) = runs.get(run_idx.saturating_sub(1))
+            {
+                if run.mono {
+                    self.set_monospace_font(font_size * 0.9);
+                } else {
+                    self.set_font_with_style(font_size, run.bold, run.italic);
+                }
+                self.current
+                    .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, self.y).as_bytes());
+                let encoded = self.encode_text_for_current_font("-");
+                self.current.extend_from_slice(format!("{} Tj\n", encoded).as_bytes());
+            }
+            self.set_font_with_style(font_size, false, false);
+            self.y -= lh;
+            }
+        }
+    }
+
     /// Render a display-math block with stacked fractions and operator limits.
     fn emit_display_math(&mut self, expression: &str, base_font_size: f32) {
         let math_size = base_font_size * 1.28;
         let padding = 10.0;
-        // Flatten multi-line matrix environments first, then split remaining rows.
-        let flattened = super::text_support::flatten_math_environments(expression);
+        // Flatten multi-line matrix environments first, apply TeX
+        // operator spacing, then split remaining rows.
+        let flattened =
+            super::math_layout::apply_operator_spacing(
+                &super::text_support::flatten_math_environments(expression),
+                false,
+            );
         let lines: Vec<&str> = flattened
             .lines()
             .map(str::trim)
@@ -1064,221 +1478,8 @@ impl ContentStreamBuilder {
                 .iter()
                 .map(|p| piece_width(p, math_size, &|t, s| measure(self, t, s)))
                 .sum();
-            let mut x = self.content_left() + ((self.content_width() - total_w) / 2.0).max(4.0);
-
-            for piece in pieces {
-                match piece {
-                    MathPiece::Text(text) => {
-                        self.set_font_with_style(math_size, false, true);
-                        self.current
-                            .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, axis_y).as_bytes());
-                        let enc = self.encode_text_for_current_font(text);
-                        self.current
-                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-                        x += measure(self, text, math_size);
-                    }
-                    MathPiece::Operator {
-                        symbol,
-                        lower,
-                        upper,
-                        side_limits,
-                    } => {
-                        let op_size = math_size * 1.45;
-                        let script = math_size * 0.55;
-                        let sym = symbol.to_string();
-                        let sym_w = measure(self, &sym, op_size);
-
-                        if *side_limits {
-                            // Integral-style: large op, scripts to the right.
-                            self.set_font_with_style(op_size, false, false);
-                            self.current.extend_from_slice(
-                                format!("1 0 0 1 {} {} Tm\n", x, axis_y - op_size * 0.18)
-                                    .as_bytes(),
-                            );
-                            let enc = self.encode_text_for_current_font(&sym);
-                            self.current
-                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-
-                            let sx = x + sym_w * 0.72;
-                            if !upper.is_empty() {
-                                self.set_font_with_style(script, false, false);
-                                self.current.extend_from_slice(
-                                    format!("1 0 0 1 {} {} Tm\n", sx, axis_y + script * 1.05)
-                                        .as_bytes(),
-                                );
-                                let enc = self.encode_text_for_current_font(upper);
-                                self.current
-                                    .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-                            }
-                            if !lower.is_empty() {
-                                self.set_font_with_style(script, false, false);
-                                self.current.extend_from_slice(
-                                    format!("1 0 0 1 {} {} Tm\n", sx, axis_y - script * 1.15)
-                                        .as_bytes(),
-                                );
-                                let enc = self.encode_text_for_current_font(lower);
-                                self.current
-                                    .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-                            }
-                            let lim_w =
-                                measure(self, lower, script).max(measure(self, upper, script));
-                            x += sym_w + 4.0 + lim_w;
-                        } else {
-                            // Sum/prod: limits above and below, centered on symbol.
-                            let lim_w =
-                                measure(self, lower, script).max(measure(self, upper, script));
-                            let col_w = sym_w.max(lim_w);
-                            let cx = x + col_w / 2.0;
-
-                            if !upper.is_empty() {
-                                let uw = measure(self, upper, script);
-                                self.set_font_with_style(script, false, false);
-                                self.current.extend_from_slice(
-                                    format!(
-                                        "1 0 0 1 {} {} Tm\n",
-                                        cx - uw / 2.0,
-                                        axis_y + op_size * 0.62
-                                    )
-                                    .as_bytes(),
-                                );
-                                let enc = self.encode_text_for_current_font(upper);
-                                self.current
-                                    .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-                            }
-
-                            self.set_font_with_style(op_size, false, false);
-                            self.current.extend_from_slice(
-                                format!(
-                                    "1 0 0 1 {} {} Tm\n",
-                                    cx - sym_w / 2.0,
-                                    axis_y - op_size * 0.12
-                                )
-                                .as_bytes(),
-                            );
-                            let enc = self.encode_text_for_current_font(&sym);
-                            self.current
-                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-
-                            if !lower.is_empty() {
-                                let lw = measure(self, lower, script);
-                                self.set_font_with_style(script, false, false);
-                                self.current.extend_from_slice(
-                                    format!(
-                                        "1 0 0 1 {} {} Tm\n",
-                                        cx - lw / 2.0,
-                                        axis_y - op_size * 0.78
-                                    )
-                                    .as_bytes(),
-                                );
-                                let enc = self.encode_text_for_current_font(lower);
-                                self.current
-                                    .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-                            }
-                            x += col_w + 8.0;
-                        }
-                    }
-                    MathPiece::Fraction {
-                        numerator,
-                        denominator,
-                    } => {
-                        let script = math_size * 0.85;
-                        let nw = measure(self, numerator, script);
-                        let dw = measure(self, denominator, script);
-                        let w = nw.max(dw) + 6.0;
-                        let cx = x + w / 2.0;
-
-                        self.set_font_with_style(script, false, true);
-                        self.current.extend_from_slice(
-                            format!("1 0 0 1 {} {} Tm\n", cx - nw / 2.0, axis_y + script * 0.75)
-                                .as_bytes(),
-                        );
-                        let enc = self.encode_text_for_current_font(numerator);
-                        self.current
-                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-
-                        // Fraction bar
-                        let bar_y = axis_y + script * 0.12;
-                        self.draw_line(
-                            cx - w / 2.0 + 1.0,
-                            bar_y,
-                            cx + w / 2.0 - 1.0,
-                            bar_y,
-                            0.9,
-                            Color::rgb(0.08, 0.1, 0.28),
-                        );
-
-                        self.set_font_with_style(script, false, true);
-                        self.current.extend_from_slice(
-                            format!("1 0 0 1 {} {} Tm\n", cx - dw / 2.0, axis_y - script * 0.95)
-                                .as_bytes(),
-                        );
-                        let enc = self.encode_text_for_current_font(denominator);
-                        self.current
-                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-
-                        x += w + 2.0;
-                    }
-                    MathPiece::Radical { index, radicand } => {
-                        let rad_size = math_size * 1.3;
-                        let script = math_size * 0.55;
-
-                        // Measure widths
-                        let sym_w = measure(self, "√", rad_size);
-                        let idx_w = if index.is_empty() {
-                            0.0
-                        } else {
-                            measure(self, index, script)
-                        };
-                        let rad_w = measure(self, radicand, math_size);
-
-                        // Draw optional root index (small, upper-left)
-                        if !index.is_empty() {
-                            self.set_font_with_style(script, false, true);
-                            self.current.extend_from_slice(
-                                format!("1 0 0 1 {} {} Tm\n", x, axis_y + rad_size * 0.45)
-                                    .as_bytes(),
-                            );
-                            let enc = self.encode_text_for_current_font(index);
-                            self.current
-                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-                        }
-
-                        // Draw √ symbol
-                        let sym_x = x + idx_w;
-                        self.set_font_with_style(rad_size, false, true);
-                        self.current.extend_from_slice(
-                            format!("1 0 0 1 {} {} Tm\n", sym_x, axis_y - rad_size * 0.15)
-                                .as_bytes(),
-                        );
-                        let enc = self.encode_text_for_current_font("√");
-                        self.current
-                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-
-                        // Draw radicand text
-                        let rad_x = sym_x + sym_w;
-                        self.set_font_with_style(math_size, false, true);
-                        self.current.extend_from_slice(
-                            format!("1 0 0 1 {} {} Tm\n", rad_x, axis_y).as_bytes(),
-                        );
-                        let enc = self.encode_text_for_current_font(radicand);
-                        self.current
-                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
-
-                        // Draw vinculum (overline) over the radicand
-                        let vinculum_y = axis_y + math_size * 0.75;
-                        self.draw_line(
-                            rad_x,
-                            vinculum_y,
-                            rad_x + rad_w,
-                            vinculum_y,
-                            0.9,
-                            Color::rgb(0.08, 0.1, 0.28),
-                        );
-
-                        x = rad_x + rad_w + 2.0;
-                    }
-                }
-            }
+            let x = self.content_left() + ((self.content_width() - total_w) / 2.0).max(4.0);
+            self.draw_math_pieces(pieces, x, axis_y, math_size);
 
             cursor_y -= *row_h;
         }
@@ -1287,6 +1488,301 @@ impl ContentStreamBuilder {
         self.set_font_with_style(base_font_size, false, false);
         self.reset_color();
         self.emit_empty_line();
+    }
+
+    /// Measure math text width using the Unicode encoder when active.
+    fn measure_math(&self, text: &str, size: f32) -> f32 {
+        if self.unicode_font_encoder.is_some()
+            && !use_base14_normalization()
+            && let Some(enc) = &self.unicode_font_encoder
+        {
+            return enc.estimate_width(text, size);
+        }
+        estimated_text_width(text, size, false)
+    }
+
+    /// Draw a row of math pieces at `axis_y` starting at `x`; returns
+    /// the x position after the last piece. Recursive on
+    /// [`MathPiece::Group`] (scaled `\left...\right` delimiters).
+    fn draw_math_pieces(
+        &mut self,
+        pieces: &[MathPiece],
+        mut x: f32,
+        axis_y: f32,
+        math_size: f32,
+    ) -> f32 {
+        for piece in pieces {
+            match piece {
+                MathPiece::Text(text) => {
+                    self.set_font_with_style(math_size, false, true);
+                    self.current
+                        .extend_from_slice(format!("1 0 0 1 {} {} Tm\n", x, axis_y).as_bytes());
+                    let enc = self.encode_text_for_current_font(text);
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                    x += self.measure_math(text, math_size);
+                }
+                MathPiece::Operator {
+                    symbol,
+                    lower,
+                    upper,
+                    side_limits,
+                } => {
+                    let op_size = math_size * 1.45;
+                    let script = math_size * 0.55;
+                    let sym = symbol.to_string();
+                    let sym_w = self.measure_math(&sym, op_size);
+
+                    if *side_limits {
+                        // Integral-style: large op, scripts to the right.
+                        self.set_font_with_style(op_size, false, false);
+                        self.current.extend_from_slice(
+                            format!("1 0 0 1 {} {} Tm\n", x, axis_y - op_size * 0.18)
+                                .as_bytes(),
+                        );
+                        let enc = self.encode_text_for_current_font(&sym);
+                        self.current
+                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+
+                        let sx = x + sym_w * 0.72;
+                        if !upper.is_empty() {
+                            self.set_font_with_style(script, false, false);
+                            self.current.extend_from_slice(
+                                format!("1 0 0 1 {} {} Tm\n", sx, axis_y + script * 1.05)
+                                    .as_bytes(),
+                            );
+                            let enc = self.encode_text_for_current_font(upper);
+                            self.current
+                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                        }
+                        if !lower.is_empty() {
+                            self.set_font_with_style(script, false, false);
+                            self.current.extend_from_slice(
+                                format!("1 0 0 1 {} {} Tm\n", sx, axis_y - script * 1.15)
+                                    .as_bytes(),
+                            );
+                            let enc = self.encode_text_for_current_font(lower);
+                            self.current
+                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                        }
+                        let lim_w =
+                            self.measure_math(lower, script).max(self.measure_math(upper, script));
+                        x += sym_w + 4.0 + lim_w;
+                    } else {
+                        // Sum/prod: limits above and below, centered on symbol.
+                        let lim_w =
+                            self.measure_math(lower, script).max(self.measure_math(upper, script));
+                        let col_w = sym_w.max(lim_w);
+                        let cx = x + col_w / 2.0;
+
+                        if !upper.is_empty() {
+                            let uw = self.measure_math(upper, script);
+                            self.set_font_with_style(script, false, false);
+                            self.current.extend_from_slice(
+                                format!(
+                                    "1 0 0 1 {} {} Tm\n",
+                                    cx - uw / 2.0,
+                                    axis_y + op_size * 0.62
+                                )
+                                .as_bytes(),
+                            );
+                            let enc = self.encode_text_for_current_font(upper);
+                            self.current
+                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                        }
+
+                        self.set_font_with_style(op_size, false, false);
+                        self.current.extend_from_slice(
+                            format!(
+                                "1 0 0 1 {} {} Tm\n",
+                                cx - sym_w / 2.0,
+                                axis_y - op_size * 0.12
+                            )
+                            .as_bytes(),
+                        );
+                        let enc = self.encode_text_for_current_font(&sym);
+                        self.current
+                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+
+                        if !lower.is_empty() {
+                            let lw = self.measure_math(lower, script);
+                            self.set_font_with_style(script, false, false);
+                            self.current.extend_from_slice(
+                                format!(
+                                    "1 0 0 1 {} {} Tm\n",
+                                    cx - lw / 2.0,
+                                    axis_y - op_size * 0.78
+                                )
+                                .as_bytes(),
+                            );
+                            let enc = self.encode_text_for_current_font(lower);
+                            self.current
+                                .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                        }
+                        x += col_w + 8.0;
+                    }
+                }
+                MathPiece::Fraction {
+                    numerator,
+                    denominator,
+                } => {
+                    let script = math_size * 0.85;
+                    let nw = self.measure_math(numerator, script);
+                    let dw = self.measure_math(denominator, script);
+                    let w = nw.max(dw) + 6.0;
+                    let cx = x + w / 2.0;
+
+                    self.set_font_with_style(script, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", cx - nw / 2.0, axis_y + script * 0.75)
+                            .as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(numerator);
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+
+                    // Fraction bar
+                    let bar_y = axis_y + script * 0.12;
+                    self.draw_line(
+                        cx - w / 2.0 + 1.0,
+                        bar_y,
+                        cx + w / 2.0 - 1.0,
+                        bar_y,
+                        0.9,
+                        Color::rgb(0.08, 0.1, 0.28),
+                    );
+
+                    self.set_font_with_style(script, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", cx - dw / 2.0, axis_y - script * 0.95)
+                            .as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(denominator);
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+
+                    x += w + 2.0;
+                }
+                MathPiece::Radical { index, radicand } => {
+                    let rad_size = math_size * 1.3;
+                    let script = math_size * 0.55;
+
+                    // Measure widths
+                    let sym_w = self.measure_math("√", rad_size);
+                    let idx_w = if index.is_empty() {
+                        0.0
+                    } else {
+                        self.measure_math(index, script)
+                    };
+                    let rad_w = self.measure_math(radicand, math_size);
+
+                    // Draw optional root index (small, upper-left)
+                    if !index.is_empty() {
+                        self.set_font_with_style(script, false, true);
+                        self.current.extend_from_slice(
+                            format!("1 0 0 1 {} {} Tm\n", x, axis_y + rad_size * 0.45)
+                                .as_bytes(),
+                        );
+                        let enc = self.encode_text_for_current_font(index);
+                        self.current
+                            .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                    }
+
+                    // Draw √ symbol
+                    let sym_x = x + idx_w;
+                    self.set_font_with_style(rad_size, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", sym_x, axis_y - rad_size * 0.15)
+                            .as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font("√");
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+
+                    // Draw radicand text
+                    let rad_x = sym_x + sym_w;
+                    self.set_font_with_style(math_size, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", rad_x, axis_y).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(radicand);
+                    self.current
+                        .extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+
+                    // Draw vinculum (overline) over the radicand
+                    let vinculum_y = axis_y + math_size * 0.75;
+                    self.draw_line(
+                        rad_x,
+                        vinculum_y,
+                        rad_x + rad_w,
+                        vinculum_y,
+                        0.9,
+                        Color::rgb(0.08, 0.1, 0.28),
+                    );
+
+                    x = rad_x + rad_w + 2.0;
+                }
+            MathPiece::Group { open, close, inner } => {
+                let inner_h = crate::pdf_generator::math_layout::line_height_for_pieces(inner, math_size);
+                // Delimiter glyph visual height ≈ 0.95 em; scale to span.
+                let delim_size = (inner_h / 0.95).clamp(math_size, math_size * 3.5);
+                let delim_baseline = axis_y - delim_size * 0.28;
+                if !open.is_empty() {
+                    let w = self.measure_math(open, delim_size);
+                    self.set_font_with_style(delim_size, false, false);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", x, delim_baseline).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(open);
+                    self.current.extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                    x += w;
+                }
+                x = self.draw_math_pieces(inner, x, axis_y, math_size);
+                if !close.is_empty() {
+                    let w = self.measure_math(close, delim_size);
+                    self.set_font_with_style(delim_size, false, false);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", x, delim_baseline).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(close);
+                    self.current.extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                    x += w;
+                }
+            }
+            MathPiece::Scripts { base, sup, sub } => {
+                let script = math_size * 0.62;
+                // Base
+                if !base.is_empty() {
+                    self.set_font_with_style(math_size, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", x, axis_y).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(base);
+                    self.current.extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                    x += self.measure_math(base, math_size);
+                }
+                // Scripts: superscript raised, subscript lowered.
+                if !sup.is_empty() {
+                    self.set_font_with_style(script, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", x, axis_y + script * 0.85).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(sup);
+                    self.current.extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                }
+                if !sub.is_empty() {
+                    self.set_font_with_style(script, false, true);
+                    self.current.extend_from_slice(
+                        format!("1 0 0 1 {} {} Tm\n", x, axis_y - script * 0.55).as_bytes(),
+                    );
+                    let enc = self.encode_text_for_current_font(sub);
+                    self.current.extend_from_slice(format!("{} Tj\n", enc).as_bytes());
+                }
+                x += self.measure_math(sup, script).max(self.measure_math(sub, script)) + 1.0;
+            }
+            }
+        }
+        x
     }
 
     fn set_color(&mut self, color: Color) {
@@ -2149,6 +2645,12 @@ pub(crate) fn render_elements_to_builder(
             Element::RichParagraph { segments } => {
                 builder.emit_rich_paragraph(segments, base_font_size);
             }
+            Element::JustifiedParagraph {
+                segments,
+                first_line_indent_em,
+            } => {
+                builder.emit_justified_paragraph(segments, *first_line_indent_em, base_font_size);
+            }
             Element::UnorderedListItem { text, depth } => {
                 let indent = "  ".repeat(*depth as usize);
                 let line = format!("{}- {}", indent, text);
@@ -2471,5 +2973,58 @@ mod tests {
         let expected = encoder.encode_text_as_glyph_ids("Unicode Test");
 
         assert_eq!(encoded, expected);
+    }
+}
+
+#[cfg(test)]
+mod widow_tests {
+    use super::paragraph_line_chunks;
+
+    #[test]
+    fn fits_when_capacity_allows() {
+        assert_eq!(paragraph_line_chunks(3, 5), vec![(0, false)]);
+        assert_eq!(paragraph_line_chunks(5, 5), vec![(0, false)]);
+    }
+
+    #[test]
+    fn zero_capacity_moves_whole_paragraph() {
+        assert_eq!(paragraph_line_chunks(4, 0), vec![(0, true)]);
+    }
+
+    #[test]
+    fn club_control_moves_paragraph_when_one_line_fits() {
+        assert_eq!(paragraph_line_chunks(4, 1), vec![(0, true)]);
+    }
+
+    #[test]
+    fn widow_control_breaks_one_line_early() {
+        // 5 lines, 4 fit: moving 4 would leave a lone widow; move 3.
+        assert_eq!(paragraph_line_chunks(5, 4), vec![(0, false), (3, true)]);
+    }
+
+    #[test]
+    fn normal_split_takes_full_capacity() {
+        assert_eq!(paragraph_line_chunks(10, 4), vec![(0, false), (4, true)]);
+    }
+
+    #[test]
+    fn empty_paragraph_has_no_chunks() {
+        assert!(paragraph_line_chunks(0, 5).is_empty());
+    }
+
+    #[test]
+    fn chunks_cover_all_lines() {
+        for lines in 1..12usize {
+            for capacity in 0..8usize {
+                let chunks = paragraph_line_chunks(lines, capacity);
+                let covered: usize = chunks
+                    .windows(2)
+                    .map(|w| w[1].0 - w[0].0)
+                    .sum::<usize>()
+                    + chunks.last().map(|&(s, _)| lines - s).unwrap_or(0);
+                assert_eq!(covered, lines, "lines={lines} capacity={capacity}");
+                assert!(chunks.windows(2).all(|w| w[0].0 < w[1].0));
+            }
+        }
     }
 }

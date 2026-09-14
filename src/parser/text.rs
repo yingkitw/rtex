@@ -34,12 +34,21 @@ impl TexParser {
                 // Keep $ delimiters so PDF builder can format the math
                 text.push_str(&format!("${}$", math_content));
             } else if let Some(ch) = remaining.chars().next() {
-                text.push(ch);
+                // `~` is a non-breaking space in text mode; plain
+                // spaces in output. (`\~` tilde accents never reach
+                // here — the accent phase consumes them.)
+                text.push(if ch == '~' { ' ' } else { ch });
                 self.position += ch.len_utf8();
             }
         }
 
         if text.trim().is_empty() {
+            // A run containing a space separates words before a
+            // command ("a \&b"); pure newline/indent runs are layout
+            // noise and are dropped.
+            if text.contains(' ') {
+                return Some(TexElement::Text(" ".to_string()));
+            }
             None
         } else {
             Some(TexElement::Text(convert_text_ligatures(&text)))

@@ -37,6 +37,21 @@ pub(super) enum MathPiece {
         /// The radicand, already rendered to Unicode text.
         radicand: String,
     },
+    /// `\left<delim> ... \right<delim>` with delimiters scaled to the
+    /// height of the grouped content (empty string = invisible `.`).
+    Group {
+        open: String,
+        close: String,
+        inner: Vec<MathPiece>,
+    },
+    /// Base with superscript/subscript (`x^{i+j}`, `a_1`, `a_n^m`),
+    /// scripts rendered at script size with vertical offsets. Either
+    /// script may be empty; base may be empty for bare `_{...}`.
+    Scripts {
+        base: String,
+        sup: String,
+        sub: String,
+    },
 }
 
 /// Parse a LaTeX-like math expression into display pieces.
@@ -52,8 +67,6 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
     s = s.replace("\\!", "");
     s = s.replace("\\quad", "  ");
     s = s.replace("\\qquad", "   ");
-    s = s.replace("\\left", "");
-    s = s.replace("\\right", "");
 
     let mut pieces = Vec::new();
     let mut i = 0;
@@ -73,6 +86,12 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
 
         let rest = &s[i..];
 
+        if let Some((piece, consumed)) = try_parse_group(rest) {
+            pieces.push(piece);
+            i += consumed;
+            continue;
+        }
+
         if let Some((piece, consumed)) = try_parse_operator(rest) {
             pieces.push(piece);
             i += consumed;
@@ -86,6 +105,14 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
         }
 
         if let Some((piece, consumed)) = try_parse_radical(rest) {
+            pieces.push(piece);
+            i += consumed;
+            continue;
+        }
+
+        // Scripts LAST: large operators and groups consume their own
+        // `^`/`_` limits first.
+        if let Some((piece, consumed)) = try_parse_scripts(rest) {
             pieces.push(piece);
             i += consumed;
             continue;
@@ -106,7 +133,7 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
                 .char_indices()
                 .skip(1)
                 .find(|(_, c)| {
-                    c.is_whitespace() || *c == '\\' || *c == '{' || *c == '^' || *c == '_'
+                    c.is_whitespace() || *c == '\\' || *c == '{' || *c == '_'
                 })
                 .map(|(idx, _)| idx)
                 .unwrap_or(rest.len())
@@ -125,7 +152,7 @@ pub(super) fn parse_display_math(expr: &str) -> Vec<MathPiece> {
 }
 
 fn find_next_special(s: &str) -> usize {
-    let markers = ["\\sum", "\\prod", "\\int", "\\frac", "\\sqrt"];
+    let markers = ["\\sum", "\\prod", "\\int", "\\frac", "\\sqrt", "\\left", "^", "_"];
     let mut best = s.len();
     for m in markers {
         if let Some(pos) = s.find(m) {
@@ -194,11 +221,12 @@ fn try_parse_radical(s: &str) -> Option<(MathPiece, usize)> {
     let mut idx = 5; // \sqrt
     let mut index = String::new();
     // Optional root index [n]
-    if idx < s.len() && s.as_bytes()[idx] == b'[' {
-        if let Some(end) = s[idx..].find(']') {
-            index = render_math_text(&s[idx + 1..idx + end]);
-            idx += end + 1;
-        }
+    if idx < s.len()
+        && s.as_bytes()[idx] == b'['
+        && let Some(end) = s[idx..].find(']')
+    {
+        index = render_math_text(&s[idx + 1..idx + end]);
+        idx += end + 1;
     }
     let (radicand, rlen) = parse_brace_group(&s[idx..])?;
     idx += rlen;
@@ -209,6 +237,144 @@ fn try_parse_radical(s: &str) -> Option<(MathPiece, usize)> {
         },
         idx,
     ))
+}
+
+/// Parse `<atom>^<arg>` / `<atom>_<arg>` (TeX scripts). The base atom
+/// is a braced group, a backslash command, or a single non-operator
+/// character; the base itself may be empty (`_{n}` alone). Either
+/// script may be absent and both may appear (`a_n^m`).
+fn try_parse_scripts(s: &str) -> Option<(MathPiece, usize)> {
+    fn script_arg(s: &str) -> Option<(String, usize)> {
+        if let Some(rest) = s.strip_prefix('{') {
+            let end = rest.find('}')?;
+            Some((rest[..end].to_string(), end + 2))
+        } else if let Some(rest) = s.strip_prefix('\\') {
+            let len: usize = rest
+                .char_indices()
+                .take_while(|(_, c)| c.is_alphabetic())
+                .map(|(_, c)| c.len_utf8())
+                .sum();
+            Some((s[..1 + len].to_string(), 1 + len))
+        } else {
+            let c = s.chars().next()?;
+            Some((c.to_string(), c.len_utf8()))
+        }
+    }
+
+    let mut idx = 0usize;
+    let mut base = String::new();
+    // Optional base atom — never an operator/relation/punct char
+    // (those belong to the surrounding expression, e.g. `x = y_1`).
+    if let Some(c) = s.chars().next() {
+        let is_op = "+-=<>,();[].|/!~".contains(c);
+        if c == '{' {
+            let rest = &s[1..];
+            let end = rest.find('}')?;
+            base = render_math_text(&rest[..end]);
+            idx = 1 + end + 1;
+        } else if c == '\\' {
+            let len: usize = s[1..]
+                .char_indices()
+                .take_while(|(_, ch)| ch.is_alphabetic())
+                .map(|(_, ch)| ch.len_utf8())
+                .sum();
+            idx = 1 + len;
+            base = render_math_text(&s[..idx]);
+        } else if !is_op && !c.is_whitespace() && c != '^' && c != '_' {
+            idx = c.len_utf8();
+            base = render_math_text(&s[..idx]);
+        }
+    }
+
+    let mut sup = String::new();
+    let mut sub = String::new();
+    let mut seen = false;
+    loop {
+        if s[idx..].starts_with('^') {
+            let (arg, len) = script_arg(&s[idx + 1..])?;
+            // Strip operator spacing: script style is tight.
+            sup = render_math_text(&arg).replace(' ', "");
+            idx += 1 + len;
+            seen = true;
+        } else if s[idx..].starts_with('_') {
+            let (arg, len) = script_arg(&s[idx + 1..])?;
+            sub = render_math_text(&arg).replace(' ', "");
+            idx += 1 + len;
+            seen = true;
+        } else {
+            break;
+        }
+    }
+    if !seen {
+        return None;
+    }
+    Some((MathPiece::Scripts { base, sup, sub }, idx))
+}
+
+/// Parse `\left<delim> ... \right<delim>` into a scaled-delimiter
+/// [`MathPiece::Group`]. Nesting is honored via depth counting;
+/// unmatched `\left` yields `None` (caller falls back to text).
+fn try_parse_group(s: &str) -> Option<(MathPiece, usize)> {
+    if !s.starts_with("\\left") {
+        return None;
+    }
+    let mut idx = 5; // \left
+    let (open, olen) = parse_delim_token(&s[idx..]);
+    idx += olen;
+
+    let (right_pos, right_word_end) = find_matching_right(&s[idx..])?;
+    let inner = parse_display_math(&s[idx..idx + right_pos]);
+    idx += right_word_end;
+    let (close, clen) = parse_delim_token(&s[idx..]);
+    idx += clen;
+
+    Some((MathPiece::Group { open, close, inner }, idx))
+}
+
+/// The delimiter token following `\left`/`\right`: a symbol, an
+/// escaped brace, `.` (invisible), or a small set of commands.
+fn parse_delim_token(s: &str) -> (String, usize) {
+    for (tok, glyph, len) in [
+        ("\\{", "{", 2),
+        ("\\}", "}", 2),
+        ("\\langle", "\u{27e8}", 7),
+        ("\\rangle", "\u{27e9}", 7),
+        ("\\lvert", "|", 6),
+        ("\\rvert", "|", 6),
+    ] {
+        if s.starts_with(tok) {
+            return (glyph.to_string(), len);
+        }
+    }
+    match s.chars().next() {
+        Some(c @ ('(' | '[' | '{' | '|' | '.' | ')' | ']' | '}')) => {
+            let glyph: String = if c == '.' { String::new() } else { c.to_string() };
+            (glyph, c.len_utf8())
+        }
+        _ => (String::new(), 0),
+    }
+}
+
+/// Find the `\right` matching the `\left` at the start of `s`.
+/// Returns (offset of `\right`, offset past the word `\right`).
+fn find_matching_right(s: &str) -> Option<(usize, usize)> {
+    let mut i = 0usize;
+    let mut depth = 1i32;
+    while i < s.len() {
+        if s[i..].starts_with("\\left") {
+            depth += 1;
+            i += 5;
+        } else if s[i..].starts_with("\\right") {
+            depth -= 1;
+            if depth == 0 {
+                return Some((i, i + 6));
+            }
+            i += 6;
+        } else {
+            i += 1;
+        }
+    }
+    None
 }
 
 /// Parse `_lower^upper`, `_{lower}^{upper}`, or mixed forms. Returns (lower, upper, bytes_consumed).
@@ -307,6 +473,21 @@ pub(super) fn piece_width(
             let rad_w = measure(radicand, font_size);
             sym_w + idx_w + rad_w
         }
+        MathPiece::Group { open, close, inner } => {
+            let inner_h = line_height_for_pieces(inner, font_size);
+            // Delimiter glyph visual height ≈ 0.95 em.
+            let delim_size = (inner_h / 0.95).clamp(font_size, font_size * 3.5);
+            let delim_w = if open.is_empty() { 0.0 } else { measure(open, delim_size) };
+            let close_w = if close.is_empty() { 0.0 } else { measure(close, delim_size) };
+            let inner_w: f32 = inner.iter().map(|p| piece_width(p, font_size, measure)).sum();
+            delim_w + inner_w + close_w
+        }
+        MathPiece::Scripts { base, sup, sub } => {
+            let script = font_size * 0.62;
+            let base_w = measure(base, font_size);
+            let script_w = measure(sup, script).max(measure(sub, script));
+            base_w + script_w + 1.0
+        }
     }
 }
 
@@ -332,6 +513,21 @@ pub(super) fn line_height_for_pieces(pieces: &[MathPiece], font_size: f32) -> f3
             }
             MathPiece::Radical { .. } => {
                 ascent = ascent.max(font_size * 1.05);
+            }
+            MathPiece::Group { inner, .. } => {
+                // Delimiters extend slightly beyond the grouped content.
+                let inner_h = line_height_for_pieces(inner, font_size);
+                ascent = ascent.max(inner_h * 0.62);
+                descent = descent.max(inner_h * 0.48);
+            }
+            MathPiece::Scripts { sup, sub, .. } => {
+                let script = font_size * 0.62;
+                if !sup.is_empty() {
+                    ascent = ascent.max(script * 1.3);
+                }
+                if !sub.is_empty() {
+                    descent = descent.max(script * 0.9);
+                }
             }
         }
     }
@@ -379,6 +575,22 @@ pub(super) fn pieces_to_plain_text(pieces: &[MathPiece]) -> String {
                 out.push('(');
                 out.push_str(radicand);
                 out.push(')');
+            }
+            MathPiece::Group { open, close, inner } => {
+                out.push_str(open);
+                out.push_str(&pieces_to_plain_text(inner));
+                out.push_str(close);
+            }
+            MathPiece::Scripts { base, sup, sub } => {
+                out.push_str(base);
+                if !sup.is_empty() {
+                    out.push('^');
+                    out.push_str(sup);
+                }
+                if !sub.is_empty() {
+                    out.push('_');
+                    out.push_str(sub);
+                }
             }
         }
     }
@@ -446,5 +658,324 @@ mod tests {
         assert!(plain.contains('∑'), "{}", plain);
         assert!(plain.contains('→') || plain.contains('k'), "{}", plain);
         assert!(plain.contains('/') || plain.contains("n+1"), "{}", plain);
+    }
+}
+
+/// Insert TeX-style spacing around math operators at group depth 0:
+/// relations (`= < > ≤ ≥ ≠ ≈ ≡ ← → ↔ ⇒ ⇐ ⇔ ∝`) get a thick space
+/// (two spaces), binary operators (`+ - ± ∗ × ·`) a medium space (one
+/// space, only between atoms — unary minus stays tight), and
+/// punctuation (`, ;`) a thin space after. Content inside groups is
+/// left untouched: `{...}` always; `(...)`/`[...]` too when
+/// `parens_as_groups` is set (inline math uses that conservative mode
+/// so `lim(x→0)` and `∑[i=1→n]` limit notation stays tight).
+pub fn apply_operator_spacing(expr: &str, parens_as_groups: bool) -> String {
+    const RELATIONS: &[char] = &[
+        '=', '<', '>', '≤', '≥', '≠', '≈', '≡', '∼', '←', '→', '↔', '⇒', '⇐', '⇔', '∝', '⊂',
+        '⊃', '⊆', '⊇', '∈', '∉',
+    ];
+    const BINOPS: &[char] = &['+', '-', '±', '∗', '×', '·', '∖', '∪', '∩'];
+    const ATOM_BREAK: &[char] = &['^', '_', '(', '[', '{', ',', ';'];
+
+    let chars: Vec<char> = expr.chars().collect();
+    let prev_atom = |i: usize| -> Option<char> {
+        chars[..i].iter().rev().find(|c| !c.is_whitespace()).copied()
+    };
+    let next_atom = |i: usize| -> Option<char> {
+        chars[i + 1..].iter().find(|c| !c.is_whitespace()).copied()
+    };
+    // A command start (`\`) behaves like an atom boundary; a sign
+    // before an operand (`x=-y`) still allows relation spacing.
+    let is_atomish = |c: char| c.is_alphanumeric() || c == ')' || c == '}' || c == '\\';
+
+    let group_open = |c: char| parens_as_groups && (c == '(' || c == '[');
+    let group_close = |c: char| parens_as_groups && (c == ')' || c == ']');
+
+    // Depth tracks parens/brackets in inline mode only; braces do NOT
+    // suppress spacing — TeX spaces binaries inside groups too (thin
+    // script spacing), e.g. `\sqrt{b^2-4ac}` renders `b^2 - 4ac`.
+    let mut out = String::with_capacity(expr.len() + 16);
+    let mut depth = 0usize;
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            _ if group_open(c) => {
+                depth += 1;
+                out.push(c);
+            }
+            _ if group_close(c) => {
+                depth = depth.saturating_sub(1);
+                out.push(c);
+            }
+            _ if depth > 0 => out.push(c),
+            _ if RELATIONS.contains(&c) => {
+                let prev = prev_atom(i);
+                let next = next_atom(i);
+                let spaced = prev.is_some_and(is_atomish)
+                    && next.is_some_and(|n| is_atomish(n) || n == '-' || n == '+');
+                if spaced {
+                    out.push_str("  ");
+                    out.push(c);
+                    out.push_str("  ");
+                } else {
+                    out.push(c);
+                }
+            }
+            _ if BINOPS.contains(&c) => {
+                let prev = prev_atom(i);
+                let next = next_atom(i);
+                let unary_left = prev.is_none()
+                    || matches!(prev, Some('(' | '[' | '{' | '^' | '_' | ','))
+                    || prev.is_some_and(|p| RELATIONS.contains(&p));
+                let binary = !unary_left && next.is_some_and(is_atomish);
+                if binary {
+                    out.push(' ');
+                    out.push(c);
+                    out.push(' ');
+                } else {
+                    out.push(c);
+                }
+            }
+            ',' | ';' => {
+                out.push(c);
+                if let Some(next) = next_atom(i)
+                    && !ATOM_BREAK.contains(&next)
+                {
+                    out.push(' ');
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod spacing_tests {
+    use super::apply_operator_spacing;
+
+    /// Display-math mode: parens are content, not groups.
+    fn apply_operator_spacing_display(expr: &str) -> String {
+        apply_operator_spacing(expr, false)
+    }
+
+    /// Inline-math mode: parens/brackets are groups (limit notation
+    /// like `lim(x→0)` stays tight).
+    fn apply_operator_spacing_inline(expr: &str) -> String {
+        apply_operator_spacing(expr, true)
+    }
+
+    #[test]
+    fn relations_get_thick_space() {
+        assert_eq!(apply_operator_spacing_display("a+b=c"), "a + b  =  c");
+        assert_eq!(apply_operator_spacing_display("x<y"), "x  <  y");
+        assert_eq!(apply_operator_spacing_display("a≥b"), "a  ≥  b");
+    }
+
+    #[test]
+    fn binary_ops_get_medium_space() {
+        assert_eq!(apply_operator_spacing_display("x-y"), "x - y");
+        assert_eq!(apply_operator_spacing_display("2×3"), "2 × 3");
+        assert_eq!(apply_operator_spacing_display("a±b"), "a ± b");
+    }
+
+    #[test]
+    fn unary_minus_stays_tight() {
+        assert_eq!(apply_operator_spacing_display("-x"), "-x");
+        assert_eq!(apply_operator_spacing_display("(-x)"), "(-x)");
+        assert_eq!(apply_operator_spacing_display("f(-x)"), "f(-x)");
+        assert_eq!(apply_operator_spacing_display("x=-y"), "x  =  -y");
+    }
+
+    #[test]
+    fn comma_gets_thin_space_after() {
+        assert_eq!(apply_operator_spacing_display("f(x,y)"), "f(x, y)");
+        assert_eq!(apply_operator_spacing_display("a,b,c"), "a, b, c");
+    }
+
+    #[test]
+    fn braces_do_not_block_spacing() {
+        // TeX spaces binaries inside groups (thin script spacing).
+        assert_eq!(apply_operator_spacing_display("a^{b+c}"), "a^{b + c}");
+        assert_eq!(apply_operator_spacing_inline("x_{i+j}=y"), "x_{i + j}  =  y");
+    }
+
+    #[test]
+    fn commands_and_greek_survive() {
+        assert_eq!(apply_operator_spacing_display("\\alpha+\\beta=\\gamma"), "\\alpha + \\beta  =  \\gamma");
+        assert_eq!(apply_operator_spacing_display("E=mc^2"), "E  =  mc^2");
+    }
+
+    #[test]
+    fn no_spacing_at_boundaries() {
+        assert_eq!(apply_operator_spacing_display("+x"), "+x");
+        assert_eq!(apply_operator_spacing_display("x+"), "x+");
+        assert_eq!(apply_operator_spacing_display(""), "");
+    }
+
+    #[test]
+    fn inline_mode_keeps_limit_notation_tight() {
+        assert_eq!(apply_operator_spacing_inline("lim(x→0)"), "lim(x→0)");
+        assert_eq!(apply_operator_spacing_inline("∑[i=1→n]"), "∑[i=1→n]");
+        assert_eq!(apply_operator_spacing_inline("f(x,y)"), "f(x,y)");
+        assert_eq!(apply_operator_spacing_inline("a+b"), "a + b");
+    }
+}
+
+#[cfg(test)]
+mod group_tests {
+    use super::*;
+
+    #[test]
+    fn parses_left_right_as_group() {
+        let pieces = parse_display_math(r"\left( a+b \right)");
+        assert_eq!(pieces.len(), 1, "got {pieces:?}");
+        match &pieces[0] {
+            MathPiece::Group { open, close, inner } => {
+                assert_eq!(open, "(");
+                assert_eq!(close, ")");
+                assert_eq!(inner.len(), 1, "inner: {inner:?}");
+            }
+            other => panic!("expected Group, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn group_with_fraction_inner() {
+        let pieces = parse_display_math(r"\left[\frac{1}{2}\right]");
+        match &pieces[0] {
+            MathPiece::Group { open, close, inner } => {
+                assert_eq!(open, "[");
+                assert_eq!(close, "]");
+                assert!(matches!(inner[0], MathPiece::Fraction { .. }), "{inner:?}");
+            }
+            other => panic!("expected Group, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nested_groups() {
+        let pieces = parse_display_math(r"\left[\left(a\right)\right]");
+        match &pieces[0] {
+            MathPiece::Group { inner, .. } => match &inner[0] {
+                MathPiece::Group { open, .. } => assert_eq!(open, "("),
+                other => panic!("expected nested Group, got {other:?}"),
+            },
+            other => panic!("expected Group, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invisible_delimiters() {
+        let pieces = parse_display_math(r"\left. a \right.");
+        match &pieces[0] {
+            MathPiece::Group { open, close, .. } => {
+                assert_eq!(open, "");
+                assert_eq!(close, "");
+            }
+            other => panic!("expected Group, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn group_is_wider_than_inner_text() {
+        let plain = parse_display_math("a+b");
+        let grouped = parse_display_math(r"\left( a+b \right)");
+        let measure = |t: &str, s: f32| t.chars().count() as f32 * s;
+        let w_plain: f32 = plain.iter().map(|p| piece_width(p, 10.0, &measure)).sum();
+        let w_group: f32 = grouped.iter().map(|p| piece_width(p, 10.0, &measure)).sum();
+        assert!(w_group > w_plain, "{w_group} vs {w_plain}");
+    }
+
+    #[test]
+    fn plain_text_recurses_into_groups() {
+        let pieces = parse_display_math(r"\left( x \right)");
+        let text = pieces_to_plain_text(&pieces);
+        assert_eq!(text, "(x)");
+    }
+
+    #[test]
+    fn unmatched_left_falls_back_without_crash() {
+        let pieces = parse_display_math(r"\left(a + b");
+        assert!(!pieces.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod scripts_tests {
+    use super::*;
+
+    #[test]
+    fn braced_superscript_parses() {
+        let pieces = parse_display_math("x^{i+j}");
+        match &pieces[0] {
+            MathPiece::Scripts { base, sup, sub } => {
+                assert_eq!(base, "x");
+                assert_eq!(sup, "i+j");
+                assert_eq!(sub, "");
+            }
+            other => panic!("expected Scripts, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn simple_subscript_parses() {
+        let pieces = parse_display_math("a_1");
+        match &pieces[0] {
+            MathPiece::Scripts { base, sup, sub } => {
+                assert_eq!(base, "a");
+                assert_eq!(sub, "1");
+                assert_eq!(sup, "");
+            }
+            other => panic!("expected Scripts, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn both_scripts_parse() {
+        let pieces = parse_display_math("a_n^m");
+        match &pieces[0] {
+            MathPiece::Scripts { base, sup, sub } => {
+                assert_eq!(base, "a");
+                assert_eq!(sup, "m");
+                assert_eq!(sub, "n");
+            }
+            other => panic!("expected Scripts, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn relations_keep_scripts_attached_to_operands() {
+        // `x = y_1`: the `=` must NOT become a script base.
+        let pieces = parse_display_math("x = y_1");
+        assert!(
+            pieces.iter().any(|p| matches!(p, MathPiece::Text(t) if t.contains('='))),
+            "relation must stay text: {pieces:?}"
+        );
+        assert!(
+            pieces.iter().any(|p| matches!(p, MathPiece::Scripts { sub, .. } if sub == "1")),
+            "subscript must parse: {pieces:?}"
+        );
+    }
+
+    #[test]
+    fn scripts_are_wider_than_base_alone() {
+        let with = parse_display_math("x^{i+j}");
+        let without = parse_display_math("x");
+        let measure = |t: &str, s: f32| t.chars().count() as f32 * s;
+        let w = |ps: &[MathPiece]| ps.iter().map(|p| piece_width(p, 10.0, &measure)).sum::<f32>();
+        assert!(w(&with) > w(&without));
+    }
+
+    #[test]
+    fn plain_text_includes_scripts() {
+        let pieces = parse_display_math("a_n^m");
+        assert_eq!(pieces_to_plain_text(&pieces), "a^m_n");
+    }
+
+    #[test]
+    fn operator_limits_still_win_over_scripts() {
+        // `\sum_i^n` must parse as an Operator piece (limits), not Scripts.
+        let pieces = parse_display_math(r"\sum_i^n a_i");
+        assert!(matches!(pieces[0], MathPiece::Operator { .. }), "{pieces:?}");
     }
 }

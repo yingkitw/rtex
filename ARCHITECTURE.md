@@ -51,6 +51,7 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
   - `\linebreak`/`\nopagebreak`/`\samepage`/`\enlargethispage`
 - `math.rs`: Inline and display math delimiter parsing
 - `text.rs`: Plain-text accumulation with inline-math preservation
+- `accents.rs`: Text accent composition (`\'e`, `\"{u}`, `\c{c}`) to precomposed Unicode
 
 ### Math Processing (`src/math/`)
 
@@ -70,11 +71,20 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
 
 - Converts parsed `TexElement` AST to PDF via the vendored pdfrs engine
 - Page layout, text positioning, automatic page breaks
+- Paragraph text is rendered justified: rtex maps paragraphs to `Element::JustifiedParagraph`, which the typesetter breaks with Knuth–Plass total-fit line breaking over a box/glue/penalty horizontal list (stretch/shrink interword glue, ragged final line). First lines carry TeX `\parindent` (1.5 em), suppressed after headings, display math, and `\noindent`; page breaks obey widow/club control (never a lone line at a page top or bottom)
 - Font management: standard Helvetica for ASCII-only docs; embedded DejaVu Sans subset for Unicode/math
 - Font subsetting via `font-subset` crate when Unicode characters are present
 - Supports titles, sections, lists, math, images, tables, theorems, cross-references
 - FlateDecode content stream compression
 - PDF metadata (Title, Author, Creator, Producer, CreationDate)
+
+### Typesetter (`vendor/pdfrs/src/typeset.rs`)
+
+- TeX horizontal-list model: `Node::{Box, Glue, Penalty, Hyphen}` with TeX's sentinel costs (`FORCED_BREAK = -10000`, `FORBIDDEN_BREAK = +10000`)
+- `break_lines` chooses breakpoints by Knuth–Plass dynamic programming (demerits + fitness classes); greedy first-fit fallback when the tolerance is unmeetable
+- Hyphenation: `vendor/pdfrs/src/hyphenate.rs` runs Liang's pattern algorithm (embedded ushyphmax English patterns + exception list) to insert discretionary `Node::Hyphen` breakpoints — mid-word breaks with a hyphen glyph, exactly like TeX
+- Math spacing: `math_layout::apply_operator_spacing` inserts TeX mu-spacing (thick around relations, medium around binary operators, tight unary minus, thin after punctuation) in display and inline math; inline mode keeps `lim(x→0)`-style limit notation tight
+- Pure and width-function-agnostic: callers supply measured box widths; the module returns `Line { start, end, ratio }` covering ranges with an adjustment ratio applied to glue
 
 ### Error Handling (`src/error.rs`)
 
@@ -218,8 +228,10 @@ rtex/
 │   │   ├── tests.rs        # Parser unit tests
 │   │   ├── text.rs         # Raw text accumulation
 │   │   ├── math.rs         # Inline and display math delimiter parsing
+│   │   ├── accents.rs      # Text accent composition → precomposed Unicode
 │   │   └── commands.rs     # Backslash command handlers
 │   ├── math/               # Math formatting submodules
+│   │   ├── mod.rs          # Math module root
 │   │   ├── symbols.rs      # 618+ LaTeX-to-Unicode mappings
 │   │   ├── scripts.rs      # Superscript/subscript Unicode conversion
 │   │   ├── radicals.rs     # Square root formatting
@@ -235,10 +247,12 @@ rtex/
 │   │   └── common.rs       # Shared output utilities
 │   ├── packages/           # CTAN package scanning and fetching
 │   ├── lsp/                # Language Server Protocol support (feature: lsp)
+│   │   ├── mod.rs          # LSP module root
 │   │   ├── server.rs       # stdio LSP loop
 │   │   ├── diagnostics.rs  # Error/warning diagnostics
 │   │   ├── completion.rs   # Autocomplete candidates
 │   │   ├── hover.rs        # Hover documentation
+│   │   ├── positions.rs    # Source ↔ AST position mapping
 │   │   └── symbols.rs      # Document symbol outline
 │   ├── table.rs            # Table parsing and rendering
 │   ├── macros.rs           # \newcommand / \def macro expansion
@@ -252,7 +266,7 @@ rtex/
 │   ├── wasm.rs             # wasm-bindgen exports (feature: wasm)
 │   ├── tests.rs            # Inline unit tests
 │   ├── example_tests.rs    # Example file compilation tests
-│   └── bin/                # Debug/test binaries (feature: dev-bins)
+│   └── bin/                # rtex-lsp (feature: lsp); debug/test harnesses (feature: dev-bins)
 ├── examples/               # Example TeX files
 ├── tests/
 │   ├── integration_test.rs # Integration tests

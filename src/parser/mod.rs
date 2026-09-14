@@ -8,6 +8,7 @@ use crate::utils::extract_braced;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+mod accents;
 mod commands;
 mod math;
 mod text;
@@ -131,6 +132,76 @@ pub struct TexParser {
     plugins: Option<crate::plugins::PluginRegistry>,
     base_dir: Option<PathBuf>,
     search_paths: Vec<PathBuf>,
+    /// Acronym/glossary entries from `\newacronym`/`\newglossaryentry`:
+    /// key → (short form, long form).
+    acronyms: std::collections::HashMap<String, (String, String)>,
+}
+
+/// Scan raw source for `\newacronym{key}{short}{long}` (with optional
+/// `[...]` before the key) and `\newglossaryentry{key}{name=..., ...}`
+/// so `\gls`/`\acr*` commands can render real terms.
+fn extract_acronyms(content: &str) -> std::collections::HashMap<String, (String, String)> {
+    let mut map = std::collections::HashMap::new();
+    let mut rest = content;
+    while let Some(pos) = rest.find("\\newacronym") {
+        rest = &rest[pos + "\\newacronym".len()..];
+        let mut fields = Vec::new();
+        let mut cursor = rest.trim_start();
+        // Optional [...] argument(s), then three {...} groups.
+        while let Some(stripped) = cursor.strip_prefix('[') {
+            if let Some(end) = stripped.find(']') {
+                cursor = stripped[end + 1..].trim_start();
+            } else {
+                break;
+            }
+        }
+        let mut ok = true;
+        for _ in 0..3 {
+            let Some(stripped) = cursor.strip_prefix('{') else {
+                ok = false;
+                break;
+            };
+            let Some(end) = stripped.find('}') else {
+                ok = false;
+                break;
+            };
+            fields.push(stripped[..end].to_string());
+            cursor = stripped[end + 1..].trim_start();
+        }
+        if ok && fields.len() == 3 {
+            map.insert(fields[0].clone(), (fields[1].clone(), fields[2].clone()));
+        }
+    }
+    rest = content;
+    while let Some(pos) = rest.find("\\newglossaryentry") {
+        rest = &rest[pos + "\\newglossaryentry".len()..];
+        let cursor = rest.trim_start();
+        let Some(stripped) = cursor.strip_prefix('{') else {
+            continue;
+        };
+        let Some(key_end) = stripped.find('}') else {
+            continue;
+        };
+        let key = stripped[..key_end].to_string();
+        let Some(opts) = stripped[key_end + 1..].strip_prefix('{') else {
+            continue;
+        };
+        let Some(opts_end) = opts.find('}') else {
+            continue;
+        };
+        // `name=Term` is the display form; the long description is the
+        // rest of the option list up to the first top-level comma.
+        let opts_body = &opts[..opts_end];
+        let name = opts_body
+            .split(',')
+            .find_map(|f| f.trim().strip_prefix("name="))
+            .map(str::trim)
+            .unwrap_or("");
+        if !name.is_empty() {
+            map.insert(key, (name.to_string(), name.to_string()));
+        }
+    }
+    map
 }
 
 impl TexParser {
@@ -141,12 +212,14 @@ impl TexParser {
         let mut store = crate::macros::MacroStore::new();
         let stripped = store.extract_definitions(&content);
         let expanded = store.expand_all(&stripped);
+        let acronyms = extract_acronyms(&expanded);
         Self {
             content: expanded,
             position: 0,
             plugins: None,
             base_dir: None,
             search_paths: Vec::new(),
+            acronyms,
         }
     }
 
@@ -182,7 +255,17 @@ impl TexParser {
         while self.position < self.content.len() {
             let start_position = self.position;
             if let Some(element) = self.parse_next() {
-                elements.push(element);
+                // Source-adjacent text concatenates without a space
+                // (TeX semantics): a symbol command like `\ss` inside
+                // a word must not split it into "Stra ß e". Line and
+                // sentence boundaries are already preserved inside the
+                // Text content itself (parse_text keeps `\n`).
+                match (elements.last_mut(), &element) {
+                    (Some(TexElement::Text(prev)), TexElement::Text(next)) => {
+                        prev.push_str(next);
+                    }
+                    _ => elements.push(element),
+                }
             }
 
             if self.position == start_position {
@@ -250,13 +333,109 @@ impl TexParser {
             return None;
         }
 
-        let remaining = &self.content[self.position..];
-
-        if remaining.starts_with("\\end{document}") {
+        // Terminate parsing at the end of the document body.
+        if self.content[self.position..].starts_with("\\end{document}") {
             self.position = self.content.len();
             return None;
         }
 
+        // Bare brace groups: `{}` terminates a command scope
+        // (`\LaTeX{} rocks`); a non-empty group scopes its contents,
+        // which are parsed normally.
+        if self.content[self.position..].starts_with('{') {
+            let base = self.position;
+            let mut depth = 0usize;
+            let mut close = None;
+            for (i, ch) in self.content[base..].char_indices() {
+                match ch {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close = Some(base + i);
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            self.position += 1; // consume '{'
+            let limit = close.unwrap_or(self.content.len());
+            while self.position < limit {
+                let before = self.position;
+                self.skip_comments();
+                if self.content[self.position..].starts_with('}') {
+                    self.position += 1;
+                    return None;
+                }
+                match self.parse_next() {
+                    Some(element) => return Some(element),
+                    None => {
+                        if self.position == before {
+                            self.position += 1;
+                        }
+                    }
+                }
+            }
+            if close.is_some() && self.content[self.position..].starts_with('}') {
+                self.position += 1;
+            }
+            return None;
+        }
+
+        // Ordered dispatch phases. Order is significant: many command
+        // prefixes overlap (for example `\cite` must be checked after
+        // `\citeauthor`). A phase returning `None` falls through to the
+        // next phase ONLY while the position is unchanged; if the phase
+        // consumed input (skip commands, `\input` splicing, unknown
+        // environments), dispatch stops and the driver re-enters
+        // `parse_next` so all phases see the updated content again.
+        macro_rules! dispatch {
+            ($phase:ident) => {{
+                let before = self.position;
+                match self.$phase() {
+                    Some(element) => return Some(element),
+                    None if self.position > before => return None,
+                    None => {}
+                }
+            }};
+        }
+        dispatch!(try_structure_and_sections);
+        dispatch!(try_inline_and_citations);
+        dispatch!(try_math_delimiters);
+        dispatch!(try_text_accents);
+        dispatch!(try_flow_and_breaks);
+        dispatch!(try_text_symbols);
+        dispatch!(try_links_and_text_cmds);
+        dispatch!(try_spacing_and_files);
+        dispatch!(try_bibliography_and_skips);
+        dispatch!(try_misc_commands);
+
+        // Fallback: plugin commands, unknown commands, blank lines, text.
+        let remaining = &self.content[self.position..];
+        if remaining.starts_with('\\') {
+            if let Some(elem) = self.try_plugin_command() {
+                return Some(elem);
+            }
+            self.parse_unknown_command();
+            return None;
+        }
+
+        if remaining.starts_with("\n\n") {
+            self.position += 2;
+            return Some(TexElement::Paragraph);
+        }
+
+        self.parse_text()
+    }
+
+    /// Parse document structure: sections, title block, TOC placeholders, environments.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_structure_and_sections(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         if remaining.starts_with("\\part") {
             return self.parse_section(0);
         }
@@ -324,6 +503,16 @@ impl TexParser {
             return self.parse_environment();
         }
 
+        None
+    }
+
+    /// Parse inline styling, citations, labels and cross-references.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_inline_and_citations(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         if remaining.starts_with("\\textcolor") {
             return self.parse_textcolor();
         }
@@ -390,6 +579,100 @@ impl TexParser {
             return self.parse_pageref();
         }
 
+        // Glossaries / acronyms — render from the scanned definitions
+        // (`extract_acronyms`); unknown keys fall back to the key text.
+        if remaining.starts_with("\\gls{")
+            || remaining.starts_with("\\glspl{")
+            || remaining.starts_with("\\Gls{")
+            || remaining.starts_with("\\GLS{")
+            || remaining.starts_with("\\acrshort{")
+            || remaining.starts_with("\\acrlong{")
+            || remaining.starts_with("\\acrfull{")
+        {
+            let name_end = remaining.find('{').unwrap_or(1);
+            let name = remaining[1..name_end].to_string();
+            self.position += name_end + 1;
+            let key = self.read_until('}');
+            self.position += 1;
+            let (short, long) = match self.acronyms.get(&key) {
+                Some((s, l)) => (s.clone(), l.clone()),
+                None => (key.clone(), key),
+            };
+            let text = match name.as_str() {
+                "acrlong" => long,
+                "acrfull" => format!("{long} ({short})"),
+                "Gls" => {
+                    let mut c = short.chars();
+                    match c.next() {
+                        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                        None => short,
+                    }
+                }
+                "GLS" => short.to_uppercase(),
+                "glspl" => format!("{short}s"),
+                _ => short,
+            };
+            return Some(TexElement::Text(text));
+        }
+        // Definitions appearing in the body are consumed silently (the
+        // pre-parse scan already harvested them). Consume the optional
+        // [...] and ALL braced groups, or leftovers leak as text.
+        if remaining.starts_with("\\newacronym")
+            || remaining.starts_with("\\newglossaryentry")
+        {
+            self.position += if remaining.starts_with("\\newacronym") {
+                "\\newacronym".len()
+            } else {
+                "\\newglossaryentry".len()
+            };
+            self.skip_whitespace_and_comments();
+            if self.content[self.position..].starts_with('[') {
+                self.position += 1;
+                let _ = self.read_until(']');
+                self.position += 1;
+                self.skip_whitespace_and_comments();
+            }
+            while self.content[self.position..].starts_with('{') {
+                let _ = self.parse_braced_content();
+                self.skip_whitespace_and_comments();
+            }
+            return None;
+        }
+
+        // \todo[...]{note} — todonotes margin note: consumed, no output.
+        if remaining.starts_with("\\todo") {
+            self.position += "\\todo".len();
+            self.skip_whitespace_and_comments();
+            if self.content[self.position..].starts_with('[') {
+                self.position += 1;
+                let _ = self.read_until(']');
+                self.position += 1;
+                self.skip_whitespace_and_comments();
+            }
+            if self.content[self.position..].starts_with('{') {
+                let _ = self.parse_braced_content();
+            }
+            return None;
+        }
+
+        // \footref{key} — a reference to a footnote label.
+        if remaining.starts_with("\\footref{") {
+            self.position += "\\footref".len();
+            self.skip_whitespace_and_comments();
+            let key = self.parse_braced_content().unwrap_or_default();
+            return Some(TexElement::Ref { key });
+        }
+
+        None
+    }
+
+    /// Parse dollar-delimited inline math and TeX-style display/inline math.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_math_delimiters(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         if remaining.starts_with('$') {
             return self.parse_math();
         }
@@ -417,6 +700,85 @@ impl TexParser {
             return Some(TexElement::MathInline(content));
         }
 
+
+        None
+    }
+
+    /// Parse text accent commands (`\'e`, `\"{u}`, `\c{c}`, `\v{s}`,
+    /// `\H{o}`, `\t{oo}`, ...) into composed Unicode text.
+    ///
+    /// The control sequence NAME is extracted first so `\cline` (name
+    /// `cline`) never matches the `\c` accent, mirroring TeX's
+    /// longest-letters tokenization.
+    fn try_text_accents(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
+        if !remaining.starts_with('\\') {
+            return None;
+        }
+        let after_backslash = &remaining[1..];
+        let first = after_backslash.chars().next()?;
+        // Name: a run of letters, or a single non-letter character.
+        let name_len: usize = if first.is_alphabetic() {
+            after_backslash
+                .char_indices()
+                .take_while(|(_, c)| c.is_alphabetic())
+                .map(|(_, c)| c.len_utf8())
+                .sum()
+        } else {
+            1
+        };
+        if !accents::is_accent_command(&after_backslash[..name_len]) {
+            return None;
+        }
+        let accent = after_backslash[..name_len].chars().next()?;
+        self.position += 1 + name_len;
+
+        // Argument: braced group, a single attached letter, or nothing.
+        // A `\i`/`\j` dotless base inside the argument resolves first
+        // (e.g. `\"{\i}` → "ï").
+        let resolve_base = |group: &str| -> String {
+            if let Some(rest) = group.strip_prefix("\\i") {
+                format!("ı{rest}")
+            } else if let Some(rest) = group.strip_prefix("\\j") {
+                format!("ȷ{rest}")
+            } else {
+                group.to_string()
+            }
+        };
+        let remaining = &self.content[self.position..];
+        if remaining.starts_with('{') {
+            self.position += 1;
+            let group = self.read_until('}');
+            self.position += 1; // closing brace
+            let group = resolve_base(&group);
+            let mut chars = group.chars();
+            let out = match chars.next() {
+                Some(base) => {
+                    let mut text = accents::compose_accent(accent, base);
+                    text.push_str(chars.as_str());
+                    text
+                }
+                None => String::new(),
+            };
+            return Some(TexElement::Text(out));
+        }
+        if let Some(base) = remaining.chars().next() {
+            if base.is_alphabetic() {
+                self.position += base.len_utf8();
+                return Some(TexElement::Text(accents::compose_accent(accent, base)));
+            }
+        }
+        // Accent with no argument (e.g. `\'` before whitespace).
+        Some(TexElement::Text(String::new()))
+    }
+
+    /// Parse page/paragraph flow controls, alignment declarations and today.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_flow_and_breaks(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         // Page breaks
         if remaining.starts_with("\\newpage")
             || remaining.starts_with("\\clearpage")
@@ -473,8 +835,28 @@ impl TexParser {
             });
         }
 
+        None
+    }
+
+    /// Parse special text characters and logo commands.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_text_symbols(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         // Special text characters (insert literal symbols)
         let text_chars = [
+            // Escaped special characters — must precede other matching
+            // so `\%` yields a literal percent instead of a comment and
+            // `\$` does not open math mode.
+            ("\\%", "%"),
+            ("\\&", "&"),
+            ("\\$", "$"),
+            ("\\#", "#"),
+            ("\\_", "_"),
+            ("\\{", "{"),
+            ("\\}", "}"),
             ("\\textasciicircum", "^"),
             ("\\textasciitilde", "~"),
             ("\\textbackslash", "\\"),
@@ -528,6 +910,7 @@ impl TexParser {
             ("\\guilsinglright", "›"),
             ("\\textvisiblespace", "␣"),
             ("\\textcompwordmark", "\u{ad}"),
+            ("\\euro", "€"),
             ("\\textunderscore", "_"),
             ("\\textdegree", "°"),
             ("\\textcelsius", "℃"),
@@ -548,16 +931,36 @@ impl TexParser {
         ];
         for (prefix, ch) in &text_chars {
             if let Some(after) = remaining.strip_prefix(prefix) {
-                // Ensure we don't match a prefix of a longer command name.
-                // E.g. \i should not match \it, \o should not match \oe.
-                if after.starts_with(|c: char| c.is_alphabetic()) {
+                // Guard only for control WORDS (alphabetic names):
+                // `\i` must not match `\it`. Control SYMBOLS (`\{`,
+                // `\%`, ...) are single-char names — `\{b` is `\{` + b.
+                if prefix.ends_with(|c: char| c.is_ascii_alphabetic())
+                    && after.starts_with(|c: char| c.is_alphabetic())
+                {
                     continue;
                 }
                 self.position += prefix.len();
+                // TeX tokenization: the space after a control WORD
+                // (alphabetic name) is the name terminator and is
+                // consumed; `\ss e` is "ße", while `\% x` keeps the
+                // space (non-letter names have no terminator).
+                if prefix.ends_with(|c: char| c.is_ascii_alphabetic()) {
+                    self.skip_whitespace_and_comments();
+                }
                 return Some(TexElement::Text(ch.to_string()));
             }
         }
 
+        None
+    }
+
+    /// Parse URLs, inline verbatim, and simple braced text commands.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_links_and_text_cmds(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         // URL
         if remaining.starts_with("\\url{") {
             return self.parse_url();
@@ -700,6 +1103,16 @@ impl TexParser {
             return self.parse_rule();
         }
 
+        None
+    }
+
+    /// Parse spacing commands and file inclusion.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_spacing_and_files(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         // Spacing commands
         let spacing_cmds = [
             ("\\hfill", "hfill"),
@@ -731,9 +1144,8 @@ impl TexParser {
         }
 
         // Include external file content inline
-        if remaining.starts_with("\\input") {
+        if let Some(after) = remaining.strip_prefix("\\input") {
             // Ensure we don't match \input* or other longer commands
-            let after = &remaining["\\input".len()..];
             if after.starts_with('{') || after.starts_with(|c: char| c.is_whitespace()) {
                 return self.parse_input();
             }
@@ -760,6 +1172,16 @@ impl TexParser {
             return self.parse_simple_braced_command("hspace", 8);
         }
 
+        None
+    }
+
+    /// Parse bibliography commands, skip commands and counter formatting.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_bibliography_and_skips(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         // Bibliography commands
         if remaining.starts_with("\\bibliography{") {
             return self.parse_simple_braced_command("bibliography", 14);
@@ -846,6 +1268,37 @@ impl TexParser {
             return self.parse_makebox();
         }
 
+        // \thanks{text} — title-page acknowledgment, rendered as a footnote
+        if remaining.starts_with("\\thanks{") {
+            self.position += "\\thanks".len();
+            self.skip_whitespace_and_comments();
+            let text = self.parse_braced_content().unwrap_or_default();
+            return Some(TexElement::Footnote { text });
+        }
+
+        // \MakeUppercase{...} / \MakeLowercase{...}
+        if remaining.starts_with("\\MakeUppercase{") {
+            self.position += "\\MakeUppercase".len();
+            self.skip_whitespace_and_comments();
+            let text = self.parse_braced_content().unwrap_or_default();
+            return Some(TexElement::Text(text.to_uppercase()));
+        }
+        if remaining.starts_with("\\MakeLowercase{") {
+            self.position += "\\MakeLowercase".len();
+            self.skip_whitespace_and_comments();
+            let text = self.parse_braced_content().unwrap_or_default();
+            return Some(TexElement::Text(text.to_lowercase()));
+        }
+
+        // \and — author separator (`\author{A \and B}`); word-boundary
+        // guarded so commands like `\andothers` never match.
+        if let Some(after) = remaining.strip_prefix("\\and")
+            && !after.starts_with(|c: char| c.is_alphabetic())
+        {
+            self.position += "\\and".len();
+            return Some(TexElement::Text(", ".to_string()));
+        }
+
         // Footnote companions
         if remaining.starts_with("\\footnotemark") {
             self.position += "\\footnotemark".len();
@@ -902,6 +1355,7 @@ impl TexParser {
         // Page control commands (no-op, just consume)
         let page_cmds = [
             ("\\linebreak", "linebreak"),
+            ("\\nolinebreak", "nolinebreak"),
             ("\\nopagebreak", "nopagebreak"),
             ("\\samepage", "samepage"),
             ("\\enlargethispage", "enlargethispage"),
@@ -1016,6 +1470,16 @@ impl TexParser {
             return Some(TexElement::Text(String::new()));
         }
 
+        None
+    }
+
+    /// Parse footnotes, captions, table helpers, font sizes and line breaks.
+    ///
+    /// Returns `None` when nothing matched, or when input was consumed
+    /// that produces no element (skip commands); both fall through to
+    /// the next dispatch phase.
+    fn try_misc_commands(&mut self) -> Option<TexElement> {
+        let remaining = &self.content[self.position..];
         // Footnote
         if remaining.starts_with("\\footnote{") {
             return self.parse_footnote();
@@ -1255,20 +1719,7 @@ impl TexParser {
             return Some(TexElement::LineBreak);
         }
 
-        if remaining.starts_with('\\') {
-            if let Some(elem) = self.try_plugin_command() {
-                return Some(elem);
-            }
-            self.parse_unknown_command();
-            return None;
-        }
-
-        if remaining.starts_with("\n\n") {
-            self.position += 2;
-            return Some(TexElement::Paragraph);
-        }
-
-        self.parse_text()
+        None
     }
 
     /// Advance past `%` comments only (not whitespace).
@@ -1575,18 +2026,19 @@ impl TexParser {
             | "remark" | "example" => self.parse_theorem(&env_name),
             "equation" => self.parse_equation(),
             "equation*" => self.parse_equation(),
-            "align" => self.parse_math_lines(MathLineKind::Align),
-            "align*" => self.parse_math_lines(MathLineKind::Align),
-            "gather" => self.parse_math_lines(MathLineKind::Gather),
-            "gather*" => self.parse_math_lines(MathLineKind::Gather),
-            "multline" => self.parse_math_lines(MathLineKind::Multline),
-            "multline*" => self.parse_math_lines(MathLineKind::Multline),
-            "cases" => self.parse_math_lines(MathLineKind::Cases),
+            "align" => self.parse_math_lines(&env_name, MathLineKind::Align),
+            "align*" => self.parse_math_lines(&env_name, MathLineKind::Align),
+            "gather" => self.parse_math_lines(&env_name, MathLineKind::Gather),
+            "gather*" => self.parse_math_lines(&env_name, MathLineKind::Gather),
+            "multline" => self.parse_math_lines(&env_name, MathLineKind::Multline),
+            "multline*" => self.parse_math_lines(&env_name, MathLineKind::Multline),
+            "cases" => self.parse_math_lines(&env_name, MathLineKind::Cases),
             "lstlisting" => self.parse_lstlisting(&env_name),
             "verbatim" => self.parse_lstlisting(&env_name),
             "tabular" => self.parse_tabular(),
             "tabular*" => self.parse_tabular_star(),
             "tabularx" => self.parse_tabularx(),
+            "longtable" | "longtable*" => self.parse_tabular_named("longtable"),
             "array" => self.parse_array_env(),
             "table" => self.parse_table(),
             "table*" => self.parse_table(),
@@ -1602,11 +2054,9 @@ impl TexParser {
             "minipage" => self.parse_minipage(),
             "displaymath" => self.parse_displaymath_env(),
             "math" => self.parse_math_env(),
-            "eqnarray" => self.parse_math_lines(MathLineKind::Align),
-            "eqnarray*" => self.parse_math_lines(MathLineKind::Align),
-            "split" => self.parse_math_lines(MathLineKind::Align),
-            "aligned" => self.parse_math_lines(MathLineKind::Align),
-            "gathered" => self.parse_math_lines(MathLineKind::Gather),
+            "eqnarray" | "eqnarray*" | "split" | "aligned" | "alignat" | "alignat*" | "flalign"
+            | "flalign*" => self.parse_math_lines(&env_name, MathLineKind::Align),
+            "gathered" => self.parse_math_lines(&env_name, MathLineKind::Gather),
             "comment" => self.parse_comment_env(),
             "multicols" => self.parse_multicols(),
             "wrapfigure" => self.parse_wrapfigure(),
@@ -1793,29 +2243,16 @@ impl TexParser {
     /// - `align`/`gather`/`multline`: `&` alignment markers are stripped.
     /// - `cases`: the `&` separator splits the value from the condition;
     ///   each line is rendered as `{ value  if  condition`.
-    fn parse_math_lines(&mut self, kind: MathLineKind) -> Option<TexElement> {
-        let env_name = match kind {
-            MathLineKind::Align => "align",
-            MathLineKind::Gather => "gather",
-            MathLineKind::Multline => "multline",
-            MathLineKind::Cases => "cases",
-        };
-        // Try the explicit name first, then its starred variant.
+    fn parse_math_lines(&mut self, env_name: &str, kind: MathLineKind) -> Option<TexElement> {
+        // The end marker MUST derive from the actual environment name:
+        // `\begin{eqnarray}` ends at `\end{eqnarray}`, not `\end{align}`
+        // (same lesson as the verbatim end-tag bug).
         let end_marker = format!("\\end{{{env_name}}}");
-        let body = if self.content[self.position..].contains(&end_marker) {
-            let body = self.read_until_str(&end_marker);
-            self.position += end_marker.len();
-            body
-        } else {
-            let starred = format!("\\end{{{env_name}*}}");
-            if self.content[self.position..].contains(&starred) {
-                let body = self.read_until_str(&starred);
-                self.position += starred.len();
-                body
-            } else {
-                return None;
-            }
-        };
+        if !self.content[self.position..].contains(&end_marker) {
+            return None;
+        }
+        let body = self.read_until_str(&end_marker);
+        self.position += end_marker.len();
 
         Some(Self::build_math_lines(&body, kind))
     }
@@ -1951,8 +2388,16 @@ impl TexParser {
 
     /// Parse `\begin{tabular} … \end{tabular}`.
     fn parse_tabular(&mut self) -> Option<TexElement> {
-        let raw = self.read_until_str("\\end{tabular}");
-        self.position += "\\end{tabular}".len();
+        self.parse_tabular_named("tabular")
+    }
+
+    /// Parse a `tabular`-family body. The end marker MUST derive from
+    /// the actual environment name (`longtable` ends at
+    /// `\end{longtable}`), per the shared-end-marker anti-pattern.
+    fn parse_tabular_named(&mut self, env_name: &str) -> Option<TexElement> {
+        let end_marker = format!("\\end{{{env_name}}}");
+        let raw = self.read_until_str(&end_marker);
+        self.position += end_marker.len();
 
         // Extract column spec from the start of raw content: {lc|r}...
         let (spec, body) = if let Some(end) = raw.find('}') {

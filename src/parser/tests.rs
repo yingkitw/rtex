@@ -813,6 +813,52 @@ Visit \url{https://example.com}.
     }
 
     #[test]
+    fn parser_skip_command_does_not_swallow_following_command() {
+        // Regression: after a mutating phase (skip commands, `\input`)
+        // dispatch must restart from the top so the text following the
+        // skipped command is parsed by its proper handler, not by the
+        // unknown-command fallback.
+        let content = r#"\setlength{\foo}{1cm}\textbf{bold} after"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(
+            elements.iter().any(|e| {
+                matches!(e, TexElement::Command { name, args }
+                    if name == "textbf" && args == &["bold".to_string()])
+            }),
+            "textbf after a skip command must still parse, got {elements:?}"
+        );
+    }
+
+    #[test]
+    fn parser_input_content_parsed_by_correct_handler() {
+        // Regression: content spliced in by `\input` must be dispatched
+        // through the full phase list, not consumed as unknown commands.
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let included = tmp.path().join("more.tex");
+        {
+            let mut f = std::fs::File::create(&included).unwrap();
+            f.write_all(b"\\emph{emphasis} \\label{key:x}").unwrap();
+        }
+
+        let content = r#"\input{more}"#;
+        let mut parser = TexParser::new(content.to_string()).with_base_dir(tmp.path());
+        let elements = parser.parse();
+        assert!(
+            elements.iter().any(|e| {
+                matches!(e, TexElement::Command { name, args }
+                    if name == "emph" && args == &["emphasis".to_string()])
+            }),
+            "emph from spliced file must parse, got {elements:?}"
+        );
+        assert!(
+            elements.iter().any(|e| matches!(e, TexElement::Label { key } if key == "key:x")),
+            "label from spliced file must parse, got {elements:?}"
+        );
+    }
+
+    #[test]
     fn parser_input_adds_tex_extension() {
         use std::io::Write;
         let tmp = tempfile::tempdir().unwrap();
@@ -2810,5 +2856,256 @@ Use \lstinline|for(int i=0;i<n;i++)| here.
         let elements = parser.parse();
         assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, args } if name == "nolinkurl" && args == &["https://example.com"])),
             "Expected nolinkurl command");
+    }
+}
+
+#[cfg(test)]
+mod text_coverage_tests {
+    use super::{TexElement, TexParser};
+
+    fn parse_body(src: &str) -> Vec<TexElement> {
+        let doc = format!(r#"\begin{{document}}{src}\end{{document}}"#);
+        let mut parser = TexParser::new(doc);
+        parser.parse()
+    }
+
+    /// Flat text of all Text elements, for content assertions.
+    fn text_of(src: &str) -> String {
+        let mut out = String::new();
+        for e in parse_body(src) {
+            if let TexElement::Text(t) = e {
+                out.push_str(&t);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn escaped_special_characters_render_literally() {
+        assert_eq!(text_of(r#"100\% \& \$5"#), "100% & $5");
+        assert_eq!(text_of(r#"\#3 \_x"#), "#3 _x");
+        assert_eq!(text_of(r#"\{braces\}"#), "{braces}");
+    }
+
+    #[test]
+    fn escaped_percent_does_not_start_a_comment() {
+        // Regression: `\%` used to swallow the rest of the document.
+        assert_eq!(text_of(r#"100\% done"#), "100% done");
+    }
+
+    #[test]
+    fn escaped_dollar_does_not_open_math() {
+        // Regression: `\$5` used to open math mode and eat the document.
+        assert_eq!(text_of(r#"costs \$5 total"#), "costs $5 total");
+    }
+
+    #[test]
+    fn attached_text_accents_compose() {
+        assert_eq!(text_of(r#"caf\'e"#), "café");
+        assert_eq!(text_of(r#"Schr\"odinger"#), "Schrödinger");
+        assert_eq!(text_of(r#"jalape\~no"#), "jalapeño");
+    }
+
+    #[test]
+    fn braced_text_accents_compose() {
+        assert_eq!(text_of(r#"G\"{o}del"#), "Gödel");
+        assert_eq!(text_of(r#"P\'{e}ter"#), "Péter");
+        assert_eq!(text_of(r#"Fran\c{c}ois"#), "François");
+        assert_eq!(text_of(r#"\v{S}uster\v{s}i\v{c}"#), "Šusteršič");
+    }
+
+    #[test]
+    fn dotless_i_inside_accent_argument() {
+        // `\"{\i}` composes diaeresis over the DOTLESS i (no
+        // precomposed form exists in Unicode): base + combining mark.
+        assert_eq!(text_of(r#"na\"{\i}ve"#), "naı\u{308}ve");
+    }
+
+    #[test]
+    fn uppercase_bases_compose() {
+        assert_eq!(text_of(r#"\AE lius \O dag"#), "Ælius Ødag");
+    }
+
+    #[test]
+    fn space_after_control_word_is_eaten() {
+        // TeX: the space after a control word is its name terminator.
+        assert_eq!(text_of(r#"Stra\ss e"#), "Straße");
+        assert_eq!(text_of(r#"\LaTeX{} rocks"#), "LaTeX rocks");
+    }
+
+    #[test]
+    fn tilde_is_a_space_in_text_mode() {
+        assert_eq!(text_of("A~B"), "A B");
+    }
+
+    #[test]
+    fn adjacent_text_fragments_concatenate_without_spaces() {
+        // Regression: word-internal commands used to be space-joined
+        // by the output backends ("jalape ñ o").
+        assert_eq!(text_of(r#"jalape\~no"#), "jalapeño");
+        assert_eq!(text_of(r#"Stra\ss e"#), "Straße");
+    }
+
+    #[test]
+    fn cline_is_not_the_cedilla_accent() {
+        // Prefix-collision guard: `\cline{` must stay a command.
+        let elements = parse_body(r#"\cline{1-2}"#);
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Command { name, .. } if name == "cline")));
+    }
+
+    #[test]
+    fn thanks_becomes_a_footnote() {
+        let elements = parse_body(r#"\thanks{Supported by NSFC}"#);
+        assert!(elements
+            .iter()
+            .any(|e| matches!(e, TexElement::Footnote { text } if text == "Supported by NSFC")));
+    }
+
+    #[test]
+    fn case_conversion_commands() {
+        assert_eq!(text_of(r#"\MakeUppercase{abc}d"#), "ABCd");
+        assert_eq!(text_of(r#"\MakeLowercase{ABC}d"#), "abcd");
+    }
+
+    #[test]
+    fn empty_group_terminates_command_scope() {
+        // `\LaTeX{}` must not leak a literal `{` into the text.
+        assert_eq!(text_of(r#"\LaTeX{} rocks"#), "LaTeX rocks");
+        assert_eq!(text_of(r#"{x}y"#), "xy");
+    }
+
+    #[test]
+    fn euro_symbol() {
+        assert_eq!(text_of(r#"5 \euro"#), "5 €");
+    }
+}
+
+#[cfg(test)]
+mod document_construct_tests {
+    use super::{MathLineKind, TexElement, TexParser};
+
+    fn parse_body(src: &str) -> Vec<TexElement> {
+        let doc = format!(r#"\begin{{document}}{src}\end{{document}}"#);
+        let mut parser = TexParser::new(doc);
+        parser.parse()
+    }
+
+    #[test]
+    fn longtable_parses_as_table() {
+        // Regression: longtable was silently dropped entirely.
+        let elements = parse_body(r#"\begin{longtable}{ll}a & b\\ c & d\end{longtable}"#);
+        let table = elements.iter().find_map(|e| match e {
+            TexElement::Table(t) => Some(t),
+            _ => None,
+        });
+        let table = table.expect("longtable must produce a Table");
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0].cells, vec!["a", "b"]);
+        assert_eq!(table.rows[1].cells, vec!["c", "d"]);
+    }
+
+    #[test]
+    fn eqnarray_lines_end_at_own_marker() {
+        // Regression: `\begin{eqnarray}` hunted for `\end{align}`,
+        // leaking the environment body into text.
+        let elements = parse_body(r#"\begin{eqnarray} a &=& b \\ c &=& d \end{eqnarray}"#);
+        assert!(elements.iter().any(|e| matches!(
+            e,
+            TexElement::MathLines { lines, kind: MathLineKind::Align }
+                if lines.len() == 2 && lines[0].contains('a')
+        )));
+    }
+
+    #[test]
+    fn split_and_aligned_are_math_lines() {
+        for env in ["split", "aligned"] {
+            let src = format!(r#"\begin{{{env}}} a &= b \\ &= c \end{{{env}}}"#);
+            let elements = parse_body(&src);
+            assert!(
+                elements
+                    .iter()
+                    .any(|e| matches!(e, TexElement::MathLines { lines, .. } if lines.len() == 2)),
+                "{env} must parse as math lines, got {elements:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn glossary_terms_render_from_definitions() {
+        let elements = parse_body(
+            r#"\newacronym{cpu}{CPU}{Central Processing Unit} The \gls{cpu} works."#,
+        );
+        let mut text = String::new();
+        for e in &elements {
+            if let TexElement::Text(t) = e {
+                text.push_str(t);
+            }
+        }
+        assert!(text.contains("The CPU works"), "got: {text}");
+        assert!(!text.contains("Central Processing Unit The"), "definition leaked: {text}");
+    }
+
+    #[test]
+    fn acronym_variants_render() {
+        let elements = parse_body(
+            r#"\newacronym{ram}{RAM}{Random Access Memory} \acrshort{ram} \acrlong{ram} \acrfull{ram} \Gls{ram}"#,
+        );
+        let mut text = String::new();
+        for e in &elements {
+            if let TexElement::Text(t) = e {
+                text.push_str(t);
+                text.push(' ');
+            }
+        }
+        assert!(text.contains("RAM"), "{text}");
+        assert!(text.contains("Random Access Memory"), "{text}");
+        assert!(text.contains("Random Access Memory (RAM)"), "{text}");
+    }
+
+    #[test]
+    fn glossary_entry_name_is_display_form() {
+        let elements = parse_body(
+            r#"\newglossaryentry{ml}{name=ML,description={Machine Learning}} See \gls{ml}."#,
+        );
+        let mut text = String::new();
+        for e in &elements {
+            if let TexElement::Text(t) = e {
+                text.push_str(t);
+            }
+        }
+        assert!(text.contains("See ML."), "got: {text}");
+        assert!(!text.contains("description="), "options leaked: {text}");
+    }
+
+    #[test]
+    fn texorpdfstring_keeps_tex_form_in_titles() {
+        let elements = parse_body(r#"\section{Intro\texorpdfstring{~x}{ y}}"#);
+        assert!(elements.iter().any(|e| matches!(
+            e,
+            TexElement::Section { title, .. } if title == "Intro x"
+        )));
+    }
+
+    #[test]
+    fn todo_notes_are_consumed() {
+        let elements = parse_body(r#"\todo{fix this} done"#);
+        let mut text = String::new();
+        for e in &elements {
+            if let TexElement::Text(t) = e {
+                text.push_str(t);
+            }
+        }
+        assert_eq!(text.trim(), "done");
+    }
+
+    #[test]
+    fn footref_is_a_reference() {
+        let elements = parse_body(r#"text\footref{fn:1} more"#);
+        assert!(
+            elements
+                .iter()
+                .any(|e| matches!(e, TexElement::Ref { key } if key == "fn:1")),
+            "got {elements:?}"
+        );
     }
 }

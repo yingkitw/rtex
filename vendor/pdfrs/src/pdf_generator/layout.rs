@@ -71,7 +71,8 @@ pub(super) fn document_requires_unicode(elements: &[Element]) -> bool {
                 || points.iter().any(|(l, _)| text_requires_unicode(l))
         }
         Element::TableRow { cells, .. } => cells.iter().any(|c| text_requires_unicode(c)),
-        Element::RichParagraph { segments } => segments.iter().any(|seg| match seg {
+        Element::RichParagraph { segments }
+        | Element::JustifiedParagraph { segments, .. } => segments.iter().any(|seg| match seg {
             TextSegment::Plain(t)
             | TextSegment::Bold(t)
             | TextSegment::Italic(t)
@@ -140,6 +141,20 @@ pub(super) fn collect_unicode_chars(elements: &[Element]) -> std::collections::B
                             chars.extend(index.chars());
                             chars.extend(radicand.chars());
                         }
+                        MathPiece::Group { open, close, inner } => {
+                            chars.extend(open.chars());
+                            chars.extend(close.chars());
+                            for piece in inner {
+                                if let MathPiece::Text(t) = piece {
+                                    chars.extend(t.chars());
+                                }
+                            }
+                        }
+                        MathPiece::Scripts { base, sup, sub } => {
+                            chars.extend(base.chars());
+                            chars.extend(sup.chars());
+                            chars.extend(sub.chars());
+                        }
                     }
                 }
             }
@@ -175,7 +190,7 @@ pub(super) fn collect_unicode_chars(elements: &[Element]) -> std::collections::B
                     chars.extend(cell.chars());
                 }
             }
-            Element::RichParagraph { segments } => {
+            Element::RichParagraph { segments } | Element::JustifiedParagraph { segments, .. } => {
                 for seg in segments {
                     match seg {
                         TextSegment::Plain(t)
