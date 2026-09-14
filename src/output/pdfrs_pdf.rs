@@ -260,20 +260,13 @@ pub fn render_pdfrs_element_bytes(
 struct ElementWriter {
     out: Vec<Element>,
     segments: Vec<TextSegment>,
-    /// TeX `\parindent` suppression: no first-line indent for the next
-    /// paragraph after a heading, display math, or `\noindent`.
-    suppress_indent: bool,
 }
-
-/// TeX's `\parindent` for article class: 1.5 em.
-const PARINDENT_EM: f32 = 1.5;
 
 impl ElementWriter {
     fn new() -> Self {
         Self {
             out: Vec::new(),
             segments: Vec::new(),
-            suppress_indent: false,
         }
     }
 
@@ -287,19 +280,7 @@ impl ElementWriter {
             return;
         }
         let segments = merge_plain_segments(std::mem::take(&mut self.segments));
-        // Plain paragraphs are justified (Knuth–Plass total-fit line
-        // breaking with stretch/shrink glue) — LaTeX's default — and
-        // carry `\parindent` first-line indentation unless suppressed.
-        let first_line_indent_em = if self.suppress_indent {
-            0.0
-        } else {
-            PARINDENT_EM
-        };
-        self.suppress_indent = false;
-        self.out.push(Element::JustifiedParagraph {
-            segments,
-            first_line_indent_em,
-        });
+        self.out.push(Element::RichParagraph { segments });
     }
 
     fn push_plain(&mut self, text: &str) {
@@ -328,12 +309,6 @@ impl ElementWriter {
 
     fn push_block(&mut self, element: Element) {
         self.flush_rich();
-        // Headings and display math suppress the next paragraph's
-        // `\parindent` (LaTeX's `\@afterheading` behavior; text after
-        // display math continues the same paragraph).
-        if matches!(element, Element::Heading { .. } | Element::MathBlock { .. }) {
-            self.suppress_indent = true;
-        }
         self.out.push(element);
     }
 }
@@ -600,7 +575,6 @@ fn push_tex_element(
             | "bibliographystyle" | "index" | "glossary" => {}
             "noindent" => {
                 writer.flush_rich();
-                writer.suppress_indent = true;
             }
             "enquote" if !args.is_empty() => {
                 writer.push_plain(&format!("\u{201c}{}\u{201d}", args[0]));
@@ -903,8 +877,7 @@ mod tests {
     fn paragraph_text(elem: &Element) -> Option<String> {
         match elem {
             Element::Paragraph { text } => Some(text.clone()),
-            Element::RichParagraph { segments }
-            | Element::JustifiedParagraph { segments, .. } => {
+            Element::RichParagraph { segments } => {
                 let mut text = String::new();
                 for seg in segments {
                     match seg {
@@ -1089,7 +1062,7 @@ mod tests {
                 .iter()
                 .any(|e| matches!(
                     e,
-                    Element::RichParagraph { .. } | Element::JustifiedParagraph { .. }
+                    Element::RichParagraph { .. }
                 )),
             "expected inline rich/justified paragraphs for texttt/href"
         );
@@ -1115,7 +1088,7 @@ mod tests {
         let mapped = tex_to_pdfrs_elements(&elements, None);
         assert!(matches!(
             mapped.first(),
-            Some(Element::JustifiedParagraph { segments, .. })
+            Some(Element::RichParagraph { segments })
             if segments.len() >= 3
         ));
     }
@@ -1283,44 +1256,3 @@ mod tests {
     }
 }
 
-    #[test]
-    fn paragraphs_carry_parindent_unless_suppressed() {
-        use pdfrs::elements::Element;
-        // After a heading: no indent. Plain paragraph: 1.5em.
-        let elements = vec![
-            TexElement::Section { level: 1, title: "T".to_string() },
-            TexElement::Text("After heading.".to_string()),
-            TexElement::Paragraph,
-            TexElement::Text("Normal paragraph.".to_string()),
-            TexElement::Command { name: "noindent".to_string(), args: vec![] },
-            TexElement::Text("Noindent paragraph.".to_string()),
-        ];
-        let mapped = tex_to_pdfrs_elements(&elements, None);
-        let indents: Vec<f32> = mapped
-            .iter()
-            .filter_map(|e| match e {
-                Element::JustifiedParagraph { first_line_indent_em, .. } => Some(*first_line_indent_em),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(indents, vec![0.0, 1.5, 0.0], "heading and noindent suppress \\parindent");
-    }
-
-    #[test]
-    fn text_after_display_math_is_not_indented() {
-        use pdfrs::elements::Element;
-        let elements = vec![
-            TexElement::Text("Before math.".to_string()),
-            TexElement::MathDisplay("a=b".to_string()),
-            TexElement::Text("After math.".to_string()),
-        ];
-        let mapped = tex_to_pdfrs_elements(&elements, None);
-        let indents: Vec<f32> = mapped
-            .iter()
-            .filter_map(|e| match e {
-                Element::JustifiedParagraph { first_line_indent_em, .. } => Some(*first_line_indent_em),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(indents, vec![1.5, 0.0], "display math suppresses the following indent");
-    }

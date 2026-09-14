@@ -44,7 +44,7 @@ cargo run --bin rtex -- examples/minimal.tex
 cargo run --bin rtex -- examples/advanced_math.tex -o output/advanced_math.pdf --force
 ```
 
-All PDF output uses the vendored [pdfrs](https://crates.io/crates/pdfrs) engine.
+All PDF output uses the [pdfrs](https://crates.io/crates/pdfrs) engine.
 
 ```bash
 cargo run --bin rtex -- examples/math.tex -o output/math.pdf --force

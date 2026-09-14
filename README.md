@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Tests](https://img.shields.io/badge/tests-788%2B-brightgreen.svg)](TODO.md)
+[![Tests](https://img.shields.io/badge/tests-786%2B-brightgreen.svg)](TODO.md)
 [![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-450%2B-informational.svg)](TODO.md)
 [![Math symbols](https://img.shields.io/badge/math%20symbols-618%2B-informational.svg)](TODO.md)
 [![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
@@ -82,7 +82,7 @@ See [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for the full honesty 
 
 ## Math Support
 
-PDF generation uses the vendored [pdfrs](https://crates.io/crates/pdfrs) engine with DejaVu Sans TrueType embedding for Unicode math symbols.
+PDF generation uses the [pdfrs](https://crates.io/crates/pdfrs) engine with DejaVu Sans TrueType embedding for Unicode math symbols.
 
 - **618 symbols** — Greek letters, operators, relations, arrows, integrals, summation, function names
 - Inline and display math, multi-line environments (`align`, `gather`, `multline`, `cases`)
@@ -197,7 +197,7 @@ The project follows KISS and DRY principles with a trait-based design:
 - `TexConverter` trait: Defines the conversion interface
 - `NativeTexConverter`: Pure Rust implementation with native TeX parser and pdfrs PDF engine
 - `TexParser`: Parses LaTeX syntax into structured elements
-- `pdfrs_pdf`: Generates PDF documents from parsed elements via the vendored pdfrs engine
+- `pdfrs_pdf`: Generates PDF documents from parsed elements via the pdfrs engine
 - `convert_tex_to_pdf`: Convenience function for direct conversion
 - `convert_tex_string_to_pdf_bytes`: In-memory PDF conversion (WASM-ready)
 - `convert_tex_string` / `convert_tex_file`: Multi-format conversion (PDF, HTML, DOCX, EPUB)
@@ -256,7 +256,7 @@ cargo test
 ```
 
 The test suite includes:
-- 788+ comprehensive tests (579 lib unit + 209 integration; 3 ignored golden-file generators)
+- 786+ comprehensive tests (577 lib unit + 208 integration + 1 doc; 3 ignored golden-file generators)
 - PDF generation verification
 - File size validation
 - PDF header verification

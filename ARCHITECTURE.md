@@ -29,7 +29,7 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
 - `NativeTexConverter`: Pure Rust implementation
   - Reads TeX files directly
   - Parses LaTeX syntax using custom parser
-  - Generates PDF via the vendored pdfrs engine (`vendor/pdfrs`)
+  - Generates PDF via the pdfrs engine
   - No external process calls
 
 ### TeX Parser (`src/parser/`)
@@ -69,22 +69,14 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
 
 ### PDF Generation (`src/output/pdfrs_pdf.rs`)
 
-- Converts parsed `TexElement` AST to PDF via the vendored pdfrs engine
+- Converts parsed `TexElement` AST to PDF via the pdfrs engine
 - Page layout, text positioning, automatic page breaks
-- Paragraph text is rendered justified: rtex maps paragraphs to `Element::JustifiedParagraph`, which the typesetter breaks with Knuth–Plass total-fit line breaking over a box/glue/penalty horizontal list (stretch/shrink interword glue, ragged final line). First lines carry TeX `\parindent` (1.5 em), suppressed after headings, display math, and `\noindent`; page breaks obey widow/club control (never a lone line at a page top or bottom)
+- Paragraph text is rendered via `Element::RichParagraph` with styled text segments
 - Font management: standard Helvetica for ASCII-only docs; embedded DejaVu Sans subset for Unicode/math
 - Font subsetting via `font-subset` crate when Unicode characters are present
 - Supports titles, sections, lists, math, images, tables, theorems, cross-references
 - FlateDecode content stream compression
 - PDF metadata (Title, Author, Creator, Producer, CreationDate)
-
-### Typesetter (`vendor/pdfrs/src/typeset.rs`)
-
-- TeX horizontal-list model: `Node::{Box, Glue, Penalty, Hyphen}` with TeX's sentinel costs (`FORCED_BREAK = -10000`, `FORBIDDEN_BREAK = +10000`)
-- `break_lines` chooses breakpoints by Knuth–Plass dynamic programming (demerits + fitness classes); greedy first-fit fallback when the tolerance is unmeetable
-- Hyphenation: `vendor/pdfrs/src/hyphenate.rs` runs Liang's pattern algorithm (embedded ushyphmax English patterns + exception list) to insert discretionary `Node::Hyphen` breakpoints — mid-word breaks with a hyphen glyph, exactly like TeX
-- Math spacing: `math_layout::apply_operator_spacing` inserts TeX mu-spacing (thick around relations, medium around binary operators, tight unary minus, thin after punctuation) in display and inline math; inline mode keeps `lim(x→0)`-style limit notation tight
-- Pure and width-function-agnostic: callers supply measured box widths; the module returns `Line { start, end, ratio }` covering ranges with an adjustment ratio applied to glue
 
 ### Error Handling (`src/error.rs`)
 
@@ -127,7 +119,7 @@ rtex is a **native** TeX-to-document converter written in Rust, requiring **no e
 - `resvg` + **usvg** + **png**: SVG rasterization for `\includegraphics{*.svg}`
 - `zip`: DOCX and EPUB packaging (ZIP archives)
 - `ureq`: CTAN package downloading (`--fetch-packages`)
-- `pdfrs` (vendored at `vendor/pdfrs`): PDF layout/render engine
+- `pdfrs`: PDF layout/render engine
 
 ## Data Flow
 
@@ -152,7 +144,7 @@ Output file
 
 | Backend | When used | Module |
 |---------|-----------|--------|
-| **pdfrs** | All PDF output | `src/output/pdfrs_pdf.rs` → `vendor/pdfrs` |
+| **pdfrs** | All PDF output | `src/output/pdfrs_pdf.rs` → pdfrs crate |
 
 Math policy on the pdfrs path: simple symbols → Unicode via `MathFormatter`; `\frac` / `\sqrt` → display math layout (stacked fractions, vinculum).
 
@@ -180,7 +172,7 @@ The `src/output/` module renders the same parsed `TexElement` AST to multiple fo
 
 | Format | Module | Notes |
 |--------|--------|-------|
-| PDF | `output/pdfrs_pdf.rs` → `vendor/pdfrs` | Vendored pdfrs engine |
+| PDF | `output/pdfrs_pdf.rs` → pdfrs crate | pdfrs engine |
 | HTML | `output/html.rs` | Semantic HTML with embedded CSS |
 | DOCX | `output/docx.rs` | Minimal OOXML packaged as ZIP |
 | EPUB | `output/epub.rs` | EPUB 3 package with XHTML chapter |
@@ -218,7 +210,6 @@ When `--keep-intermediate` is set (or `ConversionOptions::keep_intermediate`), s
 ```
 rtex/
 ├── Cargo.toml              # Dependencies and metadata (crate name: rtex)
-├── vendor/pdfrs/           # Vendored pdfrs PDF engine (local path dependency)
 ├── src/
 │   ├── lib.rs              # Core conversion logic & public API
 │   ├── main.rs             # CLI entry point (binary: rtex)
@@ -240,7 +231,7 @@ rtex/
 │   ├── math_formatter.rs   # Math formatting orchestrator
 │   ├── output/             # Multi-format output renderers
 │   │   ├── mod.rs          # Output dispatcher
-│   │   ├── pdfrs_pdf.rs    # PDF generation via vendored pdfrs
+│   │   ├── pdfrs_pdf.rs    # PDF generation via pdfrs
 │   │   ├── html.rs         # HTML output backend
 │   │   ├── docx.rs         # DOCX output backend
 │   │   ├── epub.rs         # EPUB output backend

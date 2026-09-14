@@ -54,7 +54,7 @@ src/
   output/
     mod.rs            # Output dispatcher (PDF, HTML, DOCX, EPUB)
     common.rs         # Shared output utilities (DocumentMeta)
-    pdfrs_pdf.rs      # PDF generation via vendored pdfrs (sole PDF backend)
+    pdfrs_pdf.rs      # PDF generation via pdfrs (sole PDF backend)
     html.rs            # HTML output backend
     docx.rs            # DOCX output backend
     epub.rs            # EPUB output backend
@@ -66,8 +66,6 @@ src/
     hover.rs           # Hover documentation
     symbols.rs         # Document symbol outline
   bin/                # Debug/test binaries (feature: dev-bins)
-vendor/
-  pdfrs/              # Vendored pdfrs PDF engine (local path dependency)
 ```
 
 ## Coding Guidelines

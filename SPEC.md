@@ -8,7 +8,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 
 - CLI conversion of `.tex` files to PDF, HTML, DOCX, or EPUB
 - Library API for in-process and WASM embedding
-- 450+ LaTeX commands, 618 math symbols, PDF generation via vendored pdfrs engine
+- 450+ LaTeX commands, 618 math symbols, PDF generation via pdfrs engine
 - Bibliography, cross-references, tables, graphics, macros
 - Incremental compilation, watch mode, LSP editor support
 - On-demand CTAN package fetching for missing `.sty`/`.cls` files
@@ -47,8 +47,8 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 |-------|------------|
 | Language | Rust 2024 (MSRV 1.85) |
 | CLI | clap 4 |
-| PDF | [pdfrs](https://crates.io/crates/pdfrs) (vendored at `vendor/pdfrs`) — sole backend |
-| Typesetting | Knuth–Plass total-fit line breaking over box/glue/penalty lists (`vendor/pdfrs/src/typeset.rs`); justified paragraphs with stretch/shrink interword glue, `\parindent` first-line indents, Liang hyphenation (English patterns) as discretionary breaks, ragged final line (`\parfillskip`); TeX operator spacing in math |
+| PDF | [pdfrs](https://crates.io/crates/pdfrs) — sole backend |
+| Typesetting | Paragraph rendering via `Element::RichParagraph` with styled text segments; TeX operator spacing in math |
 | Math | Unicode mapping (`src/math/`) + pdfrs display layout (`\frac`, `\sqrt` vinculum) |
 | Alt formats | HTML/DOCX/EPUB (`src/output/`) |
 | HTTP (packages) | ureq + rustls |
@@ -58,7 +58,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 ## Quality Bar
 
 - `cargo build` and `cargo test` pass (warnings noted; eliminate when practical)
-- 790+ automated tests (788 passing, 3 ignored) including round-trip and example PDF verification
+- 789 automated tests (786 passing, 3 ignored) including round-trip and example PDF verification
 - Public APIs documented with rustdoc
 - User-facing docs in `README.md`, `docs/USER_GUIDE.md`, `ARCHITECTURE.md`
 - Surgical changes: no speculative features beyond `TODO.md`

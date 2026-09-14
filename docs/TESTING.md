@@ -2,7 +2,7 @@
 
 ## Test Organization
 
-`cargo test` runs the full suite by default — **788 passing tests, 3 ignored**, completing in ~7 seconds. PDF-generating tests are **not** marked `#[ignore]`; they run as part of the default suite because the vendored pdfrs engine is fast and needs no external tools.
+`cargo test` runs the full suite by default — **786 passing tests, 3 ignored**, completing in ~7 seconds. PDF-generating tests are **not** marked `#[ignore]`; they run as part of the default suite because the pdfrs engine is fast and needs no external tools.
 
 Only three tests are `#[ignore]`d, all golden-file generators that write fixtures rather than assert on them:
 - `round_trip_test.rs::generate_golden_files`
