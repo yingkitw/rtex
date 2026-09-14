@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "pdfrs"
-version = "0.1.9"
+version = "0.1.13"
 authors = ["Ying Kit WONG"]
 build = false
 autolib = false
