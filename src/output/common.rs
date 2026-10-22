@@ -369,6 +369,13 @@ fn render_command_html(name: &str, args: &[String], out: &mut String) {
         "hspace" | "hspace*" | "vspace" | "vspace*" | "quad" | "qquad" => {
             out.push(' ');
         }
+        // Thin text-mode spaces: \, \: \; \  — emit a thin space so
+        // surrounding words don't concatenate. \! (negative thin space)
+        // is a no-op in this fallback.
+        "comma" | "colon" | "semicolon" | "control_space" => {
+            out.push('\u{2009}');
+        }
+        "bang" => {}
         "SI" if args.len() >= 2 => {
             out.push_str(&escape_html(&args[0]));
             out.push(' ');
@@ -674,5 +681,22 @@ mod tests {
         assert!(result.contains("Line 1"));
         assert!(result.contains("Line 2"));
         assert!(result.contains('\n'));
+    }
+
+    #[test]
+    fn html_text_mode_spacing_inserts_space() {
+        // Regression: \, \: \; \  produced no output in HTML, concatenating
+        // surrounding words.
+        for cmd in ["comma", "semicolon", "colon", "control_space"] {
+            let mut out = String::new();
+            render_command_html(cmd, &[], &mut out);
+            assert_eq!(out, "\u{2009}", "{cmd}: expected thin space");
+        }
+        let mut out = String::new();
+        render_command_html("quad", &[], &mut out);
+        assert_eq!(out, " ");
+        let mut out = String::new();
+        render_command_html("bang", &[], &mut out);
+        assert_eq!(out, "", "bang should be a no-op");
     }
 }

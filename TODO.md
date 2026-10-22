@@ -102,6 +102,7 @@ All foundational phases are done. Key milestones:
 - [x] Table `\cline`/`\cmidrule` partial rules now parsed as separator rows (were silently dropped)
 - [x] Unicode-fallback matrix formatting: added `vmatrix`/`Vmatrix`/`Bmatrix`/`matrix`/`smallmatrix`, fixed `pmatrix` delimiters (`( )` not `[ ]`), and depth-counting end finder for nested matrices
 - [x] Text-mode ligatures (`---`→—, `--`→–, `` `` ``→", `''`→") now converted in `parse_text`; inline math spans skipped
+- [x] Text-mode spacing commands (`\,` `\:` `\;` `\ ` `\quad` `\qquad`) now emit space in PDF and HTML backends (were silently dropped, concatenating adjacent words)
 - [x] Comprehensive LaTeX syntax coverage (special chars, skip-commands, counter formatting, file splicing)
 - [x] Divider element (`\hrulefill`)
 
@@ -120,7 +121,7 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 789 (see `cargo test`; 786 passing, 3 ignored golden-file generators)
+- Tests: 801 (see `cargo test`; 798 passing, 3 ignored golden-file generators)
 - PDF: pdfrs crate; `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - LaTeX commands: 450+

@@ -568,11 +568,21 @@ fn push_tex_element(
             "hrulefill" => {
                 writer.push_block(Element::HorizontalRule);
             }
-            "hspace" | "hspace*" | "vspace" | "vspace*" | "quad" | "qquad"
+            "hspace" | "hspace*" | "vspace" | "vspace*"
             | "footnotemark" | "cline" | "rule" | "linebreak" | "nopagebreak"
             | "samepage" | "enlargethispage" | "raggedright" | "raggedleft"
             | "centering" | "appendix" | "bibliography"
             | "bibliographystyle" | "index" | "glossary" => {}
+            // Text-mode horizontal spacing commands. In LaTeX these insert
+            // real horizontal space; emitting nothing would concatenate
+            // the surrounding words ("a\,b" → "ab"). Use Unicode spaces so
+            // the gap is visible without depending on layout measurements.
+            "quad" => writer.push_plain("  "),
+            "qquad" => writer.push_plain("    "),
+            "comma" | "colon" | "semicolon" | "control_space" => {
+                writer.push_plain("\u{2009}"); // thin space
+            }
+            "bang" => {} // negative thin space — no-op in text fallback
             "noindent" => {
                 writer.flush_rich();
             }
@@ -1091,6 +1101,59 @@ mod tests {
             Some(Element::RichParagraph { segments })
             if segments.len() >= 3
         ));
+    }
+
+    #[test]
+    fn text_mode_spacing_inserts_space_not_concatenated() {
+        // Regression: \, \: \; \  \quad \qquad produced no output, so
+        // surrounding words concatenated ("Hello\,World" → "HelloWorld").
+        for cmd in ["comma", "semicolon", "colon", "control_space", "quad", "qquad"] {
+            let elements = vec![
+                TexElement::Text("Hello".to_string()),
+                TexElement::Command {
+                    name: cmd.to_string(),
+                    args: vec![],
+                },
+                TexElement::Text("World".to_string()),
+            ];
+            let mapped = tex_to_pdfrs_elements(&elements, None);
+            let text = paragraph_text(mapped.first().unwrap())
+                .expect("spacing commands should land in a paragraph");
+            assert!(
+                text.contains(' '),
+                "{cmd}: expected a space between Hello and World, got {text:?}"
+            );
+            assert!(
+                !text.contains("HelloWorld"),
+                "{cmd}: words should not be concatenated, got {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn text_mode_bang_is_noop_in_text() {
+        // \! is a negative thin space — in the text fallback it produces
+        // nothing (no thin space, no extra space). The surrounding "a" and
+        // "b" Text segments are joined by the paragraph writer, which is
+        // independent of the \! command.
+        let elements = vec![
+            TexElement::Text("a".to_string()),
+            TexElement::Command {
+                name: "bang".to_string(),
+                args: vec![],
+            },
+            TexElement::Text("b".to_string()),
+        ];
+        let mapped = tex_to_pdfrs_elements(&elements, None);
+        let text = paragraph_text(mapped.first().unwrap()).unwrap();
+        assert!(
+            !text.contains('\u{2009}'),
+            "bang should not emit a thin space, got {text:?}"
+        );
+        assert!(
+            !text.contains("  "),
+            "bang should not add an extra space, got {text:?}"
+        );
     }
 
     #[test]
