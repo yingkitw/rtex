@@ -1,3 +1,35 @@
+/// Consume one balanced `{...}` group from `iter`, which must be positioned
+/// at the opening `{`. Returns the inner content (with nested braces
+/// preserved). Returns `None` if the next char is not `{`; returns the
+/// partial content if the group is never closed.
+fn consume_braced_arg(iter: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Option<String> {
+    if !matches!(iter.peek(), Some(&'{')) {
+        return None;
+    }
+    iter.next(); // consume opening brace
+    let mut content = String::new();
+    let mut depth = 1;
+    while let Some(&c) = iter.peek() {
+        match c {
+            '{' => {
+                depth += 1;
+                content.push(c);
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    iter.next(); // consume matching brace
+                    return Some(content);
+                }
+                content.push(c);
+            }
+            _ => content.push(c),
+        }
+        iter.next();
+    }
+    Some(content) // unterminated — return what we have
+}
+
 /// Replace LaTeX math commands with Unicode symbols.
 ///
 /// Uses a single-pass scanner for O(n) performance instead of
@@ -57,6 +89,50 @@ pub fn replace_math_symbols(text: &str) -> String {
                                 }
                                 result.push(c);
                                 iter.next();
+                            }
+                        }
+                        continue;
+                    }
+
+                    // \boxed, \mathop, \mathbin, \mathrel, \mathord, \mathpunct,
+                    // \smash, \overbrace, \underbrace, \substack: strip the command
+                    // and inline the braced-argument content. The brace decoration
+                    // (\overbrace/\underbrace) and vertical stacking (\substack) have
+                    // no single-line Unicode form, so the content is inlined as-is.
+                    // Uses balanced-brace matching so \boxed{\frac{a}{b}} does not
+                    // leak a trailing `b}}`. The content is RE-SCANNED so that
+                    // inner symbol commands (e.g. \boxed{\alpha} -> α, or `\\` row
+                    // separators inside \substack) are converted rather than
+                    // leaked as raw LaTeX.
+                    if matches!(
+                        name.as_str(),
+                        "boxed" | "mathop" | "mathbin" | "mathrel" | "mathord"
+                        | "mathpunct" | "smash" | "overbrace" | "underbrace" | "substack"
+                    ) {
+                        if let Some(content) = consume_braced_arg(&mut iter) {
+                            result.push_str(&replace_math_symbols(&content));
+                        }
+                        continue;
+                    }
+
+                    // \phantom, \hphantom, \vphantom: invisible — consume the
+                    // braced argument and emit nothing.
+                    if matches!(name.as_str(), "phantom" | "hphantom" | "vphantom") {
+                        let _ = consume_braced_arg(&mut iter);
+                        continue;
+                    }
+
+                    // \overset, \underset, \stackrel: two braced args
+                    // {annotation}{base} — inline both in source order. Each arg
+                    // is re-scanned so inner symbol commands are converted.
+                    if matches!(name.as_str(), "overset" | "underset" | "stackrel") {
+                        if let Some(annotation) = consume_braced_arg(&mut iter) {
+                            if let Some(base) = consume_braced_arg(&mut iter) {
+                                result.push_str(&replace_math_symbols(&annotation));
+                                result.push(' ');
+                                result.push_str(&replace_math_symbols(&base));
+                            } else {
+                                result.push_str(&replace_math_symbols(&annotation));
                             }
                         }
                         continue;
@@ -917,6 +993,48 @@ mod tests {
     }
 
     #[test]
+    fn test_boxed_inlines_content() {
+        // \boxed{x} must inline x, not leak \boxed or braces.
+        assert_eq!(replace_math_symbols("\\boxed{x}"), "x");
+        // Inner symbol commands are converted (content is re-scanned).
+        assert_eq!(replace_math_symbols("\\boxed{\\alpha}"), "α");
+        // Nested braces are preserved (balanced matching).
+        assert_eq!(replace_math_symbols("\\boxed{a{b}c}"), "a{b}c");
+    }
+
+    #[test]
+    fn test_math_class_commands_inline_content() {
+        // \mathop, \mathbin, \mathrel, \mathord, \mathpunct, \smash strip
+        // the command and inline the braced argument.
+        assert_eq!(replace_math_symbols("\\mathop{+}"), "+");
+        assert_eq!(replace_math_symbols("\\mathbin{*}"), "*");
+        assert_eq!(replace_math_symbols("\\mathrel{R}"), "R");
+        assert_eq!(replace_math_symbols("\\mathord{x}"), "x");
+        assert_eq!(replace_math_symbols("\\mathpunct{,}"), ",");
+        assert_eq!(replace_math_symbols("\\smash{x}"), "x");
+    }
+
+    #[test]
+    fn test_phantom_commands_emit_nothing() {
+        // \phantom, \hphantom, \vphantom consume the braced arg and emit nothing.
+        assert_eq!(replace_math_symbols("a\\phantom{b}c"), "ac");
+        assert_eq!(replace_math_symbols("a\\hphantom{b}c"), "ac");
+        assert_eq!(replace_math_symbols("a\\vphantom{b}c"), "ac");
+    }
+
+    #[test]
+    fn test_overset_inlines_both_args() {
+        // \overset{annotation}{base} inlines both in source order.
+        assert_eq!(replace_math_symbols("\\overset{:=}{=}"), ":= =");
+        assert_eq!(replace_math_symbols("\\underset{a}{b}"), "a b");
+        assert_eq!(replace_math_symbols("\\stackrel{a}{b}"), "a b");
+        // Inner symbol commands are converted (args re-scanned).
+        assert_eq!(replace_math_symbols("\\overset{\\alpha}{\\beta}"), "α β");
+        // Missing second arg: just emit the first.
+        assert_eq!(replace_math_symbols("\\overset{a}"), "a");
+    }
+
+    #[test]
     fn test_multiple_symbols() {
         let result = replace_math_symbols("\\alpha + \\beta = \\gamma");
         assert_eq!(result, "α + β = γ");
@@ -1175,5 +1293,20 @@ mod tests {
         assert_eq!(replace_math_symbols("\\boxed"), "");
         assert_eq!(replace_math_symbols("\\substack"), "");
         assert_eq!(replace_math_symbols("\\cr"), "");
+    }
+
+    #[test]
+    fn test_overbrace_underbrace_substack_inline_content() {
+        // \overbrace/\underbrace/\substack took a braced arg but only mapped
+        // the NAME to "" — the raw braces leaked. Now the content is inlined.
+        assert_eq!(replace_math_symbols("\\overbrace{ab}"), "ab");
+        assert_eq!(replace_math_symbols("\\underbrace{ab}"), "ab");
+        // Inner symbols are converted (content re-scanned).
+        assert_eq!(replace_math_symbols("\\overbrace{\\alpha}"), "α");
+        // \substack row separators (\\) become spaces; content inlined.
+        let r = replace_math_symbols("\\substack{a \\\\ b}");
+        assert!(!r.contains("\\substack"));
+        assert!(!r.contains('{') && !r.contains('}'));
+        assert!(r.contains('a') && r.contains('b'));
     }
 }

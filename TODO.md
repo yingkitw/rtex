@@ -105,6 +105,8 @@ All foundational phases are done. Key milestones:
 - [x] Text-mode spacing commands (`\,` `\:` `\;` `\ ` `\quad` `\qquad`) now emit space in PDF and HTML backends (were silently dropped, concatenating adjacent words)
 - [x] DOCX plain-text path also emits space for text-mode spacing commands (same concatenation bug via `collect_plain_text`)
 - [x] Invisible delimiters `\left.`/`\right.` no longer leak a literal dot in the Unicode math fallback
+- [x] Brace-leaking math commands (`\boxed`, `\mathop`/`\mathbin`/`\mathrel`/`\mathord`/`\mathpunct`, `\smash`, `\phantom`/`\hphantom`/`\vphantom`, `\overset`/`\underset`/`\stackrel`) now consume their braced args instead of leaking raw `{...}`
+- [x] `\overbrace`/`\underbrace`/`\substack` now consume+inline their braced args (had the same brace-leak); content-inline and two-arg blocks now RE-SCAN extracted args so inner symbols convert (`\boxed{\alpha}` → α, not literal `\alpha`)
 - [x] Comprehensive LaTeX syntax coverage (special chars, skip-commands, counter formatting, file splicing)
 - [x] Divider element (`\hrulefill`)
 
@@ -123,7 +125,7 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 803 (see `cargo test`; 799 passing, 3 ignored golden-file generators)
+- Tests: 808 (see `cargo test`; 804 passing, 3 ignored golden-file generators)
 - PDF: pdfrs crate; `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - LaTeX commands: 450+
