@@ -19,8 +19,6 @@ crate-type = ["rlib", "cdylib"]
 default = []
 lsp = ["dep:lsp-server", "dep:lsp-types"]
 wasm = ["dep:wasm-bindgen"]
-# Local debug harnesses under src/bin/debug_*.rs and test_*.rs
-dev-bins = []
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -51,47 +49,6 @@ required-features = ["lsp"]
 [[bin]]
 name = "bench"
 path = "src/bin/bench.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "debug_math"
-path = "src/bin/debug_math.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "debug_texttt"
-path = "src/bin/debug_texttt.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "debug_parse_sample"
-path = "src/bin/debug_parse_sample.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "debug_parser"
-path = "src/bin/debug_parser.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "debug_font"
-path = "src/bin/debug_font.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "debug_sample"
-path = "src/bin/debug_sample.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "test_fraction_formatting"
-path = "src/bin/test_fraction_formatting.rs"
-required-features = ["dev-bins"]
-
-[[bin]]
-name = "test_pdf_output"
-path = "src/bin/test_pdf_output.rs"
-required-features = ["dev-bins"]
 
 [dev-dependencies]
 sha2 = "0.10"

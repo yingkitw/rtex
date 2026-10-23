@@ -3,6 +3,9 @@
 AGENTS.md
 MEMORY.md
 *.pdf
+*.ast.json
+*.meta.json
+*.expanded.tex
 *.aux
 *.log
 *.out

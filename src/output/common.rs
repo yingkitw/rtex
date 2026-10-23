@@ -191,10 +191,24 @@ pub fn render_element_html(element: &TexElement, out: &mut String) {
                     out.push_str(&joined);
                     out.push_str("</sup>");
                 }
-                "citeauthor" => out.push_str(&joined),
-                "citeyear" => out.push_str(&joined),
+                "fnotecite" => {
+                    out.push_str("<sup class=\"footnote\">");
+                    out.push_str(&joined);
+                    out.push_str("</sup>");
+                }
+                "citeauthor" | "citeauthor*" => out.push_str(&joined),
+                "citeyear" | "citeyear*" => out.push_str(&joined),
                 "citetitle" => out.push_str(&joined),
                 "fullcite" => out.push_str(&joined),
+                "autocite" | "autocite*" | "smartcite" => out.push_str(&format!("({joined})")),
+                "notecite" => out.push_str(&joined),
+                "supercite" => {
+                    out.push_str("<sup>");
+                    out.push_str(&joined);
+                    out.push_str("</sup>");
+                }
+                "volcite" => out.push_str(&joined),
+                "cite*" => out.push_str(&format!("[{joined}]")),
                 _ => out.push_str(&format!("[{joined}]")),
             }
         }
@@ -515,14 +529,18 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
             TexElement::Citation { keys, kind } => {
                 if kind == "nocite" {
                     // nocite produces no visible text
-                } else if kind == "parencite" {
+                } else if kind == "parencite" || kind == "autocite" || kind == "autocite*" || kind == "smartcite" {
                     out.push('(');
                     out.push_str(&keys.join(", "));
                     out.push(')');
-                } else if kind == "footcite" {
+                } else if kind == "footcite" || kind == "fnotecite" {
                     out.push('[');
                     out.push_str(&keys.join(", "));
                     out.push(']');
+                } else if matches!(kind.as_str(), "citeauthor" | "citeauthor*" | "citeyear" | "citeyear*" | "citetitle" | "fullcite" | "notecite" | "volcite") {
+                    out.push_str(&keys.join(", "));
+                } else if kind == "supercite" {
+                    out.push_str(&format!("^{}", keys.join(", ")));
                 } else {
                     out.push('[');
                     out.push_str(&keys.join(", "));

@@ -11,17 +11,18 @@ struct Cli {
     #[arg(help = "Input TeX file path")]
     input: Option<PathBuf>,
 
-    #[arg(short, long, help = "Output file path")]
+    #[arg(short, long, help = "Output file path (ignored when multiple formats are requested)")]
     output: Option<PathBuf>,
 
     #[arg(
         short,
         long,
         value_name = "FORMAT",
+        value_delimiter = ',',
         default_value = "pdf",
-        help = "Output format: pdf, html, docx, epub"
+        help = "Output format(s): pdf, html, docx, epub. Comma-separated for multiple outputs."
     )]
-    format: String,
+    format: Vec<String>,
 
     #[arg(
         long,
@@ -58,8 +59,8 @@ struct Cli {
     completions: Option<Shell>,
 }
 
-fn parse_format(raw: &str) -> Result<OutputFormat, LatexError> {
-    raw.parse()
+fn parse_formats(raw: &[String]) -> Result<Vec<OutputFormat>, LatexError> {
+    raw.iter().map(|s| s.parse()).collect()
 }
 
 fn default_output(input: &Path, format: OutputFormat) -> PathBuf {
@@ -73,7 +74,7 @@ fn default_output(input: &Path, format: OutputFormat) -> PathBuf {
     output_dir.join(format!("{}.{}", filename, format.extension()))
 }
 
-fn conversion_options(cli: &Cli, format: OutputFormat) -> ConversionOptions {
+fn build_options(cli: &Cli, format: OutputFormat) -> ConversionOptions {
     ConversionOptions {
         format,
         fetch_packages: cli.fetch_packages,
@@ -85,28 +86,47 @@ fn conversion_options(cli: &Cli, format: OutputFormat) -> ConversionOptions {
 fn build_converter(
     cli: &Cli,
     options: ConversionOptions,
-) -> Result<StreamingConverter<ConsoleReporter>, LatexError> {
-    let converter = StreamingConverter::with_reporter(ConsoleReporter)
+) -> StreamingConverter<ConsoleReporter> {
+    StreamingConverter::with_reporter(ConsoleReporter)
         .with_options(options)
         .with_incremental(!cli.no_incremental)
         .with_force_rebuild(cli.force)
-        .with_keep_intermediate(cli.keep_intermediate);
-    Ok(converter)
+        .with_keep_intermediate(cli.keep_intermediate)
 }
 
-fn run_conversion(
+fn derive_output(cli: &Cli, input: &Path, format: OutputFormat) -> PathBuf {
+    if cli.format.len() > 1 {
+        if cli.output.is_some() {
+            eprintln!("note: -o/--output is ignored when multiple formats are requested");
+        }
+        default_output(input, format)
+    } else {
+        cli.output
+            .clone()
+            .unwrap_or_else(|| default_output(input, format))
+    }
+}
+
+fn convert_one(
     cli: &Cli,
     input: &Path,
     output: &Path,
-    options: ConversionOptions,
+    format: OutputFormat,
 ) -> Result<(), LatexError> {
-    let mut converter = build_converter(cli, options)?;
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut converter = build_converter(cli, build_options(cli, format));
     converter.convert(input, output)?;
-    println!(
-        "Successfully converted {} to {}",
-        input.display(),
-        output.display()
-    );
+    println!("Successfully converted {} to {}", input.display(), output.display());
+    Ok(())
+}
+
+fn convert_all(cli: &Cli, input: &Path, formats: &[OutputFormat]) -> Result<(), LatexError> {
+    for &format in formats {
+        let output = derive_output(cli, input, format);
+        convert_one(cli, input, &output, format)?;
+    }
     Ok(())
 }
 
@@ -125,43 +145,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     })?;
 
-    let format = parse_format(&cli.format)?;
-    let options = conversion_options(&cli, format);
-
-    let output = cli
-        .output
-        .clone()
-        .unwrap_or_else(|| default_output(&input_path, format));
-
-    if let Some(parent) = output.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    let formats = parse_formats(&cli.format)?;
 
     if cli.watch {
+        if formats.len() > 1 {
+            eprintln!("note: watch mode emits all requested formats on each rebuild");
+        }
         let force = cli.force;
         let incremental = !cli.no_incremental;
         let keep_intermediate = cli.keep_intermediate;
         let fetch_packages = cli.fetch_packages;
         let package_cache = cli.package_cache.clone();
+        let formats_for_loop = formats.clone();
+        let stem = input_path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let watch_target = derive_output(&cli, &input_path, formats[0]);
         let result: Result<(), LatexError> =
-            watch_single(&input_path, &output, move |inp, out| {
-                let options = ConversionOptions {
-                    format,
-                    fetch_packages,
-                    package_cache: package_cache.clone(),
-                    keep_intermediate,
-                };
-                let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
-                    .with_options(options)
-                    .with_incremental(incremental)
-                    .with_force_rebuild(force)
-                    .with_keep_intermediate(keep_intermediate);
-                converter.convert(inp, out)?;
-                println!(
-                    "Successfully converted {} to {}",
-                    inp.display(),
-                    out.display()
-                );
+            watch_single(&input_path, &watch_target, move |inp, _out| {
+                for &fmt in &formats_for_loop {
+                    let out = PathBuf::from("output").join(format!("{stem}.{}", fmt.extension()));
+                    if let Some(parent) = out.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    let options = ConversionOptions {
+                        format: fmt,
+                        fetch_packages,
+                        package_cache: package_cache.clone(),
+                        keep_intermediate,
+                    };
+                    let mut converter = StreamingConverter::with_reporter(ConsoleReporter)
+                        .with_options(options)
+                        .with_incremental(incremental)
+                        .with_force_rebuild(force)
+                        .with_keep_intermediate(keep_intermediate);
+                    converter.convert(inp, &out)?;
+                    println!("Successfully converted {} to {}", inp.display(), out.display());
+                }
                 Ok(())
             });
         if let Err(e) = result {
@@ -169,7 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     } else {
-        run_conversion(&cli, &input_path, &output, options)?;
+        convert_all(&cli, &input_path, &formats)?;
     }
 
     Ok(())

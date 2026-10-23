@@ -465,8 +465,10 @@ fn push_tex_element(
         TexElement::Citation { keys, kind } => {
             let label = match kind.as_str() {
                 "nocite" => String::new(),
-                "parencite" => format!("({})", keys.join(", ")),
-                "footcite" => format!("[{}]", keys.join(", ")),
+                "parencite" | "autocite" | "autocite*" | "smartcite" => format!("({})", keys.join(", ")),
+                "footcite" | "fnotecite" => format!("[{}]", keys.join(", ")),
+                "citeauthor" | "citeauthor*" | "citeyear" | "citeyear*" | "citetitle" | "fullcite" | "notecite" | "volcite" => keys.join(", "),
+                "supercite" => format!("^{}", keys.join(", ")),
                 _ => format!("[{}]", keys.join(", ")),
             };
             if !label.is_empty() {

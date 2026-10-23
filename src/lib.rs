@@ -52,7 +52,6 @@ mod watch;
 
 pub use cache::{CacheConfig, CacheStats, DocumentCache};
 pub use error::{LatexError, Position};
-pub use incremental::IncrementalCompiler;
 pub use intermediate::{IntermediateMeta, sibling_artifact, write_intermediates};
 pub use lsp::{
     CompletionKind, Severity, SymbolKind, TexCompletion, TexDiagnostic, TexPosition, TexRange,

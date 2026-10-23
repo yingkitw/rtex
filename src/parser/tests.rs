@@ -2402,6 +2402,114 @@ In \citeyear{smith2024} it was shown.
     }
 
     #[test]
+    fn parser_parses_autocite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\autocite{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "autocite")),
+            "Expected autocite Citation");
+    }
+
+    #[test]
+    fn parser_parses_autocite_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\autocite*{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "autocite*")),
+            "Expected autocite* Citation");
+    }
+
+    #[test]
+    fn parser_parses_notecite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\notecite{see smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["see smith2024"] && kind == "notecite")),
+            "Expected notecite Citation");
+    }
+
+    #[test]
+    fn parser_parses_supercite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\supercite{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "supercite")),
+            "Expected supercite Citation");
+    }
+
+    #[test]
+    fn parser_parses_fnotecite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\fnotecite{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "fnotecite")),
+            "Expected fnotecite Citation");
+    }
+
+    #[test]
+    fn parser_parses_volcite() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\volcite{1}{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["1"] && kind == "volcite")),
+            "Expected volcite Citation");
+    }
+
+    #[test]
+    fn parser_parses_cite_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\cite*{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "cite*")),
+            "Expected cite* Citation");
+    }
+
+    #[test]
+    fn parser_parses_citeauthor_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\citeauthor*{smith2024} did the work.
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "citeauthor*")),
+            "Expected citeauthor* Citation");
+    }
+
+    #[test]
+    fn parser_parses_citeyear_star() {
+        let content = r#"\documentclass{article}
+\begin{document}
+\citeyear*{smith2024}
+\end{document}"#;
+        let mut parser = TexParser::new(content.to_string());
+        let elements = parser.parse();
+        assert!(elements.iter().any(|e| matches!(e, TexElement::Citation { keys, kind } if keys == &["smith2024"] && kind == "citeyear*")),
+            "Expected citeyear* Citation");
+    }
+
+    #[test]
     fn parser_parses_printbibliography() {
         let content = r#"\documentclass{article}
 \begin{document}

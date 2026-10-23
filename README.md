@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](Cargo.toml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Edition](https://img.shields.io/badge/edition-2024-blue.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Tests](https://img.shields.io/badge/tests-786%2B-brightgreen.svg)](TODO.md)
+[![Tests](https://img.shields.io/badge/tests-785%2B-brightgreen.svg)](TODO.md)
 [![LaTeX commands](https://img.shields.io/badge/LaTeX%20commands-450%2B-informational.svg)](TODO.md)
 [![Math symbols](https://img.shields.io/badge/math%20symbols-618%2B-informational.svg)](TODO.md)
 [![Outputs](https://img.shields.io/badge/outputs-PDF%20%7C%20HTML%20%7C%20DOCX%20%7C%20EPUB-purple.svg)](#usage)
@@ -140,7 +140,13 @@ Convert to HTML, DOCX, or EPUB from the same parsed AST:
 cargo run -- input.tex --format html
 cargo run -- input.tex --format docx -o report.docx
 cargo run -- input.tex --format epub
+
+# Batch multiple formats in one invocation
+cargo run -- input.tex --format html,docx,epub
+# → output/input.html, output/input.docx, output/input.epub
 ```
+
+When multiple formats are requested, `-o/--output` is ignored and outputs are derived from the input stem in `output/`.
 
 Fetch missing LaTeX packages from CTAN before conversion:
 
@@ -256,7 +262,7 @@ cargo test
 ```
 
 The test suite includes:
-- 786+ comprehensive tests (577 lib unit + 208 integration + 1 doc; 3 ignored golden-file generators)
+- 794+ comprehensive tests (584 lib unit + 209 integration + 1 doc; 3 ignored golden-file generators)
 - PDF generation verification
 - File size validation
 - PDF header verification

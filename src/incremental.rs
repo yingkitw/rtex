@@ -86,22 +86,6 @@ impl IncrementalCompiler {
         self.dependencies.insert(source.to_path_buf(), deps);
     }
 
-    /// Invalidate all cached state for `source`.
-    pub fn invalidate(&mut self, source: &Path) {
-        self.source_hashes.remove(source);
-        self.outputs.remove(source);
-        self.dependencies.remove(source);
-    }
-
-    /// Clear every tracked entry.
-    pub fn clear(&mut self) {
-        self.source_hashes.clear();
-        self.outputs.clear();
-        self.dependencies.clear();
-        self.skips = 0;
-        self.builds = 0;
-    }
-
     /// True if any dependency of `source` has a newer mtime than
     /// the oldest known output.
     fn dependencies_changed(&self, source: &Path) -> bool {
@@ -116,17 +100,6 @@ impl IncrementalCompiler {
         match (oldest_out, newest_dep) {
             (Some(out), Some(dep)) => dep > out,
             _ => false,
-        }
-    }
-
-    /// Hit rate: fraction of `needs_rebuild` calls that returned
-    /// `false`.
-    pub fn hit_rate(&self) -> f64 {
-        let total = self.skips + self.builds;
-        if total == 0 {
-            0.0
-        } else {
-            self.skips as f64 / total as f64
         }
     }
 
@@ -228,29 +201,6 @@ mod tests {
         assert!(inc.needs_rebuild(&src));
         inc.mark_built(&src, vec![], vec![]);
         assert!(inc.needs_rebuild(&src));
-    }
-
-    #[test]
-    fn invalidate_forces_rebuild() {
-        let tmp = tempfile::tempdir().unwrap();
-        let src = tmp.path().join("doc.tex");
-        write_file(&src, "x");
-
-        let mut inc = IncrementalCompiler::new();
-        inc.mark_built(&src, vec![], vec![]);
-        assert!(!inc.needs_rebuild(&src));
-
-        inc.invalidate(&src);
-        assert!(inc.needs_rebuild(&src));
-    }
-
-    #[test]
-    fn hit_rate_calculation() {
-        let mut inc = IncrementalCompiler::new();
-        assert_eq!(inc.hit_rate(), 0.0);
-        inc.skips = 3;
-        inc.builds = 1;
-        assert_eq!(inc.hit_rate(), 0.75);
     }
 
     #[test]

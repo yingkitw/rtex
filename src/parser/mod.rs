@@ -534,7 +534,10 @@ impl TexParser {
         }
 
         // Biblatex citation variants — must be checked before \cite
-        // since \citeauthor, \citeyear, \citetitle start with \cite
+        // since \citeauthor, \citeyear, \citetitle start with \cite.
+        // Starred variants must be checked BEFORE their unstarred counterparts:
+        // \citeauthor* starts with \citeauthor, and the unstarred check has a
+        // `return` so it would swallow the input before the starred check runs.
         if remaining.starts_with("\\textcite") {
             return self.parse_cite_variant("\\textcite");
         }
@@ -544,8 +547,14 @@ impl TexParser {
         if remaining.starts_with("\\footcite") {
             return self.parse_cite_variant("\\footcite");
         }
+        if remaining.starts_with("\\citeauthor*") {
+            return self.parse_cite_variant("\\citeauthor*");
+        }
         if remaining.starts_with("\\citeauthor") {
             return self.parse_cite_variant("\\citeauthor");
+        }
+        if remaining.starts_with("\\citeyear*") {
+            return self.parse_cite_variant("\\citeyear*");
         }
         if remaining.starts_with("\\citeyear") {
             return self.parse_cite_variant("\\citeyear");
@@ -555,6 +564,30 @@ impl TexParser {
         }
         if remaining.starts_with("\\fullcite") {
             return self.parse_cite_variant("\\fullcite");
+        }
+        if remaining.starts_with("\\autocite*") {
+            return self.parse_cite_variant("\\autocite*");
+        }
+        if remaining.starts_with("\\autocite") {
+            return self.parse_cite_variant("\\autocite");
+        }
+        if remaining.starts_with("\\notecite") {
+            return self.parse_cite_variant("\\notecite");
+        }
+        if remaining.starts_with("\\supercite") {
+            return self.parse_cite_variant("\\supercite");
+        }
+        if remaining.starts_with("\\fnotecite") {
+            return self.parse_cite_variant("\\fnotecite");
+        }
+        if remaining.starts_with("\\volcite") {
+            return self.parse_cite_variant("\\volcite");
+        }
+        if remaining.starts_with("\\smartcite") {
+            return self.parse_cite_variant("\\smartcite");
+        }
+        if remaining.starts_with("\\cite*") {
+            return self.parse_cite_variant("\\cite*");
         }
 
         if remaining.starts_with("\\cite") {

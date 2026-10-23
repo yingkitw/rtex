@@ -1,4 +1,4 @@
-use rtex::convert_tex_to_pdf;
+use rtex::{OutputFormat, convert_tex_string, convert_tex_to_pdf};
 use std::fs;
 use std::path::PathBuf;
 
@@ -44,4 +44,22 @@ fn generate_example_pdfs() {
             bytes.len()
         );
     }
+}
+
+#[test]
+fn multi_format_emits_all_backends() {
+    let source = r"\documentclass{article}\begin{document}Hello.\end{document}";
+    let html = convert_tex_string(source, OutputFormat::Html).expect("html");
+    let docx = convert_tex_string(source, OutputFormat::Docx).expect("docx");
+    let epub = convert_tex_string(source, OutputFormat::Epub).expect("epub");
+    let pdf = convert_tex_string(source, OutputFormat::Pdf).expect("pdf");
+
+    assert!(html.starts_with(b"<!DOCTYPE") || html.starts_with(b"<html"));
+    assert!(docx.starts_with(b"PK")); // zip
+    assert!(epub.starts_with(b"PK")); // zip
+    assert!(pdf.starts_with(b"%PDF"));
+
+    assert!(String::from_utf8_lossy(&html).contains("Hello"));
+    assert!(docx.len() > 200);
+    assert!(epub.len() > 200);
 }

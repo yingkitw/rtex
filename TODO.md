@@ -37,7 +37,7 @@ All foundational phases are done. Key milestones:
 - **Expanded skip commands** — `\let`, `\edef`, `\xdef`, `\global`, `\frenchspacing`, `\nonfrenchspacing`, `\thicklines`, `\thinlines`, `\baselineskip`, `\topskip`, `\bottomskip`, `\parindent`, `\parskip`, `\headheight`, `\headsep`, `\footskip`, `\topmargin`, `\bottommargin`, `\leftmargin`, `\rightmargin`, `\oddsidemargin`, `\evensidemargin`, `\marginparwidth`, `\marginparsep`, `\marginparpush`, `\floatsep`, `\intextsep`, `\textfloatsep`, `\abovecaptionskip`, `\belowcaptionskip`, `\counterwithout`, `\mathversion`, `\restoremathversion`, `\sloppypar`
 - **Final command batch (400+ target reached)** — `\not`, `\limits`, `\nolimits`, `\displaylimits`, `\mathclap`/`\mathllap`/`\mathrlap`, `\boxed`, `\substack`, `\cr`, `\tag`/`\tag*`, `\intertext`/`\shortintertext`, `\reflectbox`, `\resizebox`, 20+ additional skip commands (`\nonumber`, `\notag`, `\theoremstyle`, `\qedhere`, `\swapnumbers`, `\qedsymbol`, `\settowidth`, `\settodepth`, `\settoheight`, `\sbox`, `\savebox`, `\usebox`, `\adjustbox`, `\captionof`, `\subfloat`, `\subcaption`)
 - **Bug fix** — `\ref` check no longer shadows `\reflectbox` (prefix collision fix)
-- **Biblatex citation commands** — `\textcite`, `\parencite`, `\footcite`, `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite` with kind-aware rendering (parenthetical, footnote, author-only, etc.); `\printbibliography` with optional `[...]` arg consumption; `\addbibresource{file.bib}`
+- **Biblatex citation commands** — `\textcite`, `\parencite`, `\footcite`, `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite`, `\autocite`, `\autocite*`, `\cite*`, `\citeauthor*`, `\citeyear*`, `\notecite`, `\supercite`, `\fnotecite`, `\volcite`, `\smartcite` with kind-aware rendering (parenthetical, footnote, superscript, author-only, etc.); `\printbibliography` with optional `[...]` arg consumption; `\addbibresource{file.bib}`
 - **Missing common environments** — `tabular*`, `tabularx`, `array`, `comment`, `subfigure`/`subfig`, `table*`
 - **Table and figure commands** — `\multirow`, `\rowcolor`, `\cellcolor`, `\caption*`, `\floatplacement`, `\floatbarrier`
 - **Spacing and text commands** — `\fill` (spacing), `\stretch{n}` (skip), `\textellipsis` (Unicode ellipsis), HTML rendering for `\dotfill`, `\strut`, `\mathstrut`
@@ -131,7 +131,7 @@ All foundational phases are done. Key milestones:
 - Clippy: 10 warnings (pre-existing, in pdfrs and parser)
 
 ### Target Goals
-- Tests: 788 ✓ (target was 600+)
+- Tests: 794 ✓ (target was 600+)
 - Math symbols: 618 ✓ (target was 600+)
 - LaTeX commands: 450+ ✓ (target was 400+)
 - File size: <100 KB for ASCII-only; <500 KB for Unicode/math

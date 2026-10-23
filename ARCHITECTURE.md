@@ -257,7 +257,7 @@ rtex/
 │   ├── wasm.rs             # wasm-bindgen exports (feature: wasm)
 │   ├── tests.rs            # Inline unit tests
 │   ├── example_tests.rs    # Example file compilation tests
-│   └── bin/                # rtex-lsp (feature: lsp); debug/test harnesses (feature: dev-bins)
+│   └── bin/                # rtex-lsp (feature: lsp); bench harness
 ├── examples/               # Example TeX files
 ├── tests/
 │   ├── integration_test.rs # Integration tests

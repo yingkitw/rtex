@@ -65,7 +65,7 @@ src/
     completion.rs      # Autocomplete candidates
     hover.rs           # Hover documentation
     symbols.rs         # Document symbol outline
-  bin/                # Debug/test binaries (feature: dev-bins)
+  bin/                # rtex-lsp (feature: lsp); bench harness
 ```
 
 ## Coding Guidelines

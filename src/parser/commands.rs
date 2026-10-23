@@ -145,11 +145,17 @@ impl TexParser {
     }
 
     /// Parse biblatex citation variants: `\textcite`, `\parencite`, `\footcite`,
-    /// `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite`.
+    /// `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite`,
+    /// `\autocite`, `\autocite*`, `\notecite`, `\supercite`, `\fnotecite`,
+    /// `\volcite`, `\smartcite`, `\cite*`, `\citeauthor*`, `\citeyear*`.
     pub(super) fn parse_cite_variant(&mut self, cmd_name: &str) -> Option<TexElement> {
+        let save = self.position;
         self.position += cmd_name.len();
         self.skip_whitespace_and_comments();
-        let keys_str = self.parse_braced_content()?;
+        let Some(keys_str) = self.parse_braced_content() else {
+            self.position = save;
+            return None;
+        };
         let keys: Vec<String> = keys_str
             .split(',')
             .map(|s| s.trim().to_string())

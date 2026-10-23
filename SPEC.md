@@ -27,7 +27,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 - MathML dispatch: `\mod`, `\pod`, `\boxed`, `\substack`, `\limits`/`\nolimits`, `\boldsymbol` with `mathvariant="bold"`
 - Text commands: `\textcircled`, `\hl`, `\st`, `\uline`, `\uuline`, `\uwave`, `\dotuline`, `\color`, `\normalcolor`
 - 30+ additional skip commands: `\let`, `\edef`, `\xdef`, `\global`, `\parindent`, `\parskip`, `\floatsep`, etc.
-- Biblatex citation commands: `\textcite`, `\parencite`, `\footcite`, `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite` with kind-aware rendering
+- Biblatex citation commands: `\textcite`, `\parencite`, `\footcite`, `\citeauthor`, `\citeyear`, `\citetitle`, `\fullcite`, `\autocite`, `\autocite*`, `\cite*`, `\citeauthor*`, `\citeyear*`, `\notecite`, `\supercite`, `\fnotecite`, `\volcite`, `\smartcite` with kind-aware rendering
 - `\printbibliography` (with optional `[...]` args), `\addbibresource{file.bib}`
 - Missing common environments: `tabular*`, `tabularx`, `array`, `comment`, `subfigure`/`subfig`, `table*`
 - Table and figure commands: `\multirow`, `\rowcolor`, `\cellcolor`, `\caption*`, `\floatplacement`, `\floatbarrier`
@@ -70,3 +70,7 @@ rtex is a **native** TeX-to-document converter written in Rust. It parses a prac
 2. Math documents render Unicode symbols via embedded DejaVu Sans
 3. CLI flags (`--format`, `--watch`, `--fetch-packages`, `--keep-intermediate`) work end-to-end
 4. WASM build succeeds with `cargo build --target wasm32-unknown-unknown --features wasm`
+
+## CLI
+
+`--format` accepts a comma-separated list of output formats; multiple formats emit one file each in `output/{stem}.{ext}`. `-o/--output` is ignored when multiple formats are requested.
