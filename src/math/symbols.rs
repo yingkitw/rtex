@@ -62,6 +62,16 @@ pub fn replace_math_symbols(text: &str) -> String {
                         continue;
                     }
 
+                    // \left. and \right. are invisible delimiters: \left/\right
+                    // already emit nothing, but the trailing "." would leak as a
+                    // literal dot. Consume it so the invisible delimiter is dropped.
+                    if matches!(name.as_str(), "left" | "right")
+                        && matches!(iter.peek(), Some(&'.'))
+                    {
+                        iter.next();
+                        continue;
+                    }
+
                     match lookup_symbol(&name) {
                         Some(repl) => result.push_str(repl),
                         None => {
@@ -891,6 +901,19 @@ mod tests {
         assert_eq!(replace_math_symbols("a\\,b"), "a b");
         assert_eq!(replace_math_symbols("a\\;b"), "a b");
         assert_eq!(replace_math_symbols("a\\!b"), "ab");
+    }
+
+    #[test]
+    fn test_invisible_delimiters_dropped() {
+        // \left. and \right. are invisible delimiters — they must not leak
+        // as literal dots. \left( and \right) keep their delimiters.
+        assert_eq!(replace_math_symbols("\\left.x\\right."), "x");
+        assert_eq!(replace_math_symbols("\\left( x \\right)"), "( x )");
+        // A real-world pattern: \left. <matrix> \right| (norm of a matrix)
+        assert_eq!(
+            replace_math_symbols("\\left. M \\right|"),
+            " M |"
+        );
     }
 
     #[test]

@@ -475,6 +475,16 @@ fn collect_plain_text(elements: &[TexElement], out: &mut String) {
         match element {
             TexElement::Text(text) => out.push_str(text),
             TexElement::Command { args, .. } if !args.is_empty() => out.push_str(&args[0]),
+            // Text-mode spacing commands have no args; emit a space so the
+            // DOCX plain-text fallback doesn't concatenate surrounding words.
+            TexElement::Command { name, .. }
+                if matches!(
+                    name.as_str(),
+                    "comma" | "colon" | "semicolon" | "control_space" | "quad" | "qquad"
+                ) =>
+            {
+                out.push(' ');
+            }
             TexElement::Command { .. } => {}
             TexElement::Section { title, .. } => {
                 out.push_str(title);
@@ -699,6 +709,31 @@ mod tests {
         assert!(result.contains("Line 1"));
         assert!(result.contains("Line 2"));
         assert!(result.contains('\n'));
+    }
+
+    #[test]
+    fn plain_text_spacing_inserts_space() {
+        // Regression: \, \: \; \  \quad \qquad were dropped by the
+        // plain-text path (used by DOCX), concatenating adjacent words.
+        for cmd in ["comma", "semicolon", "colon", "control_space", "quad", "qquad"] {
+            let elements = vec![
+                TexElement::Text("Hello".into()),
+                TexElement::Command {
+                    name: cmd.into(),
+                    args: vec![],
+                },
+                TexElement::Text("World".into()),
+            ];
+            let result = plain_text_from_elements(&elements);
+            assert!(
+                result.contains(' '),
+                "{cmd}: expected a space, got {result:?}"
+            );
+            assert!(
+                !result.contains("HelloWorld"),
+                "{cmd}: words should not be concatenated, got {result:?}"
+            );
+        }
     }
 
     #[test]

@@ -103,6 +103,8 @@ All foundational phases are done. Key milestones:
 - [x] Unicode-fallback matrix formatting: added `vmatrix`/`Vmatrix`/`Bmatrix`/`matrix`/`smallmatrix`, fixed `pmatrix` delimiters (`( )` not `[ ]`), and depth-counting end finder for nested matrices
 - [x] Text-mode ligatures (`---`→—, `--`→–, `` `` ``→", `''`→") now converted in `parse_text`; inline math spans skipped
 - [x] Text-mode spacing commands (`\,` `\:` `\;` `\ ` `\quad` `\qquad`) now emit space in PDF and HTML backends (were silently dropped, concatenating adjacent words)
+- [x] DOCX plain-text path also emits space for text-mode spacing commands (same concatenation bug via `collect_plain_text`)
+- [x] Invisible delimiters `\left.`/`\right.` no longer leak a literal dot in the Unicode math fallback
 - [x] Comprehensive LaTeX syntax coverage (special chars, skip-commands, counter formatting, file splicing)
 - [x] Divider element (`\hrulefill`)
 
@@ -121,7 +123,7 @@ All foundational phases are done. Key milestones:
 ## Metrics & Goals
 
 ### Current Status
-- Tests: 801 (see `cargo test`; 798 passing, 3 ignored golden-file generators)
+- Tests: 803 (see `cargo test`; 799 passing, 3 ignored golden-file generators)
 - PDF: pdfrs crate; `/Producer` stamps `rtex/pdfrs`
 - Math: 618 Unicode symbols + pdfrs display layout for `\frac` / `\sqrt` (vinculum) / `pmatrix`/`bmatrix`/`vmatrix` grid
 - LaTeX commands: 450+
